@@ -73,7 +73,11 @@ services:
       ACME_EMAIL: ${ACME_EMAIL}
       API_UPSTREAM: ${API_UPSTREAM:-api:3000}
     ports:
-      - "80:80"
+      # En un servidor COMPARTIDO donde otra app ya usa el 80 (tu caso: cvs-erp),
+      # la cafetería toma SOLO el 443. Caddy igual obtiene/renueva el certificado
+      # por el 443 (desafío TLS-ALPN), así que no pelea por el 80.
+      # En un servidor DEDICADO (cuando el cliente lo lleve al suyo) puedes
+      # agregar de vuelta "80:80" para el redirect http->https.
       - "443:443"
     depends_on:
       - api

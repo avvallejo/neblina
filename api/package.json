@@ -1,0 +1,22 @@
+{
+  "name": "cafeteria-api",
+  "version": "1.0.0",
+  "description": "API REST de la cafeteria movil — conecta el prototipo (Cliente, Caja, Barista, Admin) con PostgreSQL.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sns": "^3.1073.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5"
+  }
+}

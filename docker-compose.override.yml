@@ -1,0 +1,23 @@
+# Docker Compose combina este archivo automáticamente con docker-compose.yml
+# cuando corres "docker compose up" sin más flags — por eso aquí solo va lo
+# que aplica a DESARROLLO LOCAL (montar el código para recarga en vivo). Si
+# alguna vez quieres correr la versión "tal cual quedaría en producción" sin
+# esto, usa: docker compose -f docker-compose.yml up
+version: "3.9"
+
+services:
+  api:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./api/src:/app/src:ro
+      - ./api/package.json:/app/package.json:ro
+    command: ["node", "--watch", "src/server.js"]
+
+  frontend:
+    # Monta el código fuente para recarga en vivo (HMR), conservando el
+    # node_modules construido dentro de la imagen (volumen anónimo encima).
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev"]

@@ -1,0 +1,43 @@
+{
+  "name": "Cafetería Móvil — API + PostgreSQL",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "../docker-compose.override.yml"
+  ],
+  "service": "api",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "ckolkman.vscode-postgres",
+        "humao.rest-client",
+        "ms-azuretools.vscode-docker",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg"
+      ],
+      "settings": {
+        "sqltools.connections": [
+          {
+            "name": "Cafetería (Docker)",
+            "driver": "PostgreSQL",
+            "server": "db",
+            "port": 5432,
+            "database": "cafeteria",
+            "username": "cafeteria_app"
+          }
+        ]
+      }
+    }
+  },
+
+  "forwardPorts": [3000, 5432],
+  "portsAttributes": {
+    "3000": { "label": "API REST", "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL" }
+  },
+
+  "postCreateCommand": "npm install"
+}

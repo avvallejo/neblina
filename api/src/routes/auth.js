@@ -6,6 +6,7 @@ const { query } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { JWT_SECRET } = require('../middleware/auth');
 const { enviarSms } = require('../services/sms');
+const { createUnverifiedCustomer } = require('../services/customerRegistration');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const { pin } = req.body;
   if (!pin || !/^\d{4}$/.test(pin)) throw new ApiError(400, 'El PIN debe tener 4 dígitos.');
 
-  const { rows } = await query('SELECT id, nombre, rol, pin_hash FROM usuarios WHERE activo = true');
+  const { rows } = await query('SELECT id, nombre, rol, pin_hash, token_version FROM usuarios WHERE activo = true');
 
   // El PIN no identifica de antemano a qué usuario pertenece (igual que en el
   // prototipo), así que se compara contra cada hash activo hasta encontrar
@@ -35,7 +36,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   if (!encontrado) throw new ApiError(401, 'PIN incorrecto.');
 
   const token = jwt.sign(
-    { tipo: 'staff', id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol },
+    { tipo: 'staff', id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, ver: encontrado.token_version },
     JWT_SECRET,
     { expiresIn: '12h' }
   );
@@ -144,14 +145,7 @@ router.post('/cliente/registro', clienteLimiter, asyncHandler(async (req, res) =
   const { nombre, apellido } = req.body;
   if (!/^\d{10}$/.test(telefono)) throw new ApiError(400, 'El teléfono debe tener 10 dígitos.');
 
-  let cliente = (await query('SELECT id, nombre, apellido, telefono, pedidos_app_contador, recompensa_pendiente FROM clientes WHERE telefono = $1', [telefono])).rows[0];
-  if (!cliente) {
-    if (!nombre?.trim() || !apellido?.trim()) throw new ApiError(400, 'Para tu primer pedido necesitamos tu nombre y apellido.');
-    cliente = (await query(
-      'INSERT INTO clientes (nombre, apellido, telefono, telefono_verificado) VALUES ($1,$2,$3,false) RETURNING id, nombre, apellido, telefono, pedidos_app_contador, recompensa_pendiente',
-      [nombre.trim(), apellido.trim(), telefono]
-    )).rows[0];
-  }
+  const cliente = await createUnverifiedCustomer({ telefono, nombre, apellido });
 
   const token = jwt.sign({ tipo: 'cliente', id: cliente.id, telefono: cliente.telefono }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, cliente });

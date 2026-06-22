@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { query } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { assertStaffPin } = require('../security/policies');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
@@ -16,7 +17,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const { nombre, rol, pin } = req.body;
   if (!nombre?.trim()) throw new ApiError(400, 'Ingresa un nombre.');
   if (!['admin', 'cajero', 'barista'].includes(rol)) throw new ApiError(400, 'Rol inválido.');
-  if (!/^\d{4}$/.test(pin || '')) throw new ApiError(400, 'El PIN debe tener 4 dígitos.');
+  assertStaffPin(pin);
 
   const hash = await bcrypt.hash(pin, 10);
   const { rows } = await query(
@@ -39,9 +40,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
   if (activo !== undefined) { sets.push(`activo = $${i++}`); values.push(!!activo); }
   if (pin !== undefined) {
-    if (!/^\d{4}$/.test(pin)) throw new ApiError(400, 'El PIN debe tener 4 dígitos.');
+    assertStaffPin(pin);
     sets.push(`pin_hash = $${i++}`); values.push(await bcrypt.hash(pin, 10));
   }
+  if (rol !== undefined || activo !== undefined || pin !== undefined) sets.push('token_version = token_version + 1');
   if (sets.length === 0) throw new ApiError(400, 'No se envió ningún campo para actualizar.');
 
   values.push(req.params.id);

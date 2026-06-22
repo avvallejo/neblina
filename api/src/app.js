@@ -3,12 +3,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { errorHandler } = require('./middleware/errorHandler');
+const { parseTrustProxyHops } = require('./security/policies');
 
 const app = express();
+const trustProxyHops = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS, { required: process.env.NODE_ENV === 'production' });
+if (trustProxyHops !== null) app.set('trust proxy', trustProxyHops);
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' })); // 2mb: holgura para el logo del negocio (base64)
 
 // Límite general — además de los límites específicos en /auth.
 app.use(rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false }));

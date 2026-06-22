@@ -1,7 +1,8 @@
 -- ============================================================================
--- CAFETERÍA MÓVIL — DATOS DE EJEMPLO (seed)
+-- CAFETERÍA MÓVIL — DATOS DE EJEMPLO (SOLO DESARROLLO)
 -- ============================================================================
--- Replica exactamente el catálogo, proveedores, materias primas y usuarios del
+-- NO ejecutar en producción: contiene cuentas con PIN públicos. El Compose de
+-- producción omite este archivo. Replica el catálogo, proveedores e identidades del
 -- prototipo, para poder probar el esquema con datos reales de inmediato.
 -- Requiere haber ejecutado schema.sql y functions_triggers.sql primero.
 --

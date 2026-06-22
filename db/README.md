@@ -16,9 +16,8 @@ reales.
 1. **`01_schema.sql`** — Tablas, tipos, índices y restricciones. 27 tablas.
 2. **`02_functions_triggers.sql`** — La lógica de negocio real: descuento
    automático de inventario (con PEPS), mermas, fidelidad, turnos.
-3. **`03_seed_data.sql`** — Datos de ejemplo: el mismo catálogo, proveedores,
-   materias primas y usuarios (mismos PIN, ahora con hash bcrypt real) que ya
-   tienes en el prototipo.
+3. **`03_seed_data.sql`** — Datos exclusivamente de desarrollo. Incluye catálogo,
+   proveedores y usuarios con PIN conocidos; producción no ejecuta este archivo.
 4. **`04_views.sql`** — Vistas para los reportes que ya viste en Admin (stock
    bajo, ventas por método de pago, productos más vendidos, mermas, KPIs).
 5. **`05_mejoras_produccion.sql`** — Cierra huecos que quedaron a propósito
@@ -31,6 +30,11 @@ reales.
    (OTP) antes de dejar pedir a un cliente nuevo, y la bitácora de
    sincronización offline (`lotes_sincronizacion`) para poder investigar
    "¿por qué este dispositivo no sincronizó bien ayer?" en vez de adivinar.
+8. **`08_configuracion.sql`** — Configuración del negocio; la verificación SMS
+   arranca activada.
+9. **`09_tiempo_extraccion_por_tipo.sql`** — Tiempos de extracción por tipo.
+10. **`10_security_hardening.sql`** — Revocación de sesiones y autorizaciones
+    de descuento de un solo uso.
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -42,6 +46,9 @@ psql -U postgres -d cafeteria -f 04_views.sql
 psql -U postgres -d cafeteria -f 05_mejoras_produccion.sql
 psql -U postgres -d cafeteria -f 06_costos_indirectos.sql
 psql -U postgres -d cafeteria -f 07_verificacion_y_sync.sql
+psql -U postgres -d cafeteria -f 08_configuracion.sql
+psql -U postgres -d cafeteria -f 09_tiempo_extraccion_por_tipo.sql
+psql -U postgres -d cafeteria -f 10_security_hardening.sql
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

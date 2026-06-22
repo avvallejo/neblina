@@ -1,80 +1,78 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { calcularPrecioItem } = require('../utils/pricing');
+const { assertPaymentAllowed, normalizeDiscount, assertDiscountRole } = require('../security/policies');
+const { createDiscountApproval, consumeDiscountApproval } = require('../services/discountApprovals');
+const { prepareOrderLines } = require('../services/orderValidation');
 
 const router = express.Router();
 router.use(requireAuth); // tanto personal como cliente pueden crear/ver pedidos
 
+const discountApprovalLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  keyGenerator: req => `staff:${req.auth.id}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post('/aprobaciones-descuento', requireRole('cajero', 'admin'), discountApprovalLimiter, asyncHandler(async (req, res) => {
+  const discount = normalizeDiscount(req.body.descuentoPorcentaje);
+  const approval = await withTransaction(client => createDiscountApproval(
+    { requesterId: req.auth.id, pin: req.body.pin, discount },
+    client.query.bind(client)
+  ));
+  if (approval.denied) throw new ApiError(401, 'No se pudo autorizar el descuento.');
+  res.status(201).json({ token: approval.token, expiresInSeconds: approval.expiresInSeconds });
+}));
+
 // POST /api/pedidos
 // body: { items: [{ productoId, tamanoId?, lecheId?, cafeId?, extraIds?, cantidad?, notas?, esRegalo? }],
-//         horaRecogida?, descuentoPorcentaje?, pinAutorizacion?, pago?: { metodoPago, montoRecibido } }
+//         horaRecogida?, descuentoPorcentaje?, autorizacionDescuento?, pago?: { metodoPago, montoRecibido } }
 router.post('/', asyncHandler(async (req, res) => {
-  const { items, horaRecogida, descuentoPorcentaje, pinAutorizacion, pago, clienteTelefono } = req.body;
+  const { items, horaRecogida, descuentoPorcentaje, autorizacionDescuento, pinAutorizacion, pago, clienteTelefono } = req.body;
   if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, 'El pedido necesita al menos un producto.');
+  if (pinAutorizacion !== undefined) throw new ApiError(400, 'Usa una autorización de descuento de un solo uso.');
 
   const esStaff = req.auth.tipo === 'staff';
   const origen = esStaff ? 'mostrador' : 'app';
-  let clienteId = req.auth.tipo === 'cliente' ? req.auth.id : null;
-
-  // Caja también puede registrar la venta a nombre de un cliente con cuenta
-  // (para que el pedido cuente hacia su fidelidad aunque lo levante el cajero).
-  if (esStaff && clienteTelefono) {
-    const c = await query('SELECT id FROM clientes WHERE telefono = $1', [String(clienteTelefono).replace(/\D/g, '')]);
-    if (c.rows.length > 0) clienteId = c.rows[0].id;
-  }
-
-  const esRegaloGlobal = items.every(i => i.esRegalo);
-  if (esRegaloGlobal && !clienteId) throw new ApiError(400, 'Un regalo de fidelidad necesita un cliente.');
-
-  // Descuento: solo cajero/admin, y un cajero necesita el PIN de un admin
-  // activo (equivalente al "código de autorización" del prototipo).
-  let descuentoFinal = 0;
-  let autorizadoPor = null;
-  if (descuentoPorcentaje) {
-    if (!esStaff) throw new ApiError(403, 'Solo el personal puede aplicar descuentos.');
-    if (req.auth.rol === 'admin') {
-      autorizadoPor = req.auth.id;
-    } else {
-      if (!pinAutorizacion) throw new ApiError(400, 'El descuento requiere el PIN de un administrador.');
-      const admins = await query("SELECT id, pin_hash FROM usuarios WHERE rol = 'admin' AND activo");
-      for (const a of admins.rows) {
-        // eslint-disable-next-line no-await-in-loop
-        if (await bcrypt.compare(pinAutorizacion, a.pin_hash)) { autorizadoPor = a.id; break; }
-      }
-      if (!autorizadoPor) throw new ApiError(401, 'PIN de autorización incorrecto.');
-    }
-    descuentoFinal = Number(descuentoPorcentaje);
-  }
-
-  // Cada línea se recalcula en el servidor — nunca se usa el precio que vino
-  // en el body del cliente.
-  const lineas = [];
-  for (const item of items) {
-    // eslint-disable-next-line no-await-in-loop
-    const precioUnitario = await calcularPrecioItem({
-      productoId: item.productoId, tamanoId: item.tamanoId, lecheId: item.lecheId,
-      cafeId: item.cafeId, extraIds: item.extraIds || [], esRegalo: !!item.esRegalo,
-    });
-    lineas.push({ ...item, precioUnitario, cantidad: item.cantidad || 1 });
-  }
-
-  const subtotal = lineas.reduce((s, l) => s + l.precioUnitario * l.cantidad, 0);
-  const total = Math.round((subtotal * (1 - descuentoFinal / 100)) * 100) / 100;
-
-  const cobradoInicial = esStaff && !!pago; // venta de mostrador con pago en el momento
-  const esRegaloPedido = esRegaloGlobal;
+  assertPaymentAllowed(req.auth, pago);
+  const descuentoFinal = normalizeDiscount(descuentoPorcentaje);
+  if (descuentoFinal) assertDiscountRole(req.auth);
 
   const resultado = await withTransaction(async client => {
+    let clienteId = req.auth.tipo === 'cliente' ? req.auth.id : null;
+    if (esStaff && clienteTelefono) {
+      const c = await client.query('SELECT id FROM clientes WHERE telefono = $1', [String(clienteTelefono).replace(/\D/g, '')]);
+      if (c.rows.length > 0) clienteId = c.rows[0].id;
+    }
+
+    const { lines: lineas, isRewardOrder: esRegaloPedido } = await prepareOrderLines(client, items, clienteId);
+    if (esRegaloPedido && descuentoFinal) throw new ApiError(400, 'No se puede aplicar descuento a una recompensa.');
+
+    let autorizadoPor = null;
+    if (descuentoFinal) {
+      autorizadoPor = req.auth.rol === 'admin'
+        ? req.auth.id
+        : await consumeDiscountApproval(client, {
+          requesterId: req.auth.id,
+          token: autorizacionDescuento,
+          discount: descuentoFinal,
+        });
+    }
+
+    const subtotal = lineas.reduce((sum, line) => sum + line.precioUnitario * line.cantidad, 0);
+    const total = Math.round((subtotal * (1 - descuentoFinal / 100)) * 100) / 100;
+    const cobradoInicial = !!pago;
     const pedidoRes = await client.query(
       `INSERT INTO pedidos (turno_id, origen, cliente_id, cajero_id, hora_recogida, subtotal,
           descuento_porcentaje, descuento_autorizado_por, total, metodo_pago, monto_recibido, cambio,
           cobrado, es_regalo_fidelidad)
        VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
-      [origen, clienteId, esStaff ? req.auth.id : null, horaRecogida || null, subtotal,
+      [origen, clienteId, esStaff && ['cajero', 'admin'].includes(req.auth.rol) ? req.auth.id : null, horaRecogida || null, subtotal,
         descuentoFinal, autorizadoPor, total,
         cobradoInicial ? pago.metodoPago : null, cobradoInicial ? pago.montoRecibido : null,
         cobradoInicial && pago.montoRecibido ? Math.round((pago.montoRecibido - total) * 100) / 100 : null,
@@ -88,7 +86,7 @@ router.post('/', asyncHandler(async (req, res) => {
       const itemRes = await client.query(
         `INSERT INTO pedido_items (pedido_id, producto_id, tamano_id, leche_id, cafe_id, cantidad, precio_unitario, notas, es_regalo)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [pedido.id, l.productoId, l.tamanoId || null, l.lecheId || null, l.cafeId || null, l.cantidad, l.precioUnitario, l.notas || null, !!l.esRegalo]
+        [pedido.id, l.productoId, l.tamanoId || null, l.lecheId || null, l.cafeId || null, l.cantidad, l.precioUnitario, l.notas || null, l.esRegalo]
       );
       const itemCreado = itemRes.rows[0];
       for (const extraId of l.extraIds || []) {

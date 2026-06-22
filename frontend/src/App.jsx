@@ -4,7 +4,7 @@ import {
   ChevronLeft, Package, TrendingDown, Banknote, CreditCard, Trash2,
   Gauge as GaugeIcon, Droplets, ClipboardList, Sparkles,
   RotateCcw, Users, Wallet, AlertCircle, Snowflake, Cookie, ArrowLeftRight, Receipt,
-  Lock, History, UserPlus, Pencil, User, CupSoda, Milk, Thermometer
+  Lock, History, UserPlus, Pencil, User, CupSoda, Milk, Thermometer, Palette
 } from 'lucide-react';
 import * as api from './api/client.js';
 
@@ -562,7 +562,7 @@ function PinGate({ onSuccess, onCancel }) {
   );
 }
 
-function RoleSelect({ onSelectCliente, onStaffLogin, usuarios }) {
+function RoleSelect({ onSelectCliente, onStaffLogin, usuarios, nombreNegocio, logo }) {
   const [showPin, setShowPin] = useState(false);
 
   if (showPin) {
@@ -572,8 +572,8 @@ function RoleSelect({ onSelectCliente, onStaffLogin, usuarios }) {
   return (
     <div className="content role-select">
       <div className="role-select-head">
-        <div className="brand-mark"><Coffee size={26} /></div>
-        <h1>Cafetería Móvil</h1>
+        <div className={`brand-mark${logo ? ' has-logo' : ''}`}>{logo ? <img src={logo} alt="" className="brand-logo" /> : <Coffee size={26} />}</div>
+        <h1>{nombreNegocio || 'Mi Cafetería'}</h1>
         <p>Especialidad sobre ruedas</p>
       </div>
 
@@ -748,8 +748,16 @@ function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
 }
 
 function DiscountSheet({ onClose, onApply, current }) {
-  const [pct, setPct] = useState(current || 10);
+  const [pct, setPct] = useState(current?.porcentaje || 10);
   const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const apply = async () => {
+    setLoading(true); setError('');
+    try { await onApply(pct, code); onClose(); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
   return (
     <Sheet title="Aplicar descuento" onClose={onClose}>
       <div className="option-group">
@@ -763,23 +771,25 @@ function DiscountSheet({ onClose, onApply, current }) {
       <div className="option-group">
         <div className="option-label">Código de autorización (administrador)</div>
         <input className="text-input" placeholder="Ej. 1234" value={code} onChange={e => setCode(e.target.value)} />
+        {error && <div className="form-error"><AlertTriangle size={13} /> {error}</div>}
       </div>
       <div className="sheet-footer">
         {current ? <button className="btn-ghost" onClick={() => { onApply(null); onClose(); }}>Quitar descuento</button> : <span />}
-        <button className="btn-primary" disabled={!code.trim()} onClick={() => { onApply(pct); onClose(); }}>Aplicar {pct}%</button>
+        <button className="btn-primary" disabled={!/^\d{4}$/.test(code) || loading} onClick={apply}>{loading ? 'Autorizando…' : `Aplicar ${pct}%`}</button>
       </div>
     </Sheet>
   );
 }
 
-function CartView({ cart, setCart, discount, setDiscount, onCheckout, allowDiscount = true, ctaLabel, footerExtra }) {
+function CartView({ cart, setCart, discount, setDiscount, onAuthorizeDiscount, onCheckout, allowDiscount = true, ctaLabel, footerExtra }) {
   const [discountOpen, setDiscountOpen] = useState(false);
   const updateQty = (uid, qty) => {
     if (qty <= 0) { setCart(c => c.filter(i => i.uid !== uid)); return; }
     setCart(c => c.map(i => (i.uid === uid ? { ...i, qty } : i)));
   };
   const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0);
-  const discountAmt = discount ? subtotal * (discount / 100) : 0;
+  const discountPct = discount?.porcentaje || 0;
+  const discountAmt = discountPct ? subtotal * (discountPct / 100) : 0;
   const total = subtotal - discountAmt;
 
   if (cart.length === 0) {
@@ -812,17 +822,17 @@ function CartView({ cart, setCart, discount, setDiscount, onCheckout, allowDisco
       <div className="cart-summary">
         {allowDiscount && (
           <button className="discount-link" onClick={() => setDiscountOpen(true)}>
-            {discount ? `Descuento aplicado: ${discount}% — editar` : '+ Aplicar descuento (requiere autorización)'}
+            {discount ? `Descuento aplicado: ${discountPct}% — editar` : '+ Aplicar descuento (requiere autorización)'}
           </button>
         )}
         {footerExtra}
         <div className="summary-row"><span>Subtotal</span><span>{money(subtotal)}</span></div>
-        {discount && <div className="summary-row discount-row"><span>Descuento ({discount}%)</span><span>-{money(discountAmt)}</span></div>}
+        {discount && <div className="summary-row discount-row"><span>Descuento ({discountPct}%)</span><span>-{money(discountAmt)}</span></div>}
         <div className="summary-row total"><span>Total</span><span>{money(total)}</span></div>
         <button className="btn-primary full" onClick={() => onCheckout({ subtotal, discountAmt, total })}>{ctaLabel || `Cobrar ${money(total)}`}</button>
       </div>
 
-      {allowDiscount && discountOpen && <DiscountSheet current={discount} onClose={() => setDiscountOpen(false)} onApply={setDiscount} />}
+      {allowDiscount && discountOpen && <DiscountSheet current={discount} onClose={() => setDiscountOpen(false)} onApply={onAuthorizeDiscount} />}
     </div>
   );
 }
@@ -984,6 +994,12 @@ function CajeroApp({ tickets, createOrder, orders, cancelOrderFn, confirmarEntre
   const [noShowTarget, setNoShowTarget] = useState(null);
   const [chargingOrder, setChargingOrder] = useState(null);
 
+  const authorizeDiscount = async (porcentaje, pin) => {
+    if (!porcentaje) { setDiscount(null); return; }
+    const approval = await api.crearAprobacionDescuento({ pin, descuentoPorcentaje: porcentaje });
+    setDiscount({ porcentaje, autorizacion: approval.token });
+  };
+
   const quickAdd = product => {
     setCart(c => [...c, { uid: `${product.id}-${Date.now()}`, productId: product.id, qty: 1, unitPrice: product.price, extras: [] }]);
     addToast(`Agregado: ${product.name}`, 'success');
@@ -1003,7 +1019,12 @@ function CajeroApp({ tickets, createOrder, orders, cancelOrderFn, confirmarEntre
       return;
     }
     try {
-      const order = await createOrder({ cart, descuentoPorcentaje: discount || undefined, pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven } });
+      const order = await createOrder({
+        cart,
+        descuentoPorcentaje: discount?.porcentaje,
+        autorizacionDescuento: discount?.autorizacion,
+        pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven },
+      });
       setLastOrder(order);
       setCart([]);
       setDiscount(null);
@@ -1047,7 +1068,7 @@ function CajeroApp({ tickets, createOrder, orders, cancelOrderFn, confirmarEntre
           </>
         )}
         {screen === 'cart' && (
-          <CartView cart={cart} setCart={setCart} discount={discount} setDiscount={setDiscount} onCheckout={amts => { setAmounts(amts); setScreen('checkout'); }} />
+          <CartView cart={cart} setCart={setCart} discount={discount} setDiscount={setDiscount} onAuthorizeDiscount={authorizeDiscount} onCheckout={amts => { setAmounts(amts); setScreen('checkout'); }} />
         )}
         {screen === 'checkout' && (
           <CheckoutView amounts={amounts} onBack={backFromCheckout} onConfirm={handleConfirmPay} />
@@ -1466,7 +1487,7 @@ function UsuarioFormSheet({ user, onClose, onSave }) {
       </div>
       <div className="option-group">
         <div className="option-label">PIN de acceso (4 dígitos)</div>
-        <input className="text-input" inputMode="numeric" maxLength={4} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="Ej. 1234" />
+        <input className="text-input" inputMode="numeric" maxLength={4} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="Ej. 5831" />
       </div>
       {error && <div className="form-error"><AlertTriangle size={13} /> {error}</div>}
       <div className="sheet-footer">
@@ -1936,7 +1957,75 @@ function ReportesSection({ data }) {
   );
 }
 
-function AdminApp({ kpis, reportes, recargarCatalogo, addToast, smsActivo, onToggleSms, onSwitchRole, turnoAbierto, promoConfig, setPromoConfig, usuarios, addUsuario, updateUsuario, currentUser, materias, addMateria, updateMateria, proveedores, addProveedor, updateProveedor, recetaOverrides, setRecetaOverride }) {
+// Redimensiona una imagen (logo) a un lado máximo y la devuelve como data URL
+// base64, para guardarla liviana en la configuración del negocio.
+function redimensionarImagen(file, max) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > max || height > max) {
+          if (width >= height) { height = Math.round(height * max / width); width = max; }
+          else { width = Math.round(width * max / height); height = max; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Editor de la identidad del negocio (marca blanca): nombre + logo. Lo edita el
+// admin y aplica a TODA la app (no por usuario).
+function BrandingEditor({ nombreNegocio, logo, onSave }) {
+  const [nombre, setNombre] = useState(nombreNegocio || '');
+  const [logoLocal, setLogoLocal] = useState(logo || '');
+  const [guardando, setGuardando] = useState(false);
+  const fileRef = useRef(null);
+
+  useEffect(() => { setNombre(nombreNegocio || ''); }, [nombreNegocio]);
+  useEffect(() => { setLogoLocal(logo || ''); }, [logo]);
+
+  const elegirLogo = async e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    try { setLogoLocal(await redimensionarImagen(file, 256)); } catch { /* imagen inválida */ }
+  };
+
+  const cambiado = nombre.trim() !== (nombreNegocio || '') || logoLocal !== (logo || '');
+  const guardar = async () => { setGuardando(true); await onSave({ nombreNegocio: nombre.trim(), logo: logoLocal }); setGuardando(false); };
+
+  return (
+    <div className="branding-editor">
+      <label className="branding-field-label">Nombre del negocio</label>
+      <input className="branding-input" value={nombre} maxLength={60} placeholder="Mi Cafetería"
+             onChange={e => setNombre(e.target.value)} />
+      <div className="branding-logo-row">
+        <div className="branding-logo-preview">{logoLocal ? <img src={logoLocal} alt="logo" /> : <Coffee size={28} />}</div>
+        <div className="branding-logo-actions">
+          <button className="btn-secondary" onClick={() => fileRef.current && fileRef.current.click()}>Subir logo</button>
+          {logoLocal && <button className="link-toggle" onClick={() => setLogoLocal('')}>Quitar logo</button>}
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={elegirLogo} />
+        </div>
+      </div>
+      <div className="branding-hint">El logo se ajusta solo a 256 px. Aparece en la pantalla de inicio; el título de la pestaña usa el nombre.</div>
+      <button className="btn-primary full" style={{ marginTop: 12 }} disabled={!cambiado || guardando} onClick={guardar}>
+        {guardando ? 'Guardando…' : 'Guardar identidad'}
+      </button>
+    </div>
+  );
+}
+
+function AdminApp({ kpis, reportes, recargarCatalogo, addToast, smsActivo, onToggleSms, nombreNegocio, logo, onSaveBranding, onSwitchRole, turnoAbierto, promoConfig, setPromoConfig, usuarios, addUsuario, updateUsuario, currentUser, materias, addMateria, updateMateria, proveedores, addProveedor, updateProveedor, recetaOverrides, setRecetaOverride }) {
   const [screen, setScreen] = useState('dashboard');
   const [promoOpen, setPromoOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -2028,6 +2117,9 @@ function AdminApp({ kpis, reportes, recargarCatalogo, addToast, smsActivo, onTog
                 ? 'Los clientes verifican su teléfono con un código por SMS antes de pedir.'
                 : 'Los clientes se registran solo con nombre y teléfono (sin código).'}
             </div>
+
+            <div className="section-title" style={{ marginTop: 22 }}><Palette size={16} /> Identidad del negocio</div>
+            <BrandingEditor nombreNegocio={nombreNegocio} logo={logo} onSave={onSaveBranding} />
 
             {materiasBajas.length > 0 && (
               <>
@@ -2680,6 +2772,18 @@ const STYLES = `
 .role-select { display:flex; flex-direction:column; justify-content:center; height:100%; }
 .role-select-head { text-align:center; margin-bottom:28px; }
 .brand-mark { width:56px; height:56px; border-radius:18px; background:#E3A23D; color:#1C120D; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+.brand-mark.has-logo { background:#fff; overflow:hidden; }
+.brand-logo { width:100%; height:100%; object-fit:contain; }
+.branding-editor { background:#2B1D15; border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:14px; }
+.branding-field-label { display:block; font-size:12px; color:#B8A795; margin-bottom:6px; }
+.branding-input { width:100%; box-sizing:border-box; background:#1C120D; border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:11px 12px; color:#F4ECE2; font-size:14px; font-family:inherit; }
+.branding-input:focus { outline:none; border-color:#E3A23D; }
+.branding-logo-row { display:flex; align-items:center; gap:14px; margin-top:14px; }
+.branding-logo-preview { width:64px; height:64px; flex-shrink:0; border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; overflow:hidden; color:#1C120D; }
+.branding-logo-preview img { width:100%; height:100%; object-fit:contain; }
+.branding-logo-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+.branding-hint { font-size:11px; color:#8A7A6B; margin-top:10px; line-height:1.4; }
+.branding-editor .btn-primary:disabled { opacity:.5; cursor:default; }
 .role-select-head h1 { font-family:'Space Grotesk',sans-serif; font-size:24px; margin:0 0 6px; }
 .role-select-head p { color:#B8A795; font-size:14px; margin:0; }
 .role-grid { display:flex; flex-direction:column; gap:12px; }
@@ -3076,7 +3180,9 @@ export default function App() {
   const [proveedores, setProveedores] = useState([]);
   const [reportes, setReportes] = useState(null);
   const [kpis, setKpis] = useState(null);
-  const [smsActivo, setSmsActivo] = useState(false); // verificación por SMS del cliente (config admin)
+  const [smsActivo, setSmsActivo] = useState(true); // falla cerrado hasta poder leer la configuración
+  const [nombreNegocio, setNombreNegocio] = useState(''); // marca blanca: nombre del negocio
+  const [logo, setLogo] = useState(''); // marca blanca: logo (data URL base64)
   const [recetaOverrides, setRecetaOverrides] = useState({});
   const [bootState, setBootState] = useState('loading'); // 'loading' | 'ready' | 'error'
   const [pedidos, setPedidos] = useState([]); // pedidos reales (API) para Caja
@@ -3087,6 +3193,9 @@ export default function App() {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // El título de la pestaña del navegador usa el nombre del negocio (marca blanca).
+  useEffect(() => { document.title = nombreNegocio || 'Mi Cafetería'; }, [nombreNegocio]);
 
   // Carga el catálogo real (menú, categorías y opciones) desde la API y lo vuelca
   // en los arreglos que ya usa todo el prototipo. Son endpoints públicos, así que
@@ -3111,7 +3220,7 @@ export default function App() {
         const premio = prods.find(p => p.name === 'Americano') || prods[0];
         if (premio) setPromoConfig(pc => ({ ...pc, premioId: premio.id }));
       }
-      try { const cfg = await api.getConfig(); setSmsActivo(!!cfg.smsVerificacion); } catch { /* SMS off por defecto */ }
+      try { const cfg = await api.getConfig(); setSmsActivo(!!cfg.smsVerificacion); setNombreNegocio(cfg.nombreNegocio || ''); setLogo(cfg.logo || ''); } catch { /* conserva el modo seguro */ }
       setBootState('ready');
     } catch {
       setBootState('error');
@@ -3140,8 +3249,8 @@ export default function App() {
     return () => clearInterval(t);
   }, [role, refrescarPedidos, refrescarCola, refrescarTurno]);
 
-  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, pinAutorizacion, clienteTelefono }) => {
-    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, pinAutorizacion, clienteTelefono });
+  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono }) => {
+    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono });
     await refrescarPedidos(); await refrescarCola();
     addToast(`Pedido ${r.pedido.folio} enviado a preparación`, 'success');
     return adaptPedido(r.pedido);
@@ -3381,6 +3490,15 @@ export default function App() {
     catch (e) { addToast(e.message, 'warn'); }
   };
 
+  const guardarBranding = async cambios => {
+    try {
+      const cfg = await api.setConfig(cambios);
+      setNombreNegocio(cfg.nombreNegocio || '');
+      setLogo(cfg.logo || '');
+      addToast('Identidad del negocio actualizada', 'success');
+    } catch (e) { addToast(e.message, 'warn'); }
+  };
+
   const setRecetaOverride = async (productId, override) => {
     try {
       if (override === null) { await api.restaurarReceta(productId); addToast('Receta restaurada a su versión predeterminada', 'success'); }
@@ -3398,7 +3516,7 @@ export default function App() {
         <div className="status-bar"><span>{clock}</span><span>● ● ● 100%</span></div>
 
         {!role && (bootState === 'ready'
-          ? <RoleSelect onSelectCliente={() => setRole('cliente')} onStaffLogin={u => { setCurrentUser(u); setRole(u.rol); }} usuarios={usuarios} />
+          ? <RoleSelect onSelectCliente={() => setRole('cliente')} onStaffLogin={u => { setCurrentUser(u); setRole(u.rol); }} usuarios={usuarios} nombreNegocio={nombreNegocio} logo={logo} />
           : <BootScreen state={bootState} onRetry={cargarCatalogo} />)}
         {role === 'cliente' && (
           <ClienteApp
@@ -3427,6 +3545,7 @@ export default function App() {
           <AdminApp
             kpis={kpis} reportes={reportes} recargarCatalogo={cargarCatalogo} addToast={addToast}
             smsActivo={smsActivo} onToggleSms={guardarSmsConfig}
+            nombreNegocio={nombreNegocio} logo={logo} onSaveBranding={guardarBranding}
             onSwitchRole={logout} turnoAbierto={turnoAbierto} promoConfig={promoConfig} setPromoConfig={guardarPromo}
             usuarios={usuarios} addUsuario={addUsuario} updateUsuario={updateUsuario} currentUser={currentUser}
             materias={materias} addMateria={addMateria} updateMateria={updateMateria}

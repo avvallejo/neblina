@@ -182,7 +182,11 @@ function itemToApi(item) {
   };
 }
 
-export function crearPedido({ cart, pago, descuentoPorcentaje, pinAutorizacion, clienteTelefono, horaRecogida, comoCliente }) {
+export function crearAprobacionDescuento({ pin, descuentoPorcentaje }) {
+  return request('/pedidos/aprobaciones-descuento', { method: 'POST', body: { pin, descuentoPorcentaje } });
+}
+
+export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente }) {
   return request('/pedidos', {
     method: 'POST',
     useClienteToken: !!comoCliente, // un pedido del Cliente usa su token, no el del personal
@@ -190,7 +194,7 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, pinAutorizacion, 
       items: cart.map(itemToApi),
       pago,
       descuentoPorcentaje,
-      pinAutorizacion,
+      autorizacionDescuento,
       clienteTelefono,
       horaRecogida,
     },

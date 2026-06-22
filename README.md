@@ -29,8 +29,20 @@ primera vez que crea su volumen de datos) y arranca la API en
 `http://localhost:3000` con recarga en vivo (gracias a
 `docker-compose.override.yml`, que Compose combina solo).
 
-Usuarios de prueba (mismos PIN que el prototipo): Admin `1234`, Caja `1111`,
-Barista `2222`.
+Solo en desarrollo se cargan usuarios de prueba: Admin `1234`, Caja `1111`,
+Barista `2222`. `docker-compose.prod.yml` no monta esa semilla.
+
+En producción, después de aplicar las migraciones, crea el primer administrador
+una sola vez y elimina el PIN del entorno al terminar:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm \
+  -e BOOTSTRAP_ADMIN_NAME='Administrador' \
+  -e BOOTSTRAP_ADMIN_PIN='<PIN-UNICO-DE-4-DIGITOS>' \
+  api npm run bootstrap:admin
+```
+
+El comando rechaza los PIN conocidos de demostración y no imprime el secreto.
 
 ## Por qué no choca con tus otros proyectos en Docker
 
@@ -66,7 +78,7 @@ Este `docker-compose.yml` es para **desarrollo local**. Para producción en
 AWS, lo natural es:
 
 1. **Base de datos → Amazon RDS para PostgreSQL**, no el contenedor `db`. Las
-   migraciones (`db/00` a `db/07`) se corren UNA VEZ contra el endpoint de RDS
+    migraciones (`db/00` a `db/10`) se corren UNA VEZ contra el endpoint de RDS
    (con `psql` desde una instancia con acceso, o con una tarea de ECS/Lambda
    de un solo uso) — el mecanismo de auto-inicio de `docker/00_roles_y_permisos.sh`
    solo aplica al contenedor local, RDS no lo usa.

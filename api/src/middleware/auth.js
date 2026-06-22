@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { query } = require('../db');
 const { ApiError } = require('../utils/asyncHandler');
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -8,19 +9,40 @@ if (!JWT_SECRET) {
   throw new Error('Falta JWT_SECRET en las variables de entorno. Revisa .env.example.');
 }
 
-// Verifica el token y deja al usuario (o cliente) disponible en req.auth.
-function requireAuth(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) throw new ApiError(401, 'Falta el token de autenticación');
+function createRequireAuth({ verifyToken = jwt.verify, queryFn = query } = {}) {
+  return function requireAuthMiddleware(req, res, next) {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) return next(new ApiError(401, 'Falta el token de autenticación'));
 
-  try {
-    req.auth = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch (err) {
-    throw new ApiError(401, 'Token inválido o expirado');
-  }
+    let decoded;
+    try {
+      decoded = verifyToken(token, JWT_SECRET);
+    } catch (err) {
+      return next(new ApiError(401, 'Token inválido o expirado'));
+    }
+
+    if (decoded.tipo === 'cliente' && decoded.id) {
+      req.auth = decoded;
+      return next();
+    }
+    if (decoded.tipo !== 'staff' || !decoded.id) return next(new ApiError(401, 'Tipo de sesión inválido.'));
+
+    return queryFn('SELECT id, nombre, rol, activo, token_version FROM usuarios WHERE id = $1', [decoded.id])
+      .then(result => {
+        const current = result.rows[0];
+        if (!current?.activo || Number(decoded.ver) !== Number(current.token_version)) {
+          throw new ApiError(401, 'La sesión de personal fue revocada. Inicia sesión otra vez.');
+        }
+        req.auth = { tipo: 'staff', id: current.id, nombre: current.nombre, rol: current.rol, ver: current.token_version };
+        next();
+      })
+      .catch(err => next(err instanceof ApiError ? err : new ApiError(503, 'No se pudo validar la sesión de personal.')));
+  };
 }
+
+// Verifica firma y, para personal, también estado, rol y versión vigentes.
+const requireAuth = createRequireAuth();
 
 // Limita el acceso a ciertos roles de personal (admin, cajero, barista).
 // Úsalo DESPUÉS de requireAuth.
@@ -41,4 +63,4 @@ function requireCliente(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireRole, requireCliente, JWT_SECRET };
+module.exports = { requireAuth, requireRole, requireCliente, createRequireAuth, JWT_SECRET };

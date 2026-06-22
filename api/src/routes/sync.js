@@ -2,7 +2,7 @@ const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth } = require('../middleware/auth');
-const { calcularPrecioItem } = require('../utils/pricing');
+const { prepareOrderLines } = require('../services/orderValidation');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -73,46 +73,42 @@ router.post('/batch', asyncHandler(async (req, res) => {
 }));
 
 async function procesarCrearPedido(op, auth, idMap) {
-  const existente = await query('SELECT id FROM pedidos WHERE client_uuid = $1', [op.clientUuid]);
-  if (existente.rows.length > 0) return { id: existente.rows[0].id, yaExistia: true };
-
   const { items, horaRecogida, timestampOriginal, clienteTelefono } = op.payload || {};
   if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, 'El pedido necesita al menos un producto.');
-
-  const esStaff = auth.tipo === 'staff';
-  const origen = esStaff ? 'mostrador' : 'app';
-  let clienteId = auth.tipo === 'cliente' ? auth.id : null;
-  if (esStaff && clienteTelefono) {
-    const c = await query('SELECT id FROM clientes WHERE telefono = $1', [String(clienteTelefono).replace(/\D/g, '')]);
-    if (c.rows.length > 0) clienteId = c.rows[0].id;
-  }
-
-  const lineas = [];
-  for (const item of items) {
-    // eslint-disable-next-line no-await-in-loop
-    const precioUnitario = await calcularPrecioItem({
-      productoId: item.productoId, tamanoId: item.tamanoId, lecheId: item.lecheId,
-      cafeId: item.cafeId, extraIds: item.extraIds || [], esRegalo: !!item.esRegalo,
-    });
-    lineas.push({ ...item, precioUnitario, cantidad: item.cantidad || 1 });
-  }
-  const total = lineas.reduce((s, l) => s + l.precioUnitario * l.cantidad, 0);
 
   // El pedido pasó EN REALIDAD mientras el dispositivo estaba sin conexión —
   // el turno al que pertenece es el que estaba abierto EN ESE MOMENTO, no el
   // que esté abierto ahora que por fin sincroniza (pueden ser turnos
   // distintos si ya cerraron caja entre que se vendió y se sincronizó).
   const fechaReal = timestampOriginal ? new Date(timestampOriginal) : new Date();
-  const turnoHistorico = await query(
-    'SELECT id FROM turnos WHERE abierto_en <= $1 AND (cerrado_en IS NULL OR cerrado_en >= $1) ORDER BY abierto_en DESC LIMIT 1',
-    [fechaReal]
-  );
+  if (Number.isNaN(fechaReal.getTime())) throw new ApiError(400, 'timestampOriginal inválido.');
 
   return withTransaction(async client => {
+    const existente = await client.query('SELECT id FROM pedidos WHERE client_uuid = $1 FOR UPDATE', [op.clientUuid]);
+    if (existente.rows.length > 0) return { id: existente.rows[0].id, yaExistia: true };
+
+    const esStaff = auth.tipo === 'staff';
+    const origen = esStaff ? 'mostrador' : 'app';
+    let clienteId = auth.tipo === 'cliente' ? auth.id : null;
+    if (esStaff && clienteTelefono) {
+      const c = await client.query('SELECT id FROM clientes WHERE telefono = $1', [String(clienteTelefono).replace(/\D/g, '')]);
+      if (c.rows.length > 0) clienteId = c.rows[0].id;
+    }
+
+    const { lines: lineas, isRewardOrder } = await prepareOrderLines(client, items, clienteId);
+    const total = lineas.reduce((sum, line) => sum + line.precioUnitario * line.cantidad, 0);
+    const turnoHistorico = await client.query(
+      'SELECT id FROM turnos WHERE abierto_en <= $1 AND (cerrado_en IS NULL OR cerrado_en >= $1) ORDER BY abierto_en DESC LIMIT 1',
+      [fechaReal]
+    );
     const pedidoRes = await client.query(
-      `INSERT INTO pedidos (turno_id, origen, cliente_id, cajero_id, hora_recogida, subtotal, total, cobrado, client_uuid, creado_en)
-       VALUES ($1,$2,$3,$4,$5,$6,$6,false,$7,$8) RETURNING id`,
-      [turnoHistorico.rows[0]?.id || null, origen, clienteId, esStaff ? auth.id : null, horaRecogida || null, total, op.clientUuid, fechaReal]
+      `INSERT INTO pedidos
+         (turno_id, origen, cliente_id, cajero_id, hora_recogida, subtotal, total, cobrado,
+          es_regalo_fidelidad, client_uuid, creado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$6,false,$7,$8,$9) RETURNING id`,
+      [turnoHistorico.rows[0]?.id || null, origen, clienteId,
+        esStaff && ['cajero', 'admin'].includes(auth.rol) ? auth.id : null,
+        horaRecogida || null, total, isRewardOrder, op.clientUuid, fechaReal]
     );
     const pedidoId = pedidoRes.rows[0].id;
 
@@ -121,7 +117,7 @@ async function procesarCrearPedido(op, auth, idMap) {
       const itemRes = await client.query(
         `INSERT INTO pedido_items (pedido_id, producto_id, tamano_id, leche_id, cafe_id, cantidad, precio_unitario, notas, es_regalo, client_uuid, creado_en)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [pedidoId, l.productoId, l.tamanoId || null, l.lecheId || null, l.cafeId || null, l.cantidad, l.precioUnitario, l.notas || null, !!l.esRegalo, l.clientUuid || null, fechaReal]
+        [pedidoId, l.productoId, l.tamanoId || null, l.lecheId || null, l.cafeId || null, l.cantidad, l.precioUnitario, l.notas || null, l.esRegalo, l.clientUuid || null, fechaReal]
       );
       const itemId = itemRes.rows[0].id;
       for (const extraId of l.extraIds || []) {

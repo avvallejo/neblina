@@ -13,7 +13,15 @@ CREATE TABLE IF NOT EXISTS configuracion (
   actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO configuracion (clave, valor) VALUES ('sms_verificacion', 'false'::jsonb)
+INSERT INTO configuracion (clave, valor) VALUES ('sms_verificacion', 'true'::jsonb)
+ON CONFLICT (clave) DO NOTHING;
+
+-- Identidad del negocio (marca blanca): el admin la edita desde la app. El logo
+-- se guarda como "data URL" en base64 (la imagen se redimensiona en el front
+-- para que pese poco).
+INSERT INTO configuracion (clave, valor) VALUES ('nombre_negocio', '"Mi Cafetería"'::jsonb)
+ON CONFLICT (clave) DO NOTHING;
+INSERT INTO configuracion (clave, valor) VALUES ('logo', '""'::jsonb)
 ON CONFLICT (clave) DO NOTHING;
 
 -- La API se conecta como cafeteria_app (sin privilegios de superusuario).

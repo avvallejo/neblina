@@ -9,9 +9,14 @@ services:
   api:
     environment:
       NODE_ENV: development
+      TEST_REPO_ROOT: /workspace
     volumes:
       - ./api/src:/app/src:ro
+      - ./api/test:/app/test:ro
       - ./api/package.json:/app/package.json:ro
+      - ./docker-compose.yml:/workspace/docker-compose.yml:ro
+      - ./docker-compose.prod.yml:/workspace/docker-compose.prod.yml:ro
+      - ./db:/workspace/db:ro
     command: ["node", "--watch", "src/server.js"]
 
   frontend:

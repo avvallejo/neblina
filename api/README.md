@@ -19,6 +19,10 @@ psql -U postgres -d cafeteria -f ../db/03_seed_data.sql
 psql -U postgres -d cafeteria -f ../db/04_views.sql
 psql -U postgres -d cafeteria -f ../db/05_mejoras_produccion.sql
 psql -U postgres -d cafeteria -f ../db/06_costos_indirectos.sql
+psql -U postgres -d cafeteria -f ../db/07_verificacion_y_sync.sql
+psql -U postgres -d cafeteria -f ../db/08_configuracion.sql
+psql -U postgres -d cafeteria -f ../db/09_tiempo_extraccion_por_tipo.sql
+psql -U postgres -d cafeteria -f ../db/10_security_hardening.sql
 
 # 2. API
 npm install
@@ -26,8 +30,9 @@ cp .env.example .env        # edita PGPASSWORD y genera un JWT_SECRET real
 npm start
 ```
 
-Usuarios de prueba (mismos PIN que el prototipo): Admin `1234`, Caja `1111`,
-Barista `2222`. **Cámbialos antes de usar esto en la calle.**
+Solo la semilla de desarrollo crea estos usuarios: Admin `1234`, Caja `1111`,
+Barista `2222`. Producción omite por completo esa semilla y usa
+`npm run bootstrap:admin` para crear una credencial única.
 
 ## Autenticación
 
@@ -46,7 +51,9 @@ Barista `2222`. **Cámbialos antes de usar esto en la calle.**
 - `POST /api/clientes { nombre, apellido, telefono }` (cajero/admin) — Caja
   registra a un cliente **en persona**, sin SMS: la presencia física frente
   al cajero es su propia verificación.
-- Todas las demás rutas requieren `Authorization: Bearer <token>`.
+- Todas las demás rutas requieren `Authorization: Bearer <token>`. Para
+  personal, cada petición vuelve a comprobar `activo`, rol y `token_version`;
+  cambiar rol, PIN o estado revoca los JWT anteriores.
 - Límite de 10 intentos de login / 15 min por IP (protege contra fuerza bruta
   sobre un PIN de 4 dígitos).
 
@@ -152,6 +159,20 @@ Puntos clave que ya se probaron en vivo:
 - Solo el personal puede mandar `actualizar_item` y `crear_merma`; cualquiera
   (personal o cliente) puede mandar `crear_pedido`.
 
+### Descuentos
+
+El PIN del administrador ya no viaja con el pedido. Caja solicita primero una
+autorización efímera y de un solo uso:
+
+```json
+POST /api/pedidos/aprobaciones-descuento
+{ "pin": "<PIN ADMIN>", "descuentoPorcentaje": 10 }
+```
+
+El `token` devuelto dura cinco minutos y el pedido lo manda como
+`autorizacionDescuento`. Está ligado al cajero, porcentaje y primer uso. Cinco
+PIN fallidos bloquean nuevas pruebas durante una hora.
+
 ## Decisiones de seguridad que ya están tomadas
 
 - El PIN nunca se guarda ni compara en texto plano (bcrypt, vía pgcrypto en
@@ -161,8 +182,8 @@ Puntos clave que ya se probaron en vivo:
   y límite de 1 código por minuto / 5 por hora por número.
 - La API se conecta con un rol de base de datos sin privilegios de
   superusuario (`cafeteria_app`), no con `postgres`.
-- Los descuentos de cajero exigen el PIN de un admin activo, verificado en
-  el momento — no basta con "decir que sí".
+- Los descuentos de cajero usan una autorización de un solo uso ligada al
+  cajero y porcentaje. Los intentos de PIN se bloquean de forma persistente.
 - Rate limiting en login, en solicitar código SMS, y en general.
 - Helmet (cabeceras HTTP de seguridad) y CORS configurable por variable de
   entorno.

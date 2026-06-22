@@ -262,15 +262,7 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_cobro_inmediato AFTER INSERT ON pedidos FOR EACH ROW EXECUTE FUNCTION fn_cobro_inmediato_al_crear();
 
--- Al CREAR un pedido que es el reclamo del regalo, se apaga la bandera de "regalo listo"
--- en ese mismo momento (igual que en el prototipo: reclamar ya cuenta como usado).
-CREATE OR REPLACE FUNCTION fn_registrar_reclamo_regalo() RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.es_regalo_fidelidad AND NEW.cliente_id IS NOT NULL THEN
-    UPDATE clientes SET recompensa_pendiente = false WHERE id = NEW.cliente_id;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_reclamo_regalo AFTER INSERT ON pedidos FOR EACH ROW EXECUTE FUNCTION fn_registrar_reclamo_regalo();
+-- La recompensa se valida y consume dentro de la misma transacción que crea
+-- el pedido. No se usa un trigger AFTER INSERT: ese patrón aceptaba cualquier
+-- pedido marcado por el cliente y borraba la bandera sin comprobar producto,
+-- cantidad ni elegibilidad.

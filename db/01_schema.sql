@@ -28,6 +28,7 @@ CREATE TABLE usuarios (
   rol             rol_usuario NOT NULL,
   pin_hash        TEXT NOT NULL,              -- hash (bcrypt/argon2); el PIN nunca se guarda en texto plano
   activo          BOOLEAN NOT NULL DEFAULT true,
+  token_version   INTEGER NOT NULL DEFAULT 0, -- revoca JWT al cambiar rol, estado o PIN
   creado_en       TIMESTAMPTZ NOT NULL DEFAULT now(),
   actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

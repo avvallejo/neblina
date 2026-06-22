@@ -7,12 +7,24 @@ FROM base AS deps
 COPY package*.json ./
 RUN npm ci
 
-# --- desarrollo: Vite con recarga en vivo (--host para que sea accesible
-# desde fuera del contenedor). En docker-compose.override.yml se monta el
-# código fuente encima para HMR. Para producción lo natural es un build
-# estático servido por nginx; se deja fuera a propósito (ver README).
+# --- desarrollo: Vite con recarga en vivo (el código se monta en
+# docker-compose.override.yml). Se selecciona con target: dev.
 FROM base AS dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 EXPOSE 5173
 CMD ["npm", "run", "dev"]
+
+# --- build de producción: genera el sitio estático en /app/dist
+FROM base AS build
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+# --- producción: Caddy sirve el sitio estático, reenvía /api a la API y obtiene
+# y renueva el certificado HTTPS automáticamente (Let's Encrypt) para el dominio
+# configurado. Se selecciona con target: prod (ver docker-compose.prod.yml).
+FROM caddy:2-alpine AS prod
+COPY --from=build /app/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile
+EXPOSE 80 443

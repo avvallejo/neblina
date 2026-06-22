@@ -1,0 +1,26 @@
+name: Desplegar a producción
+
+# Se dispara SOLO al hacer push de un tag de versión, p. ej.:
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Desplegar por SSH en el servidor
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}        # IP o dominio del servidor
+          username: ${{ secrets.SSH_USER }}    # p. ej. ubuntu
+          key: ${{ secrets.SSH_KEY }}          # llave privada SSH (contenido completo)
+          script: |
+            set -e
+            cd ${{ secrets.APP_DIR }}          # p. ej. /opt/cafeteria-movil
+            git fetch --all --tags
+            git checkout "${{ github.ref_name }}"
+            docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+            docker image prune -f

@@ -1,0 +1,22 @@
+# Caddy obtiene y RENUEVA el certificado HTTPS solo para {$DOMAIN}, en cuanto el
+# DNS del dominio apunte a este servidor y los puertos 80/443 estén abiertos.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Las llamadas a la API van al contenedor de la API. Por defecto api:3000
+	# (mismo docker-compose); si algún día separas la API a otro servidor, cambia
+	# API_UPSTREAM en .env.prod y no se toca nada más.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:3000}
+	}
+
+	# Todo lo demás es la app de React (SPA): si la ruta no es un archivo real,
+	# se devuelve index.html para que el ruteo del navegador funcione.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	tls {$ACME_EMAIL}
+}

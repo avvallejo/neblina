@@ -33,6 +33,8 @@ services:
       - ./db/05_mejoras_produccion.sql:/docker-entrypoint-initdb.d/05_mejoras_produccion.sql:ro
       - ./db/06_costos_indirectos.sql:/docker-entrypoint-initdb.d/06_costos_indirectos.sql:ro
       - ./db/07_verificacion_y_sync.sql:/docker-entrypoint-initdb.d/07_verificacion_y_sync.sql:ro
+      - ./db/08_configuracion.sql:/docker-entrypoint-initdb.d/08_configuracion.sql:ro
+      - ./db/09_tiempo_extraccion_por_tipo.sql:/docker-entrypoint-initdb.d/09_tiempo_extraccion_por_tipo.sql:ro
     networks:
       - cafeteria-net
     healthcheck:
@@ -68,6 +70,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      target: dev
     container_name: cafeteria-frontend
     environment:
       # El frontend llama a rutas "/api/..." y Vite las reenvía a la API por la

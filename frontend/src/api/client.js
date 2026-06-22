@@ -317,3 +317,27 @@ export function getReportes() {
   ]).then(([ventasPorMetodo, masVendidos, cancelaciones, mermasPorMotivo]) =>
     ({ ventasPorMetodo, masVendidos, cancelaciones, mermasPorMotivo }));
 }
+
+/* ============================================================
+   RECETAS  (molienda / tiempo de extracción por tipo de café)
+   ============================================================ */
+
+export function getRecetas() { return request('/recetas'); }
+export function guardarReceta(productoId, ov) {
+  return request(`/recetas/${productoId}`, {
+    method: 'PUT',
+    body: {
+      pasos: ov.pasos,
+      gramajePorShot: ov.gramajePorShot,
+      molienda: ov.molienda,
+      moliendaEspecial: ov.moliendaEspecial,
+      ajusteMolino: ov.ajusteMolino,
+      ajusteMolinoEspecial: ov.ajusteMolinoEspecial,
+      tiempoExtraccion: ov.tiempoExtraccion || ov.tiempoLicuado,        // frappé usa tiempoLicuado en la misma columna
+      tiempoExtraccionEspecial: ov.tiempoExtraccionEspecial,
+      temperaturaServicio: ov.temperatura,
+      texturaLeche: ov.texturaLeche,
+    },
+  });
+}
+export function restaurarReceta(productoId) { return request(`/recetas/${productoId}/restaurar`, { method: 'POST' }); }

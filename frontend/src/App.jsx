@@ -238,7 +238,7 @@ function buildRecipe(product, sel, override) {
         { label: 'Gramaje', value: `${gramaje} g` },
         { label: 'Molienda', value: sel.coffeeType === 'especial' ? (ov.moliendaEspecial || moliendaDefault) : (ov.molienda || moliendaDefault) },
         { label: 'Ajuste molino', value: sel.coffeeType === 'especial' ? (ov.ajusteMolinoEspecial || ajusteDefault) : (ov.ajusteMolino || ajusteDefault) },
-        { label: 'Tiempo extracción', value: ov.tiempoExtraccion || (shots > 1 ? '50-55 s' : '26-30 s') },
+        { label: 'Tiempo extracción', value: (sel.coffeeType === 'especial' ? (ov.tiempoExtraccionEspecial || ov.tiempoExtraccion) : ov.tiempoExtraccion) || (shots > 1 ? '50-55 s' : '26-30 s') },
         { label: 'Rendimiento', value: `${gramaje * 2} g aprox` },
         { label: 'Temperatura', value: ov.temperatura || (product.frio ? '92°C / servir frío' : '92°C') },
       ],
@@ -346,6 +346,24 @@ function estadoPedidoCliente(p) {
   if (its.length > 0 && its.every(i => i.estado === 'terminado')) return p.cobrado ? 'terminado' : 'listo';
   if (its.some(i => i.estado && i.estado !== 'pendiente')) return 'en_preparacion';
   return 'pendiente';
+}
+
+// Receta de la API -> forma de "override" que usa buildRecipe. Los campos en
+// null se dejan undefined para que buildRecipe caiga a su valor por defecto.
+function adaptReceta(r) {
+  return {
+    pasos: Array.isArray(r.pasos) ? r.pasos : [],
+    gramajePorShot: r.gramaje_por_shot != null ? Number(r.gramaje_por_shot) : undefined,
+    molienda: r.molienda || undefined,
+    moliendaEspecial: r.molienda_especial || undefined,
+    ajusteMolino: r.ajuste_molino || undefined,
+    ajusteMolinoEspecial: r.ajuste_molino_especial || undefined,
+    tiempoExtraccion: r.tiempo_extraccion || undefined,
+    tiempoExtraccionEspecial: r.tiempo_extraccion_especial || undefined,
+    tiempoLicuado: r.tiempo_extraccion || undefined, // para frappés
+    temperatura: r.temperatura_servicio || undefined,
+    texturaLeche: r.textura_leche || undefined,
+  };
 }
 
 // Materia prima de la API -> forma del prototipo (snake_case -> camelCase).
@@ -1678,6 +1696,7 @@ function RecetaFormSheet({ product, receta, onClose, onSave }) {
   const [ajusteMolino, setAjusteMolino] = useState((receta && receta.ajusteMolino) || '3.5');
   const [ajusteMolinoEspecial, setAjusteMolinoEspecial] = useState((receta && receta.ajusteMolinoEspecial) || '4.2');
   const [tiempoExtraccion, setTiempoExtraccion] = useState((receta && (receta.tiempoExtraccion || receta.tiempoLicuado)) || (isFrappe ? '25-30 s' : '26-30 s'));
+  const [tiempoExtraccionEspecial, setTiempoExtraccionEspecial] = useState((receta && (receta.tiempoExtraccionEspecial || receta.tiempoExtraccion)) || '26-30 s');
   const [temperatura, setTemperatura] = useState((receta && receta.temperatura) || (isFrappe ? 'Frío / con hielo' : (product.frio ? '92°C / servir frío' : '92°C')));
   const [texturaLeche, setTexturaLeche] = useState((receta && receta.texturaLeche) || 'Microespuma suave y sedosa');
   const [error, setError] = useState('');
@@ -1688,7 +1707,7 @@ function RecetaFormSheet({ product, receta, onClose, onSave }) {
     setError('');
     onSave(product.id, isFrappe
       ? { pasos: pasosArr, molienda, tiempoLicuado: tiempoExtraccion, temperatura }
-      : { pasos: pasosArr, gramajePorShot: parseInt(gramaje, 10) || 18, molienda, moliendaEspecial, ajusteMolino, ajusteMolinoEspecial, tiempoExtraccion, temperatura, texturaLeche }
+      : { pasos: pasosArr, gramajePorShot: parseInt(gramaje, 10) || 18, molienda, moliendaEspecial, ajusteMolino, ajusteMolinoEspecial, tiempoExtraccion, tiempoExtraccionEspecial, temperatura, texturaLeche }
     );
     onClose();
   };
@@ -1706,7 +1725,7 @@ function RecetaFormSheet({ product, receta, onClose, onSave }) {
             <input className="text-input" type="number" value={gramaje} onChange={e => setGramaje(e.target.value)} />
           </div>
           <div>
-            <div className="option-label">Tiempo de extracción</div>
+            <div className="option-label">Tiempo extracción (tradicional)</div>
             <input className="text-input" value={tiempoExtraccion} onChange={e => setTiempoExtraccion(e.target.value)} placeholder="26-30 s" />
           </div>
         </div>
@@ -1739,6 +1758,12 @@ function RecetaFormSheet({ product, receta, onClose, onSave }) {
             <div className="option-label">Ajuste molino (especial)</div>
             <input className="text-input" value={ajusteMolinoEspecial} onChange={e => setAjusteMolinoEspecial(e.target.value)} />
           </div>
+        </div>
+      )}
+      {!isFrappe && (
+        <div className="option-group">
+          <div className="option-label">Tiempo extracción (origen especial)</div>
+          <input className="text-input" value={tiempoExtraccionEspecial} onChange={e => setTiempoExtraccionEspecial(e.target.value)} placeholder="26-30 s" />
         </div>
       )}
       <div className="option-group">
@@ -3173,6 +3198,23 @@ export default function App() {
     return () => clearInterval(t);
   }, [role, recargarAdmin]);
 
+  // Recetas personalizadas reales (molienda/tiempo por tipo de café) en el mapa
+  // que ya usa todo el prototipo, para que el barista vea lo que el admin guardó.
+  const recargarRecetas = React.useCallback(async () => {
+    try {
+      const rows = await api.getRecetas();
+      const map = {};
+      rows.forEach(r => { if (r.es_personalizada) map[r.producto_id] = adaptReceta(r); });
+      setRecetaOverrides(map);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (!['cajero', 'barista', 'admin'].includes(role)) return undefined;
+    recargarRecetas();
+    return undefined;
+  }, [role, recargarRecetas]);
+
   const addToast = (msg, tone = 'info') => {
     const id = Date.now() + Math.random();
     setToasts(t => [...t, { id, msg, tone }]);
@@ -3339,12 +3381,12 @@ export default function App() {
     catch (e) { addToast(e.message, 'warn'); }
   };
 
-  const setRecetaOverride = (productId, override) => {
-    setRecetaOverrides(prev => {
-      if (override === null) { const next = { ...prev }; delete next[productId]; return next; }
-      return { ...prev, [productId]: override };
-    });
-    addToast(override === null ? 'Receta restaurada a su versión predeterminada' : 'Receta actualizada', 'success');
+  const setRecetaOverride = async (productId, override) => {
+    try {
+      if (override === null) { await api.restaurarReceta(productId); addToast('Receta restaurada a su versión predeterminada', 'success'); }
+      else { await api.guardarReceta(productId, override); addToast('Receta actualizada', 'success'); }
+      await recargarRecetas();
+    } catch (e) { addToast(e.message, 'warn'); }
   };
 
   const clock = new Date(now).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });

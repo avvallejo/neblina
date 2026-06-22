@@ -69,27 +69,26 @@ services:
       target: prod
     container_name: cafeteria-web
     environment:
-      DOMAIN: ${DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL}
       API_UPSTREAM: ${API_UPSTREAM:-api:3000}
-    ports:
-      # En un servidor COMPARTIDO donde otra app ya usa el 80 (tu caso: cvs-erp),
-      # la cafetería toma SOLO el 443. Caddy igual obtiene/renueva el certificado
-      # por el 443 (desafío TLS-ALPN), así que no pelea por el 80.
-      # En un servidor DEDICADO (cuando el cliente lo lleve al suyo) puedes
-      # agregar de vuelta "80:80" para el redirect http->https.
-      - "443:443"
+      # Detrás del PORTERO (servidor compartido): SITE_ADDRESS=:80 -> sirve HTTP
+      # interno y el portero pone el HTTPS. NO publica puertos al host.
+      # Servidor DEDICADO (handoff): pon SITE_ADDRESS=tu-dominio + ACME_EMAIL en
+      # .env.prod y agrega aquí  ports: ["80:80","443:443"].
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      ACME_EMAIL: ${ACME_EMAIL:-}
     depends_on:
       - api
     restart: unless-stopped
     volumes:
-      - caddy_data:/data       # certificados HTTPS (¡persisten entre reinicios!)
+      - caddy_data:/data
       - caddy_config:/config
-    networks: [cafeteria-net]
+    networks: [cafeteria-net, web-proxy]
 
 networks:
   cafeteria-net:
     name: cafeteria-net
+  web-proxy:
+    external: true   # red compartida con el portero (docker network create web-proxy)
 
 volumes:
   cafeteria_db_data:

@@ -207,6 +207,8 @@ export function cobrarPedido(id, { metodoPago, montoRecibido } = {}) {
   return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido } });
 }
 export function cancelarPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH' }); }
+// El cliente cancela SU propio pedido (con su token), si la preparación no inició.
+export function cancelarMiPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', useClienteToken: true }); }
 export function noShowPedido(id) { return request(`/pedidos/${id}/no-show`, { method: 'PATCH' }); }
 
 /* ============================================================

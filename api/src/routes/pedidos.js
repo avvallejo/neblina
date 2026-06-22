@@ -147,10 +147,31 @@ router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (
   res.json(rows[0]);
 }));
 
-router.patch('/:id/cancelar', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
+// Cancelar un pedido. Lo permite el CLIENTE (solo el suyo), el BARISTA, la CAJA
+// y el ADMIN, pero SOLO si la preparación no ha iniciado (ningún ítem dejó de
+// estar 'pendiente'). Si ya inició, se rechaza: para lo ya preparado y no
+// recogido está el flujo de no-show, no la cancelación.
+router.patch('/:id/cancelar', asyncHandler(async (req, res) => {
+  if (req.auth.tipo === 'staff' && !['barista', 'cajero', 'admin'].includes(req.auth.rol)) {
+    throw new ApiError(403, 'No autorizado para cancelar pedidos.');
+  }
   await withTransaction(async client => {
-    const r = await client.query('UPDATE pedidos SET cancelado = true WHERE id = $1 RETURNING id', [req.params.id]);
-    if (r.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
+    const ped = await client.query('SELECT cliente_id, cancelado FROM pedidos WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (ped.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
+    // El cliente solo puede cancelar SU propio pedido.
+    if (req.auth.tipo === 'cliente' && ped.rows[0].cliente_id !== req.auth.id) {
+      throw new ApiError(403, 'No puedes cancelar un pedido que no es tuyo.');
+    }
+    if (ped.rows[0].cancelado) return; // idempotente: ya estaba cancelado
+
+    // La preparación "inició" en cuanto algún ítem deja de estar 'pendiente'.
+    const iniciado = await client.query(
+      "SELECT 1 FROM pedido_items WHERE pedido_id = $1 AND estado <> 'pendiente' LIMIT 1",
+      [req.params.id]
+    );
+    if (iniciado.rows.length > 0) throw new ApiError(409, 'No se puede cancelar: la preparación ya inició.');
+
+    await client.query('UPDATE pedidos SET cancelado = true WHERE id = $1', [req.params.id]);
     await client.query("UPDATE pedido_items SET estado = 'cancelado' WHERE pedido_id = $1", [req.params.id]);
   });
   res.json({ ok: true });

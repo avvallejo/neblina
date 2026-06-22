@@ -1133,7 +1133,7 @@ function CajeroApp({ tickets, createOrder, orders, cancelOrderFn, confirmarEntre
    BARISTA
    ============================================================ */
 
-function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma }) {
+function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma, onCancelar }) {
   const product = getProduct(ticket.productId);
   const elapsedSec = (now - (ticket.status === 'pendiente' ? ticket.createdAt : ticket.startedAt || ticket.createdAt)) / 1000;
   return (
@@ -1172,6 +1172,9 @@ function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma }
         {ticket.status === 'en_preparacion' && <button className="btn-primary" onClick={onTerminar}>Terminar</button>}
         <button className="icon-btn small" onClick={onMerma} aria-label="Registrar merma"><AlertCircle size={16} /></button>
       </div>
+      {ticket.status === 'pendiente' && onCancelar && (
+        <button className="link-danger ticket-cancelar" onClick={onCancelar}>Cancelar pedido</button>
+      )}
     </div>
   );
 }
@@ -1357,10 +1360,11 @@ function MermaModal({ ticket, onClose, onSave }) {
   );
 }
 
-function BaristaApp({ tickets, startTicket, finishTicket, addMerma, addToast, onSwitchRole, now, currentUser, recetaOverrides }) {
+function BaristaApp({ tickets, startTicket, finishTicket, addMerma, onCancelar, addToast, onSwitchRole, now, currentUser, recetaOverrides }) {
   const [tab, setTab] = useState('pendientes');
   const [recipeTicket, setRecipeTicket] = useState(null);
   const [mermaTicket, setMermaTicket] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
 
   const dueKey = t => t.horaRecogida || t.createdAt;
   const pendientes = tickets.filter(t => t.status === 'pendiente').sort((a, b) => dueKey(a) - dueKey(b));
@@ -1388,6 +1392,7 @@ function BaristaApp({ tickets, startTicket, finishTicket, addMerma, addToast, on
               onIniciar={() => startTicket(t.id)}
               onTerminar={() => handleFinish(t)}
               onMerma={() => setMermaTicket(t)}
+              onCancelar={() => setCancelTarget(t)}
             />
           ))
         )}
@@ -1412,6 +1417,15 @@ function BaristaApp({ tickets, startTicket, finishTicket, addMerma, addToast, on
         />
       )}
       {mermaTicket && <MermaModal ticket={mermaTicket} onClose={() => setMermaTicket(null)} onSave={addMerma} />}
+      <ConfirmDialog
+        open={!!cancelTarget}
+        title="Cancelar pedido"
+        message={cancelTarget ? `¿Cancelar el pedido ${cancelTarget.folio || cancelTarget.orderId}? Solo se puede mientras no inicie su preparación.` : ''}
+        confirmLabel="Sí, cancelar"
+        danger
+        onConfirm={() => { onCancelar(cancelTarget.orderId); setCancelTarget(null); }}
+        onCancel={() => setCancelTarget(null)}
+      />
     </>
   );
 }
@@ -2366,20 +2380,25 @@ function ClienteConfirmado({ order, modo, horaRecogida, reward, onVerEstado }) {
   );
 }
 
-function ClienteSeguimiento({ order, onNuevoPedido }) {
+function ClienteSeguimiento({ order, onNuevoPedido, onCancelar }) {
+  const [confirmar, setConfirmar] = useState(false);
   const items = order.items || [];
   const steps = ['pendiente', 'en_preparacion', 'terminado'];
   const allDone = items.length > 0 && items.every(t => t.estado === 'terminado' || t.estado === 'cancelado');
   const entregado = allDone && order.cobrado;
+  // Solo se puede cancelar mientras la preparación no inició (todo 'pendiente').
+  const cancelable = !!onCancelar && estadoPedidoCliente(order) === 'pendiente';
   return (
     <div className="seguimiento">
       <div className="seguimiento-head">
         <div className="confirm-order-id">{order.folio || order.id}</div>
         <div className="footer-label">
-          {order.no_show ? 'No recogido' : entregado ? '¡Entregado!' : allDone ? '¡Listo para recoger!' : 'Preparando tu pedido...'}
+          {order.cancelado ? 'Pedido cancelado' : order.no_show ? 'No recogido' : entregado ? '¡Entregado!' : allDone ? '¡Listo para recoger!' : 'Preparando tu pedido...'}
         </div>
       </div>
-      {order.no_show ? (
+      {order.cancelado ? (
+        <div className="noshow-banner"><AlertCircle size={20} /> Este pedido fue cancelado.</div>
+      ) : order.no_show ? (
         <div className="noshow-banner">
           <AlertCircle size={20} /> Lamentamos que no pudiste pasar por este pedido. Por políticas de merma, se restó 1 punto de tu tarjeta de fidelidad.
         </div>
@@ -2406,7 +2425,19 @@ function ClienteSeguimiento({ order, onNuevoPedido }) {
           );
         })}
       </div>
+      {cancelable && (
+        <button className="link-danger full-cancel" onClick={() => setConfirmar(true)}>Cancelar mi pedido</button>
+      )}
       <button className="btn-secondary full" onClick={onNuevoPedido}>Hacer otro pedido</button>
+      <ConfirmDialog
+        open={confirmar}
+        title="Cancelar pedido"
+        message="¿Seguro que quieres cancelar tu pedido? Solo se puede mientras no empiece a prepararse."
+        confirmLabel="Sí, cancelar"
+        danger
+        onConfirm={() => { setConfirmar(false); onCancelar(order.id); }}
+        onCancel={() => setConfirmar(false)}
+      />
     </div>
   );
 }
@@ -2495,6 +2526,15 @@ function ClienteApp({ turnoAbierto, promoConfig, smsActivo, addToast, onSwitchRo
       setMisPedidos(ped);
     } catch { /* ignore */ }
   }, []);
+
+  // El cliente cancela su propio pedido (solo si la preparación no inició).
+  const cancelarMiPedidoApp = React.useCallback(async (orderId) => {
+    try {
+      await api.cancelarMiPedido(orderId);
+      await refrescarCuenta();
+      addToast('Tu pedido fue cancelado', 'warn');
+    } catch (e) { addToast(e.message, 'warn'); }
+  }, [refrescarCuenta, addToast]);
 
   // Restaura la sesión del cliente desde el token guardado: así NO pierde su
   // historial al navegar, recargar la página o volver de otro rol.
@@ -2695,6 +2735,7 @@ function ClienteApp({ turnoAbierto, promoConfig, smsActivo, addToast, onSwitchRo
               <ClienteSeguimiento
                 order={seguimientoOrder || lastOrder}
                 onNuevoPedido={() => { setScreen('menu'); setLastOrder(null); setMisPedidos([]); }}
+                onCancelar={cancelarMiPedidoApp}
               />
             )}
           </>
@@ -2784,6 +2825,8 @@ const STYLES = `
 .branding-logo-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
 .branding-hint { font-size:11px; color:#8A7A6B; margin-top:10px; line-height:1.4; }
 .branding-editor .btn-primary:disabled { opacity:.5; cursor:default; }
+.ticket-cancelar { display:block; margin:10px auto 0; }
+.full-cancel { display:block; width:100%; margin-top:10px; padding:8px; text-align:center; }
 .role-select-head h1 { font-family:'Space Grotesk',sans-serif; font-size:24px; margin:0 0 6px; }
 .role-select-head p { color:#B8A795; font-size:14px; margin:0; }
 .role-grid { display:flex; flex-direction:column; gap:12px; }
@@ -3537,7 +3580,8 @@ export default function App() {
         )}
         {role === 'barista' && (
           <BaristaApp
-            tickets={cola} startTicket={iniciarTicketApi} finishTicket={terminarTicketApi} addMerma={crearMermaApi} addToast={addToast}
+            tickets={cola} startTicket={iniciarTicketApi} finishTicket={terminarTicketApi} addMerma={crearMermaApi}
+            onCancelar={cancelarPedidoApi} addToast={addToast}
             onSwitchRole={logout} now={now} currentUser={currentUser} recetaOverrides={recetaOverrides}
           />
         )}

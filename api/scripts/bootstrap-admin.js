@@ -16,12 +16,21 @@ async function main() {
   const existing = await query("SELECT id FROM usuarios WHERE rol = 'admin' AND activo = true LIMIT 1");
   if (existing.rows.length > 0) throw new Error('Ya existe un administrador activo; no se creó otro.');
 
+  // Multi-sucursal (migración 12): garantiza que exista al menos la sede
+  // "Principal" antes del primer arranque. Si la migración ya la creó, este
+  // INSERT no hace nada.
+  await query(
+    "INSERT INTO sucursales (nombre, prefijo_folio) VALUES ('Principal', 'S1') ON CONFLICT (nombre) DO NOTHING"
+  );
+
   const pinHash = await bcrypt.hash(pin, 12);
+  // sucursal_id queda NULL a propósito: el primer administrador es el
+  // "admin general", con acceso a todas las sucursales.
   const created = await query(
     "INSERT INTO usuarios (nombre, rol, pin_hash) VALUES ($1, 'admin', $2) RETURNING id, nombre",
     [name, pinHash]
   );
-  console.log(`Administrador inicial creado: ${created.rows[0].nombre} (${created.rows[0].id}).`);
+  console.log(`Administrador general creado: ${created.rows[0].nombre} (${created.rows[0].id}).`);
   console.log('El PIN no se imprimió. Elimina BOOTSTRAP_ADMIN_PIN del entorno.');
 }
 

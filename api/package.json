@@ -9,7 +9,8 @@
     "dev": "node --watch src/server.js",
     "test": "node --test test/*.test.js",
     "test:security:live": "node test/live-security-smoke.js",
-    "bootstrap:admin": "node scripts/bootstrap-admin.js"
+    "bootstrap:admin": "node scripts/bootstrap-admin.js",
+    "test:multisucursal:live": "node test/live-multisucursal-smoke.js"
   },
   "dependencies": {
     "@aws-sdk/client-sns": "^3.1073.0",

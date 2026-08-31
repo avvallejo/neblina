@@ -49,7 +49,8 @@ BEGIN
   IF p_unidad_origen = 'kg' AND p_unidad_destino = 'g'  THEN RETURN p_cantidad * 1000; END IF;
   IF p_unidad_origen = 'ml' AND p_unidad_destino = 'l'  THEN RETURN p_cantidad / 1000; END IF;
   IF p_unidad_origen = 'l'  AND p_unidad_destino = 'ml' THEN RETURN p_cantidad * 1000; END IF;
-  RETURN p_cantidad; -- unidades no convertibles entre sí (ej. 'pieza'); se asume que ya coinciden
+  RAISE EXCEPTION 'No se puede convertir de % a %', p_unidad_origen, p_unidad_destino
+    USING ERRCODE = '22023';
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
@@ -72,7 +73,9 @@ DECLARE
   v_cantidad      NUMERIC;
   v_restante      NUMERIC;
   v_lote          RECORD;
-  v_tomar         NUMERIC;
+  v_disponible_stock NUMERIC;
+  v_tomar_stock   NUMERIC;
+  v_tomar_lote    NUMERIC;
 BEGIN
   IF p_cantidad IS NULL OR p_cantidad <= 0 THEN
     RETURN;
@@ -84,20 +87,24 @@ BEGIN
 
   IF v_requiere_lote THEN
     FOR v_lote IN
-      SELECT id, cantidad_disponible FROM lotes
+      SELECT id, cantidad_disponible, unidad FROM lotes
       WHERE materia_prima_id = p_materia_prima_id AND cantidad_disponible > 0
       ORDER BY fecha_compra ASC, creado_en ASC
       FOR UPDATE
     LOOP
       EXIT WHEN v_restante <= 0;
-      v_tomar := LEAST(v_lote.cantidad_disponible, v_restante);
-      UPDATE lotes SET cantidad_disponible = cantidad_disponible - v_tomar WHERE id = v_lote.id;
+      v_disponible_stock := fn_convertir_unidad(v_lote.cantidad_disponible, v_lote.unidad, v_unidad_stock);
+      v_tomar_stock := LEAST(v_disponible_stock, v_restante);
+      v_tomar_lote := fn_convertir_unidad(v_tomar_stock, v_unidad_stock, v_lote.unidad);
+      UPDATE lotes SET cantidad_disponible = GREATEST(0, cantidad_disponible - v_tomar_lote) WHERE id = v_lote.id;
       INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, lote_id, pedido_item_id, merma_id, usuario_id)
-        VALUES (p_materia_prima_id, p_tipo, -v_tomar, v_lote.id, p_pedido_item_id, p_merma_id, p_usuario_id);
-      v_restante := v_restante - v_tomar;
+        VALUES (p_materia_prima_id, p_tipo, -v_tomar_stock, v_lote.id, p_pedido_item_id, p_merma_id, p_usuario_id);
+      v_restante := v_restante - v_tomar_stock;
     END LOOP;
-    UPDATE materias_primas m SET stock_actual = COALESCE(
-      (SELECT SUM(cantidad_disponible) FROM lotes WHERE materia_prima_id = m.id), 0
+    UPDATE materias_primas m SET stock_actual = (
+      SELECT COALESCE(SUM(fn_convertir_unidad(l.cantidad_disponible, l.unidad, m.unidad)), 0)
+      FROM lotes l
+      WHERE l.materia_prima_id = m.id
     ) WHERE m.id = p_materia_prima_id;
     IF v_restante > 0 THEN
       INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, pedido_item_id, merma_id, usuario_id, motivo)

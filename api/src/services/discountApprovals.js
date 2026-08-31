@@ -10,7 +10,7 @@ function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-async function createDiscountApproval({ requesterId, pin, discount }, queryFn = query) {
+async function createDiscountApproval({ requesterId, pin, discount, sucursalId }, queryFn = query) {
   if (!/^\d{4}$/.test(String(pin || ''))) throw new ApiError(400, 'El PIN de autorización debe tener 4 dígitos.');
 
   // El llamador ejecuta esta función dentro de una transacción. El bloqueo
@@ -26,7 +26,14 @@ async function createDiscountApproval({ requesterId, pin, discount }, queryFn = 
     throw new ApiError(429, 'Autorización bloqueada por demasiados intentos. Espera una hora.');
   }
 
-  const admins = await queryFn("SELECT id, pin_hash FROM usuarios WHERE rol = 'admin' AND activo = true");
+  // Autorizan: los admin DE ESTA SEDE y los administradores generales. Un
+  // admin de otra sede no puede autorizar descuentos aquí.
+  const admins = sucursalId
+    ? await queryFn(
+      "SELECT id, pin_hash FROM usuarios WHERE rol = 'admin' AND activo = true AND (sucursal_id = $1 OR sucursal_id IS NULL)",
+      [sucursalId]
+    )
+    : await queryFn("SELECT id, pin_hash FROM usuarios WHERE rol = 'admin' AND activo = true AND sucursal_id IS NULL");
   let authorizerId = null;
   for (const admin of admins.rows) {
     // eslint-disable-next-line no-await-in-loop

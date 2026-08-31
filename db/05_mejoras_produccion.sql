@@ -69,8 +69,8 @@ DECLARE
   v_producto  productos%ROWTYPE;
   v_receta    recetas%ROWTYPE;
   v_costo     NUMERIC := 0;
-  v_cafe      NUMERIC;
-  v_leche     NUMERIC;
+  v_cafe      RECORD;
+  v_leche     RECORD;
   v_leche_ml  NUMERIC;
   v_variante  TEXT;
   v_empaque   RECORD;
@@ -83,13 +83,21 @@ BEGIN
   END IF;
 
   -- Café tradicional, a tamaño de referencia (12oz, un shot)
-  SELECT m.costo_unitario INTO v_cafe FROM opciones_cafe oc JOIN materias_primas m ON m.id = oc.materia_prima_id WHERE oc.codigo = 'tradicional';
-  v_costo := v_costo + COALESCE(v_receta.gramaje_por_shot, 18) / 1000.0 * COALESCE(v_cafe, 0);
+  SELECT m.costo_unitario, m.unidad INTO v_cafe
+  FROM opciones_cafe oc JOIN materias_primas m ON m.id = oc.materia_prima_id
+  WHERE oc.codigo = 'tradicional';
+  IF FOUND THEN
+    v_costo := v_costo + fn_convertir_unidad(COALESCE(v_receta.gramaje_por_shot, 18), 'g', v_cafe.unidad) * COALESCE(v_cafe.costo_unitario, 0);
+  END IF;
 
   IF v_producto.permite_leche THEN
-    SELECT m.costo_unitario INTO v_leche FROM opciones_leche ol JOIN materias_primas m ON m.id = ol.materia_prima_id WHERE ol.codigo = 'entera';
+    SELECT m.costo_unitario, m.unidad INTO v_leche
+    FROM opciones_leche ol JOIN materias_primas m ON m.id = ol.materia_prima_id
+    WHERE ol.codigo = 'entera';
     SELECT cantidad_ml INTO v_leche_ml FROM tamano_leche_cantidad WHERE tamano_id = (SELECT id FROM opciones_tamano WHERE codigo = '12');
-    v_costo := v_costo + COALESCE(v_leche_ml, 0) / 1000.0 * COALESCE(v_leche, 0);
+    IF v_leche.unidad IS NOT NULL THEN
+      v_costo := v_costo + fn_convertir_unidad(COALESCE(v_leche_ml, 0), 'ml', v_leche.unidad) * COALESCE(v_leche.costo_unitario, 0);
+    END IF;
   END IF;
 
   -- Vaso y tapa de 12oz, según variante (caliente/fría/frappé) — la sección 14.1

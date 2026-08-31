@@ -15,7 +15,7 @@ function normalizeItems(items) {
   });
 }
 
-async function prepareOrderLines(client, items, customerId) {
+async function prepareOrderLines(client, items, customerId, sucursalId) {
   const normalized = normalizeItems(items);
   const lines = [];
   for (const item of normalized) {
@@ -26,6 +26,7 @@ async function prepareOrderLines(client, items, customerId) {
       lecheId: item.lecheId,
       cafeId: item.cafeId,
       extraIds: item.extraIds,
+      sucursalId,
     }, client.query.bind(client));
     lines.push({ ...item, precioUnitario: regularPrice });
   }
@@ -38,16 +39,26 @@ async function prepareOrderLines(client, items, customerId) {
   }
   if (lines[0].extraIds.length > 0) throw new ApiError(400, 'La recompensa no admite extras.');
 
-  const customer = await client.query(
-    'SELECT recompensa_pendiente FROM clientes WHERE id = $1 FOR UPDATE',
-    [customerId]
-  );
+  const customer = sucursalId
+    ? await client.query(
+      'SELECT recompensa_pendiente FROM clientes WHERE id = $1 AND sucursal_id = $2 FOR UPDATE',
+      [customerId, sucursalId]
+    )
+    : await client.query(
+      'SELECT recompensa_pendiente FROM clientes WHERE id = $1 FOR UPDATE',
+      [customerId]
+    );
   if (customer.rows.length === 0) throw new ApiError(404, 'Cliente no encontrado.');
   if (!customer.rows[0].recompensa_pendiente) throw new ApiError(409, 'El cliente no tiene una recompensa pendiente.');
 
-  const promotion = await client.query(
-    'SELECT activo, producto_premio_id FROM promocion_fidelidad ORDER BY actualizado_en DESC LIMIT 1'
-  );
+  const promotion = sucursalId
+    ? await client.query(
+      'SELECT activo, producto_premio_id FROM promocion_fidelidad WHERE sucursal_id = $1 ORDER BY actualizado_en DESC LIMIT 1',
+      [sucursalId]
+    )
+    : await client.query(
+      'SELECT activo, producto_premio_id FROM promocion_fidelidad ORDER BY actualizado_en DESC LIMIT 1'
+    );
   const activePromotion = promotion.rows[0];
   if (!activePromotion?.activo || !activePromotion.producto_premio_id) {
     throw new ApiError(409, 'No hay una recompensa activa.');

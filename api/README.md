@@ -23,6 +23,10 @@ psql -U postgres -d cafeteria -f ../db/07_verificacion_y_sync.sql
 psql -U postgres -d cafeteria -f ../db/08_configuracion.sql
 psql -U postgres -d cafeteria -f ../db/09_tiempo_extraccion_por_tipo.sql
 psql -U postgres -d cafeteria -f ../db/10_security_hardening.sql
+psql -U postgres -d cafeteria -f ../db/11_catalogos_y_unidades.sql
+psql -U postgres -d cafeteria -f ../db/12_multisucursal.sql
+psql -U postgres -d cafeteria -f ../db/13_flujo_costos_menu.sql
+psql -U postgres -d cafeteria -f ../db/14_proveedores_categorias.sql
 
 # 2. API
 npm install
@@ -34,17 +38,44 @@ Solo la semilla de desarrollo crea estos usuarios: Admin `1234`, Caja `1111`,
 Barista `2222`. Producción omite por completo esa semilla y usa
 `npm run bootstrap:admin` para crear una credencial única.
 
+## Multi-sucursal (cómo piensa la API desde la migración 12)
+
+Todo — catálogo, inventario, clientes, personal, turnos, folios y
+configuración — pertenece a UNA sucursal. Reglas:
+
+- **Endpoints públicos** (menú, opciones, `turnos/estado`, `config`,
+  fidelidad): reciben la sede como `?sucursal=<id>`. La lista de sedes para
+  el selector es `GET /api/sucursales` (público, solo id y nombre).
+- **Sesiones**: el login es POR SEDE y el token queda atado a ella. El
+  personal con sede fija opera SOLO su sucursal — cualquier `X-Sucursal-Id`
+  que mande se ignora, y un recurso de otra sede le responde 404.
+- **Jerarquía de administradores**:
+  - *Administrador general* (`usuarios.sucursal_id = NULL`): opera cualquier
+    sede eligiéndola con el encabezado `X-Sucursal-Id` (o `?sucursal=`); es
+    el único que administra sucursales (`/api/sucursales/todas`, `POST`,
+    `PATCH`), crea otros admins generales, reasigna gente de sede y ve el
+    reporte consolidado (`?consolidado=true`).
+  - *Administrador de sede*: administra únicamente su sucursal (incluido su
+    personal); no ve ni edita a los admins generales ni a otras sedes.
+- **Descuentos**: el PIN autorizador debe ser de un admin DE ESA SEDE o de un
+  admin general.
+- La prueba de integración `npm run test:multisucursal:live` verifica estas
+  garantías (10 casos) contra la API corriendo.
+
 ## Autenticación
 
-- `POST /api/auth/login { pin }` → personal (admin/cajero/barista). Devuelve
-  `{ token, usuario }`. El PIN se compara con bcrypt contra los usuarios
-  activos — nunca se guarda ni se compara en texto plano.
+- `POST /api/auth/login { pin, sucursalId }` → personal (admin/cajero/
+  barista) **de esa sucursal** (los admins generales entran desde cualquier
+  sede). Devuelve `{ token, usuario }`, donde `usuario.sucursalId === null`
+  identifica al administrador general. El PIN se compara con bcrypt solo
+  contra el personal de esa sede + los generales — nunca se guarda ni se
+  compara en texto plano.
 - **Cliente, en dos pasos (verificación real por SMS):**
-  1. `POST /api/auth/cliente/solicitar-codigo { telefono }` — manda un código
+  1. `POST /api/auth/cliente/solicitar-codigo { telefono, sucursalId }` — manda un código
      de 6 dígitos por SMS (o lo imprime en consola si `SMS_PROVIDER=console`,
      para desarrollo sin gastar SMS reales). Límite: 1 código por minuto y
      máximo 5 por hora, por teléfono.
-  2. `POST /api/auth/cliente/verificar-codigo { telefono, codigo, nombre?, apellido? }`
+  2. `POST /api/auth/cliente/verificar-codigo { telefono, codigo, sucursalId, nombre?, apellido? }`
      — `nombre`/`apellido` solo son obligatorios la primera vez (cliente
      nuevo); alguien que ya tiene cuenta solo necesita el código. Devuelve
      `{ token, cliente }`.
@@ -61,9 +92,12 @@ Barista `2222`. Producción omite por completo esa semilla y usa
 
 | Método y ruta | Quién | Para qué |
 |---|---|---|
-| `GET /api/productos` | público | Menú (Caja y Cliente) |
+| `GET /api/sucursales` | público | Sedes activas, para el selector |
+| `GET /api/productos?sucursal=<id>` | público | Menú de esa sede (Caja y Cliente) |
 | `GET /api/opciones/{tamanos,leches,cafes,extras}` | público | Hoja de personalización |
-| `GET /api/turnos/estado` | público | El cliente ve si está abierto |
+| `GET /api/opciones/admin` · `POST /api/opciones/{leches,cafes,extras}` · `PATCH /api/opciones/{tipo}/:id` | admin | Ajustes de precio de la personalización, con costo estimado y sugerido |
+| `GET/POST/PATCH/DELETE /api/gastos-fijos` · `GET/PUT /api/promociones/margen` | admin | Gastos fijos y margen/volumen (costo indirecto) |
+| `GET /api/turnos/estado?sucursal=<id>` | público | El cliente ve si SU sede está abierta |
 | `POST /api/pedidos` | staff o cliente | Levantar un pedido (precio se calcula en el servidor) |
 | `PATCH /api/pedidos/:id/cobrar` | cajero/admin | Confirma el cobro — **aquí** se acredita fidelidad |
 | `PATCH /api/pedidos/:id/no-show` | cajero/admin | Penaliza fidelidad por no recogido |
@@ -73,14 +107,37 @@ Barista `2222`. Producción omite por completo esa semilla y usa
 | `GET /api/clientes/yo` , `/yo/pedidos` | cliente | Su cuenta y su historial |
 | `POST /api/sync/batch` | staff o cliente | Sincroniza una cola de acciones hechas sin internet |
 | `PUT /api/recetas/:productoId` | admin | Editar pasos/molienda/tiempo/temperatura |
-| `GET /api/productos/:id/precio-sugerido` | admin | Costo directo + indirecto + precio de equilibrio |
+| `GET /api/productos/:id/precio-sugerido` | admin | Costo directo + indirecto, margen aplicable y redondeo |
+| `GET /api/productos/precios-por-revisar` | admin | Productos cuyo precio de menú ya no cuadra con su costo + margen |
 | `GET /api/promociones/punto-equilibrio` | admin | Unidades/mes y /día para no perder dinero |
-| `GET /api/reportes/*` | admin | Los mismos reportes del dashboard |
+| `GET /api/reportes/*` | admin | Reportes de su sede |
+| `GET /api/reportes/*?consolidado=true` | admin general | Todas las sedes, con nombre de sucursal |
+| `GET/POST/PATCH /api/sucursales*` | admin general | Crear y administrar sucursales |
 
 Todos los precios se **calculan en el servidor** (`src/utils/pricing.js`) — el
 precio que manda el frontend nunca se usa para cobrar, solo se confía en los
 catálogos (`opciones_*`, `productos.precio_base`) que vive en la base de
 datos.
+
+## Flujo inventario → receta → costo → precio → menú
+
+La cadena está automatizada de punta a punta:
+
+1. Das de alta la **materia prima** en el inventario (con su costo unitario).
+2. Creas el **producto**: su receta se crea sola con valores predeterminados;
+   en el editor de receta agregas sus **ingredientes del inventario**
+   (`PUT /api/recetas/:productoId` con `insumosFijos`). El café, la leche y
+   el vaso/tapa se calculan según las opciones de cada venta.
+3. El sistema calcula el **costo prorrateado** (directo por receta +
+   indirecto por gastos fijos). Tú solo decides el **margen** — el de la
+   sucursal o uno propio del producto (`margenPorcentaje`) — y aplicas el
+   **precio sugerido** al menú con un clic.
+4. El producto queda visible en el menú de la app y en la **pantalla del
+   negocio** (frontend: `/?pantalla=menu&sucursal=<id>`, pensada para una TV;
+   se actualiza sola cada minuto).
+5. Si el costo de un insumo cambia, el precio NO cambia solo:
+   `GET /api/productos/precios-por-revisar` alimenta el aviso del panel para
+   repreciar con un clic.
 
 ## Costos indirectos y punto de equilibrio (lo que pediste explícitamente)
 
@@ -190,10 +247,11 @@ PIN fallidos bloquean nuevas pruebas durante una hora.
 
 ## Lo que falta a propósito (y qué hacer cuando llegue el momento)
 
-- **Pruebas automatizadas**: todo esto se probó a mano con peticiones HTTP
-  reales (ver el historial de la conversación), pero no hay todavía una
-  suite de pruebas que corra sola en CI. Vale la pena escribirla antes de que
-  el equipo crezca.
+- **Pruebas automatizadas**: ya existen dos niveles — `npm test` (unitarias,
+  32 casos, corren sin base de datos) y las de integración contra la API viva:
+  `npm run test:security:live` (seguridad) y `npm run test:multisucursal:live`
+  (las 10 garantías multi-sucursal). Falta engancharlas a un CI (GitHub
+  Actions) para que corran solas en cada cambio.
 - **Backups de la base de datos**: configura `pg_dump` programado (cron) o el
   backup automático de tu proveedor de hosting desde el primer día en
   producción — no es algo que la API resuelva por ti.

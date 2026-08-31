@@ -17,6 +17,7 @@ services:
       - ./docker-compose.yml:/workspace/docker-compose.yml:ro
       - ./docker-compose.prod.yml:/workspace/docker-compose.prod.yml:ro
       - ./db:/workspace/db:ro
+      - ./frontend/src:/workspace/frontend/src:ro
     command: ["node", "--watch", "src/server.js"]
 
   frontend:

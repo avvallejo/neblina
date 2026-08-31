@@ -13,12 +13,21 @@ app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json({ limit: '2mb' })); // 2mb: holgura para el logo del negocio (base64)
 
-// Límite general — además de los límites específicos en /auth.
-app.use(rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false }));
+// Límite general — suficientemente holgado para el refresco automático del
+// panel Admin. Las rutas sensibles (login, SMS, autorizaciones) conservan sus
+// límites específicos y más estrictos.
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.API_RATE_LIMIT_MAX || 600),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Espera un momento e intenta de nuevo.' },
+}));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/sucursales', require('./routes/sucursales'));
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/proveedores', require('./routes/proveedores'));
 app.use('/api/materias-primas', require('./routes/materias'));

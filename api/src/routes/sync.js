@@ -1,11 +1,11 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, resolveSucursal } = require('../middleware/auth');
 const { prepareOrderLines } = require('../services/orderValidation');
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireAuth, resolveSucursal); // cada lote se procesa en la sede del dispositivo
 
 // El dispositivo (Caja, Barista o la app del Cliente) guarda sus acciones en
 // una cola local mientras está sin internet, cada una con un client_uuid que
@@ -34,13 +34,13 @@ router.post('/batch', asyncHandler(async (req, res) => {
       let resultado;
       switch (op.tipo) {
         case 'crear_pedido':
-          resultado = await procesarCrearPedido(op, req.auth, idMap);
+          resultado = await procesarCrearPedido(op, req.auth, idMap, req.sucursalId);
           break;
         case 'actualizar_item':
-          resultado = await procesarActualizarItem(op, req.auth, idMap);
+          resultado = await procesarActualizarItem(op, req.auth, idMap, req.sucursalId);
           break;
         case 'crear_merma':
-          resultado = await procesarCrearMerma(op, req.auth, idMap);
+          resultado = await procesarCrearMerma(op, req.auth, idMap, req.sucursalId);
           break;
         default:
           throw new ApiError(400, `Tipo de operación desconocido: "${op.tipo}".`);
@@ -72,7 +72,7 @@ router.post('/batch', asyncHandler(async (req, res) => {
   res.json({ resultados });
 }));
 
-async function procesarCrearPedido(op, auth, idMap) {
+async function procesarCrearPedido(op, auth, idMap, sucursalId) {
   const { items, horaRecogida, timestampOriginal, clienteTelefono } = op.payload || {};
   if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, 'El pedido necesita al menos un producto.');
 
@@ -91,24 +91,24 @@ async function procesarCrearPedido(op, auth, idMap) {
     const origen = esStaff ? 'mostrador' : 'app';
     let clienteId = auth.tipo === 'cliente' ? auth.id : null;
     if (esStaff && clienteTelefono) {
-      const c = await client.query('SELECT id FROM clientes WHERE telefono = $1', [String(clienteTelefono).replace(/\D/g, '')]);
+      const c = await client.query('SELECT id FROM clientes WHERE telefono = $1 AND sucursal_id = $2', [String(clienteTelefono).replace(/\D/g, ''), sucursalId]);
       if (c.rows.length > 0) clienteId = c.rows[0].id;
     }
 
-    const { lines: lineas, isRewardOrder } = await prepareOrderLines(client, items, clienteId);
+    const { lines: lineas, isRewardOrder } = await prepareOrderLines(client, items, clienteId, sucursalId);
     const total = lineas.reduce((sum, line) => sum + line.precioUnitario * line.cantidad, 0);
     const turnoHistorico = await client.query(
-      'SELECT id FROM turnos WHERE abierto_en <= $1 AND (cerrado_en IS NULL OR cerrado_en >= $1) ORDER BY abierto_en DESC LIMIT 1',
-      [fechaReal]
+      'SELECT id FROM turnos WHERE sucursal_id = $2 AND abierto_en <= $1 AND (cerrado_en IS NULL OR cerrado_en >= $1) ORDER BY abierto_en DESC LIMIT 1',
+      [fechaReal, sucursalId]
     );
     const pedidoRes = await client.query(
       `INSERT INTO pedidos
          (turno_id, origen, cliente_id, cajero_id, hora_recogida, subtotal, total, cobrado,
-          es_regalo_fidelidad, client_uuid, creado_en)
-       VALUES ($1,$2,$3,$4,$5,$6,$6,false,$7,$8,$9) RETURNING id`,
+          es_regalo_fidelidad, client_uuid, creado_en, sucursal_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$6,false,$7,$8,$9,$10) RETURNING id`,
       [turnoHistorico.rows[0]?.id || null, origen, clienteId,
-        esStaff && ['cajero', 'admin'].includes(auth.rol) ? auth.id : null,
-        horaRecogida || null, total, isRewardOrder, op.clientUuid, fechaReal]
+        esStaff && ['cajero', 'mostrador', 'admin'].includes(auth.rol) ? auth.id : null,
+        horaRecogida || null, total, isRewardOrder, op.clientUuid, fechaReal, sucursalId]
     );
     const pedidoId = pedidoRes.rows[0].id;
 
@@ -132,7 +132,7 @@ async function procesarCrearPedido(op, auth, idMap) {
 
 const ORDEN_ESTADO = { pendiente: 0, en_preparacion: 1, terminado: 2 };
 
-async function procesarActualizarItem(op, auth, idMap) {
+async function procesarActualizarItem(op, auth, idMap, sucursalId) {
   if (auth.tipo !== 'staff') throw new ApiError(403, 'Solo el personal puede actualizar el estado de un ticket.');
   const { itemClientUuid, nuevoEstado } = op.payload || {};
   if (!Object.prototype.hasOwnProperty.call(ORDEN_ESTADO, nuevoEstado) || nuevoEstado === 'pendiente') {
@@ -141,12 +141,19 @@ async function procesarActualizarItem(op, auth, idMap) {
 
   let itemId = idMap[itemClientUuid];
   if (!itemId) {
-    const buscado = await query('SELECT id, estado FROM pedido_items WHERE client_uuid = $1', [itemClientUuid]);
+    const buscado = await query(
+      'SELECT pi.id, pi.estado FROM pedido_items pi JOIN pedidos p ON p.id = pi.pedido_id WHERE pi.client_uuid = $1 AND p.sucursal_id = $2',
+      [itemClientUuid, sucursalId]
+    );
     if (buscado.rows.length === 0) throw new ApiError(404, `No se encontró el ticket con clientUuid ${itemClientUuid} (¿llegó antes su "crear_pedido" en el lote?).`);
     itemId = buscado.rows[0].id;
   }
 
-  const actual = await query('SELECT estado FROM pedido_items WHERE id = $1', [itemId]);
+  const actual = await query(
+    'SELECT pi.estado FROM pedido_items pi JOIN pedidos p ON p.id = pi.pedido_id WHERE pi.id = $1 AND p.sucursal_id = $2',
+    [itemId, sucursalId]
+  );
+  if (actual.rows.length === 0) throw new ApiError(404, 'El ticket no pertenece a esta sucursal.');
   const estadoActual = actual.rows[0].estado;
 
   // Idempotente Y resistente a reproducir el lote fuera de orden: si el
@@ -160,13 +167,15 @@ async function procesarActualizarItem(op, auth, idMap) {
 
   const columnaFecha = nuevoEstado === 'en_preparacion' ? 'iniciado_en' : 'terminado_en';
   const { rows } = await query(
-    `UPDATE pedido_items SET estado = $1, ${columnaFecha} = now(), barista_id = COALESCE(barista_id, $2) WHERE id = $3 RETURNING id`,
-    [nuevoEstado, auth.tipo === 'staff' ? auth.id : null, itemId]
+    `UPDATE pedido_items SET estado = $1, ${columnaFecha} = now(), barista_id = COALESCE(barista_id, $2)
+     WHERE id = $3 AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $4)
+     RETURNING id`,
+    [nuevoEstado, auth.tipo === 'staff' ? auth.id : null, itemId, sucursalId]
   );
   return { id: rows[0].id, yaExistia: false };
 }
 
-async function procesarCrearMerma(op, auth, idMap) {
+async function procesarCrearMerma(op, auth, idMap, sucursalId) {
   if (auth.tipo !== 'staff') throw new ApiError(403, 'Solo el personal puede registrar mermas.');
   const existente = await query('SELECT id FROM mermas WHERE client_uuid = $1', [op.clientUuid]);
   if (existente.rows.length > 0) return { id: existente.rows[0].id, yaExistia: true };
@@ -176,14 +185,17 @@ async function procesarCrearMerma(op, auth, idMap) {
 
   let pedidoItemId = pedidoItemClientUuid ? idMap[pedidoItemClientUuid] : null;
   if (pedidoItemClientUuid && !pedidoItemId) {
-    const buscado = await query('SELECT id FROM pedido_items WHERE client_uuid = $1', [pedidoItemClientUuid]);
+    const buscado = await query(
+      'SELECT pi.id FROM pedido_items pi JOIN pedidos p ON p.id = pi.pedido_id WHERE pi.client_uuid = $1 AND p.sucursal_id = $2',
+      [pedidoItemClientUuid, sucursalId]
+    );
     pedidoItemId = buscado.rows[0]?.id || null;
   }
 
   const { rows } = await query(
-    `INSERT INTO mermas (materia_prima_id, cantidad, unidad, motivo, pedido_item_id, usuario_id, observacion, client_uuid)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [materiaPrimaId, cantidad, unidad, motivo, pedidoItemId, auth.tipo === 'staff' ? auth.id : null, observacion || null, op.clientUuid]
+    `INSERT INTO mermas (materia_prima_id, cantidad, unidad, motivo, pedido_item_id, usuario_id, observacion, client_uuid, sucursal_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+    [materiaPrimaId, cantidad, unidad, motivo, pedidoItemId, auth.tipo === 'staff' ? auth.id : null, observacion || null, op.clientUuid, sucursalId]
   );
   return { id: rows[0].id, yaExistia: false };
 }

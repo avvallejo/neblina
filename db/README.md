@@ -35,6 +35,36 @@ reales.
 9. **`09_tiempo_extraccion_por_tipo.sql`** — Tiempos de extracción por tipo.
 10. **`10_security_hardening.sql`** — Revocación de sesiones y autorizaciones
     de descuento de un solo uso.
+11. **`11_catalogos_y_unidades.sql`** — Eliminación segura de catálogos desde
+    la API y corrección de conversiones g/kg, ml/l respetando la unidad real
+    de cada lote.
+12. **`12_multisucursal.sql`** — **Multi-sucursal**: tabla `sucursales`,
+    `sucursal_id` en todas las tablas operativas y de catálogo (con backfill
+    de todo lo existente a la sede "Principal"), un turno abierto POR sede,
+    folios con prefijo por sede (`S1-P-105`, `S2-P-1`…), unicidades por sede
+    (teléfono de cliente, códigos de opciones), triggers de blindaje que
+    impiden mezclar datos de dos sedes, y funciones de costos parametrizadas
+    por sucursal. `usuarios.sucursal_id = NULL` define al **administrador
+    general** (todas las sedes). ⚠️ Debe desplegarse JUNTO con la versión
+    multi-sucursal de la API: cambia contratos que la API anterior asume.
+13. **`13_flujo_costos_menu.sql`** — Flujo inventario → receta → costo →
+    precio: margen de ganancia POR PRODUCTO (`productos.margen_porcentaje`,
+    NULL = usa el de la sucursal), `fn_precio_sugerido` que lo respeta, y
+    `vw_precios_por_revisar` — los productos cuyo precio de menú ya no
+    corresponde a su costo + margen (el precio nunca cambia solo; el panel
+    avisa y el admin lo aplica con un clic).
+14. **`14_proveedores_categorias.sql`** — Un proveedor puede surtir VARIAS
+    categorías de insumos: `proveedores.categorias TEXT[]` reemplaza a la
+    categoría única (con backfill de la existente).
+15. **`15_receta_leche_por_tamano.sql`** — Los ingredientes base de una
+    receta se pueden ajustar por producto: además del gramaje de café por
+    shot, `recetas.leche_ml_por_tamano` (`{"8":180,"12":280,"16":360}`;
+    NULL = leche predeterminada de la sede). `fn_leche_ml_receta()` la resuelve
+    y la usan tanto el descuento de inventario como el costo teórico.
+16. **`16_rol_mostrador.sql`** — Rol `mostrador` (= cajero + barista) para
+    sedes donde la misma persona levanta el pedido, cobra y prepara.
+17. **`17_descripcion_producto.sql`** — `productos.descripcion` (frase corta
+    opcional) para la pantalla del negocio estilo pizarra.
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -49,6 +79,13 @@ psql -U postgres -d cafeteria -f 07_verificacion_y_sync.sql
 psql -U postgres -d cafeteria -f 08_configuracion.sql
 psql -U postgres -d cafeteria -f 09_tiempo_extraccion_por_tipo.sql
 psql -U postgres -d cafeteria -f 10_security_hardening.sql
+psql -U postgres -d cafeteria -f 11_catalogos_y_unidades.sql
+psql -U postgres -d cafeteria -f 12_multisucursal.sql
+psql -U postgres -d cafeteria -f 13_flujo_costos_menu.sql
+psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
+psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
+psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
+psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos
@@ -140,11 +177,12 @@ Es lo correcto — si se quemó leche, ese inventario ya no existe.
   offline/semi-offline de la Fase 3 del requerimiento: con UUID, dos
   dispositivos sin conexión pueden crear registros sin riesgo de que choquen
   los IDs al sincronizar.
-- **`activo BOOLEAN` en vez de borrar filas.** Nada se borra de verdad
-  (usuarios, productos, materias primas, proveedores) — se desactiva. Igual
-  que ya hace el prototipo.
+- **Eliminación segura en catálogos.** Proveedores, productos y materias primas
+  se borran definitivamente solo si no tienen historial; si ya participaron en
+  lotes, ventas, recetas o movimientos, la API los desactiva para conservar los
+  reportes.
 - **Conversión de unidades explícita.** Las recetas siempre piensan en
-  gramos/mililitros, pero el inventario se puede llevar en kg/L. Encontré este
+  gramos/mililitros, pero el inventario se puede llevar en kg/l. Encontré este
   bug probando el esquema: si no conviertes, "descontar 18 g" de un insumo en
   kilos te borra 18 **kilos** de un golpe. La función
   `fn_convertir_unidad` existe exactamente para evitar esto.

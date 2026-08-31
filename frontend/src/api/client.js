@@ -1,13 +1,17 @@
-// Cliente HTTP de la API de la cafetería.
+// Cliente HTTP de la API de la cafetería — MULTI-SUCURSAL.
 //
-// Centraliza: el token JWT, el manejo de errores y la TRADUCCIÓN entre la forma
-// del prototipo (las opciones se identifican por "código": '12', 'entera',
-// 'tradicional', 'shot'...) y la forma de la base de datos (ids numéricos). Así
-// los componentes del prototipo siguen usando códigos y solo aquí, al mandar un
-// pedido, se traducen a los ids que la API espera.
+// Centraliza: el token JWT (personal y cliente), la SUCURSAL ACTIVA, el manejo
+// de errores y la TRADUCCIÓN entre la forma de la UI (opciones por "código":
+// '12', 'entera', 'tradicional'...) y la forma de la base de datos (ids).
 //
-// Escrito para funcionar igual en el navegador (Vite hace proxy de /api -> API)
-// y en Node (para pruebas: usar setBaseUrl('http://localhost:3000/api')).
+// Sucursal activa:
+//   * Se guarda en localStorage y se manda SIEMPRE:
+//       - como ?sucursal= en los endpoints públicos (menú, config, estado...)
+//       - como X-Sucursal-Id en los autenticados (el backend lo usa solo si
+//         la sesión es de un administrador general; para el personal con sede
+//         fija lo ignora y usa la suya).
+//   * El personal con sede fija queda "anclado" a su sede por el token; el
+//     ADMIN GENERAL cambia de sede con setSucursal() (el switcher del panel).
 
 const LS = typeof localStorage !== 'undefined' ? localStorage : null;
 
@@ -17,6 +21,8 @@ export function setBaseUrl(u) { BASE = u; }
 
 let token = LS ? LS.getItem('cafeteria_token') : null;
 let tokenCliente = LS ? LS.getItem('cafeteria_token_cliente') : null;
+let sucursal = null;
+try { sucursal = LS && LS.getItem('cafeteria_sucursal') ? JSON.parse(LS.getItem('cafeteria_sucursal')) : null; } catch { sucursal = null; }
 
 export function setToken(t) {
   token = t || null;
@@ -30,11 +36,20 @@ export function getToken() { return token; }
 export function getTokenCliente() { return tokenCliente; }
 export function logout() { setToken(null); setTokenCliente(null); }
 
+export function setSucursal(s) {
+  sucursal = s || null;
+  if (LS) { s ? LS.setItem('cafeteria_sucursal', JSON.stringify({ id: s.id, nombre: s.nombre })) : LS.removeItem('cafeteria_sucursal'); }
+}
+export function getSucursal() { return sucursal; }
+export function getSucursalId() { return sucursal ? sucursal.id : null; }
+
 async function request(path, { method = 'GET', body, useClienteToken = false } = {}) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const tk = useClienteToken ? tokenCliente : token;
   if (tk) headers.Authorization = `Bearer ${tk}`;
+  // La sede activa viaja en cada petición; el backend decide si aplica.
+  if (sucursal && sucursal.id) headers['X-Sucursal-Id'] = sucursal.id;
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -55,8 +70,25 @@ async function request(path, { method = 'GET', body, useClienteToken = false } =
   return data;
 }
 
+// Endpoints públicos: la sede va en la query (?sucursal=).
+function pub(path) {
+  if (!sucursal || !sucursal.id) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}sucursal=${sucursal.id}`;
+}
+
 /* ============================================================
-   ADAPTADORES  (API -> forma del prototipo)
+   SUCURSALES
+   ============================================================ */
+
+export function getSucursales() { return request('/sucursales'); } // público: [{ id, nombre }]
+export function getSucursalesTodas() { return request('/sucursales/todas'); } // admin general
+export function crearSucursal({ nombre, prefijoFolio }) {
+  return request('/sucursales', { method: 'POST', body: { nombre, prefijoFolio } });
+}
+export function actualizarSucursal(id, body) { return request(`/sucursales/${id}`, { method: 'PATCH', body }); }
+
+/* ============================================================
+   ADAPTADORES  (API -> forma de la UI)
    ============================================================ */
 
 function adaptProducto(p) {
@@ -66,6 +98,9 @@ function adaptProducto(p) {
     cat: p.categoria,
     icon: p.icono || '☕',
     price: Number(p.precio_efectivo ?? p.precio_base),
+    precioBase: Number(p.precio_base),            // para tachar el precio normal cuando hay promoción
+    precioPromocional: p.precio_promocional === null || p.precio_promocional === undefined ? null : Number(p.precio_promocional),
+    descripcion: p.descripcion || '',
     tipo: p.tipo,
     leche: !!p.permite_leche,
     frio: !!p.es_frio,
@@ -76,9 +111,21 @@ function adaptProducto(p) {
   };
 }
 
-// Las opciones conservan el "código" como id (lo que el prototipo ya usa para
-// seleccionar y para sus valores por defecto). El id numérico real se guarda
-// aparte, en los mapas de abajo, para traducir al crear el pedido.
+function normalizeUnidadMedida(unidad) {
+  if (unidad === undefined || unidad === null || unidad === '') return unidad;
+  const raw = String(unidad).trim().toLowerCase();
+  const aliases = {
+    gr: 'g', gramo: 'g', gramos: 'g',
+    kilo: 'kg', kilos: 'kg', kilogramo: 'kg', kilogramos: 'kg',
+    mililitro: 'ml', mililitros: 'ml',
+    lt: 'l', lts: 'l', litro: 'l', litros: 'l',
+    piezas: 'pieza', pz: 'pieza', pza: 'pieza', pzas: 'pieza', unidad: 'pieza', unidades: 'pieza',
+  };
+  return aliases[raw] || raw;
+}
+
+// Las opciones conservan el "código" como id. El id numérico real (de ESTA
+// sede) se guarda aparte para traducir al crear el pedido.
 const codigoToId = { tamano: {}, leche: {}, cafe: {}, extra: {} };
 
 function adaptOpcion(o, tipo) {
@@ -89,7 +136,9 @@ function adaptOpcion(o, tipo) {
     label: o.etiqueta,
     delta: Number(o.delta_precio || 0),
     dbId: o.id,
+    ...(o.leche_ml !== undefined && o.leche_ml !== null ? { lecheMl: Number(o.leche_ml) } : {}), // tamaños: leche predeterminada de la sede
     ...(o.es_shot_adicional ? { esShot: true } : {}),
+    ...(tipo === 'extra' && o.cantidad ? { cantidad: Number(o.cantidad), unidad: o.unidad } : {}), // porción del extra (para la receta)
   };
 }
 
@@ -97,55 +146,61 @@ function adaptOpcion(o, tipo) {
    AUTENTICACIÓN
    ============================================================ */
 
+// Restaura la sesión guardada (personal). 401 = token vencido o revocado.
+export function getYo() { return request('/auth/yo'); }
+
 export async function login(pin) {
-  const r = await request('/auth/login', { method: 'POST', body: { pin } });
+  const r = await request('/auth/login', { method: 'POST', body: { pin, sucursalId: getSucursalId() } });
   setToken(r.token);
-  return r.usuario; // { id, nombre, rol }
+  return r.usuario; // { id, nombre, rol, sucursalId } — sucursalId null = admin general
 }
 
-export async function clienteSolicitarCodigo(telefono) {
-  return request('/auth/cliente/solicitar-codigo', { method: 'POST', body: { telefono } });
+export function clienteSolicitarCodigo(telefono) {
+  return request('/auth/cliente/solicitar-codigo', { method: 'POST', body: { telefono, sucursalId: getSucursalId() } });
 }
 
 export async function clienteVerificarCodigo({ telefono, codigo, nombre, apellido }) {
   const r = await request('/auth/cliente/verificar-codigo', {
     method: 'POST',
-    body: { telefono, codigo, nombre, apellido },
+    body: { telefono, codigo, nombre, apellido, sucursalId: getSucursalId() },
   });
   setTokenCliente(r.token);
   return r.cliente;
 }
 
-// Alta directa sin SMS (solo válida si la verificación por SMS está apagada).
+// Alta directa sin SMS (solo válida si la verificación por SMS está apagada EN ESTA SEDE).
 export async function clienteRegistroDirecto({ telefono, nombre, apellido }) {
-  const r = await request('/auth/cliente/registro', { method: 'POST', body: { telefono, nombre, apellido } });
+  const r = await request('/auth/cliente/registro', { method: 'POST', body: { telefono, nombre, apellido, sucursalId: getSucursalId() } });
   setTokenCliente(r.token);
   return r.cliente;
 }
 
-// Configuración general de la app (ej. si el alta de clientes exige SMS).
-export function getConfig() { return request('/config'); }
+// Configuración de la sede (nombre, logo, SMS).
+export function getConfig() { return request(pub('/config')); }
 export function setConfig(body) { return request('/config', { method: 'PUT', body }); }
 
 /* ============================================================
-   CATÁLOGO  (menú + opciones)
+   CATÁLOGO  (menú + opciones) — de la sede activa
    ============================================================ */
 
-export async function getCategorias() {
-  return request('/productos/categorias'); // [{ id, nombre, orden, ... }]
-}
+export function getCategorias() { return request(pub('/productos/categorias')); }
 
 export async function getProductos() {
-  const rows = await request('/productos');
+  const rows = await request(pub('/productos'));
+  return rows.map(adaptProducto);
+}
+
+export async function getProductosAdmin() {
+  const rows = await request(pub('/productos?incluirInactivos=1'));
   return rows.map(adaptProducto);
 }
 
 export async function getOpciones() {
   const [tamanos, leches, cafes, extras] = await Promise.all([
-    request('/opciones/tamanos'),
-    request('/opciones/leches'),
-    request('/opciones/cafes'),
-    request('/opciones/extras'),
+    request(pub('/opciones/tamanos')),
+    request(pub('/opciones/leches')),
+    request(pub('/opciones/cafes')),
+    request(pub('/opciones/extras')),
   ]);
   return {
     tamanos: tamanos.map(o => adaptOpcion(o, 'tamano')),
@@ -159,7 +214,7 @@ export async function getOpciones() {
    TURNO
    ============================================================ */
 
-export function getTurnoEstado() { return request('/turnos/estado'); } // { abierto, turno }
+export function getTurnoEstado() { return request(pub('/turnos/estado')); } // { abierto, turno }
 export function abrirTurno() { return request('/turnos/abrir', { method: 'POST' }); }
 export function cerrarTurno() { return request('/turnos/cerrar', { method: 'POST' }); }
 export function getKpisTurno() { return request('/turnos/actual/kpis'); }
@@ -168,7 +223,6 @@ export function getKpisTurno() { return request('/turnos/actual/kpis'); }
    PEDIDOS
    ============================================================ */
 
-// Traduce un item del carrito (con códigos) al formato que la API espera (ids).
 function itemToApi(item) {
   return {
     productoId: item.productId,
@@ -189,7 +243,7 @@ export function crearAprobacionDescuento({ pin, descuentoPorcentaje }) {
 export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente }) {
   return request('/pedidos', {
     method: 'POST',
-    useClienteToken: !!comoCliente, // un pedido del Cliente usa su token, no el del personal
+    useClienteToken: !!comoCliente,
     body: {
       items: cart.map(itemToApi),
       pago,
@@ -201,13 +255,12 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
   });
 }
 
-export function getPedidos() { return request('/pedidos'); } // vista vw_pedidos_con_estado
+export function getPedidos() { return request('/pedidos'); }
 export function getPedido(id) { return request(`/pedidos/${id}`); }
 export function cobrarPedido(id, { metodoPago, montoRecibido } = {}) {
   return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido } });
 }
 export function cancelarPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH' }); }
-// El cliente cancela SU propio pedido (con su token), si la preparación no inició.
 export function cancelarMiPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', useClienteToken: true }); }
 export function noShowPedido(id) { return request(`/pedidos/${id}/no-show`, { method: 'PATCH' }); }
 
@@ -220,8 +273,7 @@ export function iniciarItem(id) { return request(`/pedido-items/${id}/iniciar`, 
 export function terminarItem(id) { return request(`/pedido-items/${id}/terminar`, { method: 'PATCH' }); }
 
 /* ============================================================
-   MERMAS  (el prototipo manda nombre de insumo; la API pide materiaPrimaId.
-   Esa traducción se resolverá al cablear Barista; por ahora se expone crudo.)
+   MERMAS E INVENTARIO
    ============================================================ */
 
 export function crearMerma(body) { return request('/mermas', { method: 'POST', body }); }
@@ -238,9 +290,6 @@ export function getMisPedidos() { return request('/clientes/yo/pedidos', { useCl
    ADMIN
    ============================================================ */
 
-// Mapas nombre-de-categoría -> id, que se llenan al pedir las categorías y se
-// usan para traducir los formularios del prototipo (que eligen categoría por
-// NOMBRE) al id que la API necesita.
 const matCatId = {};
 const prodCatId = {};
 
@@ -251,6 +300,7 @@ export function actualizarUsuario(id, body) { return request(`/usuarios/${id}`, 
 export function getProveedores() { return request('/proveedores'); }
 export function crearProveedor(body) { return request('/proveedores', { method: 'POST', body }); }
 export function actualizarProveedor(id, body) { return request(`/proveedores/${id}`, { method: 'PATCH', body }); }
+export function eliminarProveedor(id) { return request(`/proveedores/${id}`, { method: 'DELETE' }); }
 
 export async function getMateriasCategorias() {
   const rows = await request('/materias-primas/categorias');
@@ -261,7 +311,7 @@ export function crearMateria(m) {
   return request('/materias-primas', {
     method: 'POST',
     body: {
-      nombre: m.nombre, categoriaId: matCatId[m.categoria], unidad: m.unidad,
+      nombre: m.nombre, categoriaId: matCatId[m.categoria], unidad: normalizeUnidadMedida(m.unidad),
       stockActual: m.stockActual, stockMinimo: m.stockMinimo, costoUnitario: m.costoUnitario,
       proveedorId: m.proveedorId || null,
     },
@@ -271,16 +321,29 @@ export function actualizarMateria(id, m) {
   const body = {};
   if (m.nombre !== undefined) body.nombre = m.nombre;
   if (m.categoria !== undefined) body.categoriaId = matCatId[m.categoria];
-  if (m.unidad !== undefined) body.unidad = m.unidad;
+  if (m.unidad !== undefined) body.unidad = normalizeUnidadMedida(m.unidad);
+  if (m.stockActual !== undefined) body.stockActual = m.stockActual;
   if (m.stockMinimo !== undefined) body.stockMinimo = m.stockMinimo;
   if (m.costoUnitario !== undefined) body.costoUnitario = m.costoUnitario;
   if (m.proveedorId !== undefined) body.proveedorId = m.proveedorId;
   if (m.activo !== undefined) body.activo = m.activo;
   return request(`/materias-primas/${id}`, { method: 'PATCH', body });
 }
+export function eliminarMateria(id) { return request(`/materias-primas/${id}`, { method: 'DELETE' }); }
+
+// Compras (lotes) y ajustes de conteo físico — el kardex del inventario.
+export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad }) {
+  return request(`/materias-primas/${materiaId}/lotes`, {
+    method: 'POST',
+    body: { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad },
+  });
+}
+export function ajustarStock(materiaId, { nuevaCantidad, motivo }) {
+  return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo } });
+}
 
 export async function getCategoriasProducto() {
-  const rows = await request('/productos/categorias');
+  const rows = await request(pub('/productos/categorias'));
   rows.forEach(c => { prodCatId[c.nombre] = c.id; });
   return rows;
 }
@@ -290,6 +353,7 @@ export function crearProducto(p) {
     body: {
       nombre: p.name, categoriaId: prodCatId[p.cat], tipo: p.tipo, icono: p.icon, precioBase: p.price,
       permiteTamanos: p.sizes, permiteLeche: p.leche, permiteTipoCafe: p.coffeeType, permiteExtras: p.extras, esFrio: p.frio,
+      margenPorcentaje: p.margenPorcentaje, descripcion: p.descripcion, precioPromocional: p.precioPromocional,
     },
   });
 }
@@ -306,10 +370,40 @@ export function actualizarProducto(id, p) {
   if (p.extras !== undefined) body.permiteExtras = p.extras;
   if (p.frio !== undefined) body.esFrio = p.frio;
   if (p.activo !== undefined) body.activo = p.activo;
+  if (p.margenPorcentaje !== undefined) body.margenPorcentaje = p.margenPorcentaje;
+  if (p.descripcion !== undefined) body.descripcion = p.descripcion;
+  if (p.precioPromocional !== undefined) body.precioPromocional = p.precioPromocional;
   return request(`/productos/${id}`, { method: 'PATCH', body });
 }
+export function eliminarProducto(id) { return request(`/productos/${id}`, { method: 'DELETE' }); }
 
-export function getFidelidad() { return request('/promociones/fidelidad'); }
+// Flujo costo → margen → precio.
+export function getPrecioSugerido(id) { return request(`/productos/${id}/precio-sugerido`); }
+export function getPreciosPorRevisar() { return request('/productos/precios-por-revisar'); }
+
+// Costos indirectos: gastos fijos mensuales de la sede (renta, sueldos…) y la
+// configuración de margen/volumen con la que se prorratean por bebida.
+export function getGastosFijos() { return request('/gastos-fijos'); }
+export function crearGastoFijo({ concepto, categoria, montoMensual }) {
+  return request('/gastos-fijos', { method: 'POST', body: { concepto, categoria, montoMensual } });
+}
+export function actualizarGastoFijo(id, body) { return request(`/gastos-fijos/${id}`, { method: 'PATCH', body }); }
+export function eliminarGastoFijo(id) { return request(`/gastos-fijos/${id}`, { method: 'DELETE' }); }
+export function getMargen() { return request('/promociones/margen'); } // incluye ventas_reales_promedio_mes
+export function guardarMargen({ porcentajeGananciaNormal, redondeo, unidadesEstimadasMes }) {
+  return request('/promociones/margen', { method: 'PUT', body: { porcentajeGananciaNormal, redondeo, unidadesEstimadasMes } });
+}
+export function getPuntoEquilibrio() { return request('/promociones/punto-equilibrio'); }
+
+// Opciones de personalización (tamaños, leches, cafés, extras) con su costo
+// estimado y precio sugerido; el admin ajusta el "delta_precio" que ve el
+// cliente como (+6) y que el servidor suma al cobrar.
+export function getOpcionesAdmin() { return request('/opciones/admin'); }
+export function crearOpcion(tipo, body) { return request(`/opciones/${tipo}`, { method: 'POST', body }); }
+export function actualizarOpcion(tipo, id, body) { return request(`/opciones/${tipo}/${id}`, { method: 'PATCH', body }); }
+
+export function getPromocionesApertura() { return request(pub('/promociones/apertura')); } // público por sede
+export function getFidelidad() { return request(pub('/promociones/fidelidad')); }
 export function guardarFidelidad({ activo, cada, premioId }) {
   return request('/promociones/fidelidad', { method: 'PUT', body: { activo, cadaNPedidos: cada, productoPremioId: premioId } });
 }
@@ -324,22 +418,36 @@ export function getReportes() {
     ({ ventasPorMetodo, masVendidos, cancelaciones, mermasPorMotivo }));
 }
 
+// Comparativo entre sedes — SOLO admin general.
+export function getReportesConsolidados() {
+  return Promise.all([
+    request('/reportes/ventas-por-metodo-pago?consolidado=true'),
+    request('/reportes/productos-mas-vendidos?consolidado=true'),
+    request('/reportes/cancelaciones-no-show?consolidado=true'),
+    request('/reportes/mermas-por-motivo?consolidado=true'),
+  ]).then(([ventasPorMetodo, masVendidos, cancelaciones, mermasPorMotivo]) =>
+    ({ ventasPorMetodo, masVendidos, cancelaciones, mermasPorMotivo }));
+}
+
 /* ============================================================
-   RECETAS  (molienda / tiempo de extracción por tipo de café)
+   RECETAS
    ============================================================ */
 
 export function getRecetas() { return request('/recetas'); }
+export function getReceta(productoId) { return request(`/recetas/${productoId}`); } // incluye insumos_fijos
 export function guardarReceta(productoId, ov) {
   return request(`/recetas/${productoId}`, {
     method: 'PUT',
     body: {
+      insumosFijos: ov.insumosFijos, // [{ materiaPrimaId, cantidad, unidad }] — reemplaza los ingredientes
+      lecheMlPorTamano: ov.lecheMlPorTamano, // { '12': 280, ... } | null = predeterminado de la sede
       pasos: ov.pasos,
       gramajePorShot: ov.gramajePorShot,
       molienda: ov.molienda,
       moliendaEspecial: ov.moliendaEspecial,
       ajusteMolino: ov.ajusteMolino,
       ajusteMolinoEspecial: ov.ajusteMolinoEspecial,
-      tiempoExtraccion: ov.tiempoExtraccion || ov.tiempoLicuado,        // frappé usa tiempoLicuado en la misma columna
+      tiempoExtraccion: ov.tiempoExtraccion || ov.tiempoLicuado,
       tiempoExtraccionEspecial: ov.tiempoExtraccionEspecial,
       temperaturaServicio: ov.temperatura,
       texturaLeche: ov.texturaLeche,

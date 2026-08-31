@@ -1,6 +1,6 @@
 const { ApiError } = require('../utils/asyncHandler');
 
-const PAYMENT_ROLES = new Set(['cajero', 'admin']);
+const PAYMENT_ROLES = new Set(['cajero', 'mostrador', 'admin']); // mostrador = caja + barra
 const KNOWN_OR_WEAK_PINS = new Set(['0000', '1111', '1234', '2222']);
 
 function assertStaffPin(pin) {

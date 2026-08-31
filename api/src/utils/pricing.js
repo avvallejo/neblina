@@ -4,11 +4,15 @@ const { ApiError } = require('./asyncHandler');
 // Calcula el precio unitario de una línea de pedido en el servidor — el precio
 // que manda el frontend nunca se usa para cobrar, solo para mostrarlo de
 // forma optimista mientras llega la respuesta real.
-async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extraIds = [] }, queryFn = query) {
+async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extraIds = [], sucursalId }, queryFn = query) {
   if (!Array.isArray(extraIds)) throw new ApiError(400, 'extraIds debe ser una lista.');
   if (new Set(extraIds.map(String)).size !== extraIds.length) throw new ApiError(400, 'No se puede repetir el mismo extra.');
 
-  const prodRow = await queryFn('SELECT * FROM productos WHERE id = $1 AND activo = true', [productoId]);
+  // Con sucursalId, un producto de otra sede simplemente "no existe" para
+  // este pedido — misma respuesta que un id inventado, sin filtrar información.
+  const prodRow = sucursalId
+    ? await queryFn('SELECT * FROM productos WHERE id = $1 AND activo = true AND sucursal_id = $2', [productoId, sucursalId])
+    : await queryFn('SELECT * FROM productos WHERE id = $1 AND activo = true', [productoId]);
   if (prodRow.rows.length === 0) throw new ApiError(404, 'Producto no encontrado.');
   const producto = prodRow.rows[0];
 
@@ -30,23 +34,31 @@ async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extra
   total = Number(efectivo.rows[0].precio);
 
   if (tamanoId) {
-    const r = await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1', [tamanoId]);
+    const r = sucursalId
+      ? await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1 AND sucursal_id = $2', [tamanoId, sucursalId])
+      : await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1', [tamanoId]);
     if (r.rows.length === 0) throw new ApiError(400, 'Tamaño inválido.');
     total += Number(r.rows[0].delta_precio);
   }
   if (lecheId) {
-    const r = await queryFn('SELECT delta_precio FROM opciones_leche WHERE id = $1 AND activo', [lecheId]);
+    const r = sucursalId
+      ? await queryFn('SELECT delta_precio FROM opciones_leche WHERE id = $1 AND activo AND sucursal_id = $2', [lecheId, sucursalId])
+      : await queryFn('SELECT delta_precio FROM opciones_leche WHERE id = $1 AND activo', [lecheId]);
     if (r.rows.length === 0) throw new ApiError(400, 'Opción de leche inválida.');
     total += Number(r.rows[0].delta_precio);
   }
   if (cafeId) {
-    const r = await queryFn('SELECT delta_precio FROM opciones_cafe WHERE id = $1 AND activo', [cafeId]);
+    const r = sucursalId
+      ? await queryFn('SELECT delta_precio FROM opciones_cafe WHERE id = $1 AND activo AND sucursal_id = $2', [cafeId, sucursalId])
+      : await queryFn('SELECT delta_precio FROM opciones_cafe WHERE id = $1 AND activo', [cafeId]);
     if (r.rows.length === 0) throw new ApiError(400, 'Opción de café inválida.');
     total += Number(r.rows[0].delta_precio);
   }
   for (const extraId of extraIds) {
     // eslint-disable-next-line no-await-in-loop
-    const r = await queryFn('SELECT delta_precio FROM opciones_extra WHERE id = $1 AND activo', [extraId]);
+    const r = sucursalId
+      ? await queryFn('SELECT delta_precio FROM opciones_extra WHERE id = $1 AND activo AND sucursal_id = $2', [extraId, sucursalId])
+      : await queryFn('SELECT delta_precio FROM opciones_extra WHERE id = $1 AND activo', [extraId]);
     if (r.rows.length === 0) throw new ApiError(400, `Extra inválido: ${extraId}`);
     total += Number(r.rows[0].delta_precio);
   }

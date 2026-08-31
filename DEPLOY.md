@@ -31,6 +31,48 @@ los contenedores. Nada más.
 
 ---
 
+## Nota importante: actualizar un servidor que YA está en producción
+
+Desde la versión multi-sucursal, la base de datos y el código **viajan
+juntos**: cada versión nueva puede traer migraciones (`db/NN_*.sql`) que la
+API nueva necesita. En un servidor con datos, `docker compose up` NO las
+aplica (la carpeta `docker-entrypoint-initdb.d` solo corre cuando el volumen
+nace vacío). Para eso existe `db/migrar.sh`:
+
+- Lleva registro en la tabla `schema_migraciones` y aplica **solo lo
+  pendiente**, en orden; se puede correr las veces que quieras.
+- La primera vez detecta lo que la base ya tiene (una instalación que nació
+  con 00-10) y solo registra eso, sin volver a ejecutarlo.
+- `db/migrar.sh --dry-run` muestra qué aplicaría sin tocar nada.
+
+El despliegue automático por tag (Parte 5) ya hace los tres pasos en orden:
+respaldo `pg_dump` → `db/migrar.sh` → `docker compose up -d --build`. Si
+despliegas a mano, haz lo mismo:
+
+```bash
+cd /opt/cafeteria-movil
+git fetch --all --tags && git checkout vX.Y.Z
+docker exec cafeteria-db pg_dump -U postgres cafeteria | gzip > ~/backup-pre-vX.Y.Z.sql.gz
+bash db/migrar.sh --dry-run     # revisa
+bash db/migrar.sh               # aplica
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+Qué esperar la primera vez que se pasa de la versión de un solo local a la
+multi-sucursal (migración 12): todo lo que ya había queda asignado a la
+sucursal "Principal"; la migración cierra a propósito todas las sesiones del
+personal (los tokens anteriores no traen sucursal), así que cada quien vuelve
+a iniciar sesión una vez eligiendo su sede; el primer administrador es
+**administrador general** y desde su panel (sección "Sucursales") crea las
+demás sedes. Las migraciones 13-17 (costos, proveedores multi-categoría,
+leche por receta, rol "Caja + barra", descripción de producto) no cambian
+datos existentes.
+
+Variables nuevas opcionales en `.env.prod`: `API_RATE_LIMIT_MAX` (límite
+general por minuto; si no está, la API usa su valor por defecto).
+
+---
+
 ## Parte 1 — Subir el proyecto a GitHub (la cuenta nueva)
 
 El repo ya está versionado localmente (tiene commits y un esquema de versiones).

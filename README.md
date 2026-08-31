@@ -1,8 +1,9 @@
 # Cafetería Móvil — proyecto completo
 
-Backend completo (PostgreSQL + API REST en Node/Express) de la cafetería
-móvil, ya listo para abrir como su propio proyecto en VS Code y correr en
-Docker, sin pisar ningún otro proyecto que ya tengas corriendo en tu máquina.
+Sistema completo y **multi-sucursal** de la cafetería (PostgreSQL + API REST
+en Node/Express + frontend React adaptable a cualquier pantalla), listo para
+abrir como su propio proyecto en VS Code y correr en Docker, sin pisar ningún
+otro proyecto que ya tengas corriendo en tu máquina.
 
 ```
 .
@@ -10,8 +11,9 @@ Docker, sin pisar ningún otro proyecto que ya tengas corriendo en tu máquina.
 ├── docker-compose.override.yml   # Se combina solo: monta código fuente, recarga en vivo
 ├── .devcontainer/                # Configuración de VS Code Dev Containers
 ├── docker/00_roles_y_permisos.sh # Crea el rol de la API al iniciar el contenedor de Postgres
-├── db/                           # Las mismas migraciones SQL (00-07), para correr sin Docker / contra AWS RDS
-└── api/                          # Código fuente de la API (Node + Express)
+├── db/                           # Las mismas migraciones SQL (00-12), para correr sin Docker / contra AWS RDS
+├── api/                          # Código fuente de la API (Node + Express)
+└── frontend/                     # Frontend React (Vite) — adaptable a celular, tablet y escritorio
 ```
 
 ## Arrancar con Docker (recomendado)
@@ -24,7 +26,7 @@ cp .env.example .env
 docker compose up
 ```
 
-Eso levanta PostgreSQL, le corre las 8 migraciones automáticamente (solo la
+Eso levanta PostgreSQL, le corre las 13 migraciones automáticamente (solo la
 primera vez que crea su volumen de datos) y arranca la API en
 `http://localhost:3000` con recarga en vivo (gracias a
 `docker-compose.override.yml`, que Compose combina solo).
@@ -32,8 +34,9 @@ primera vez que crea su volumen de datos) y arranca la API en
 Solo en desarrollo se cargan usuarios de prueba: Admin `1234`, Caja `1111`,
 Barista `2222`. `docker-compose.prod.yml` no monta esa semilla.
 
-En producción, después de aplicar las migraciones, crea el primer administrador
-una sola vez y elimina el PIN del entorno al terminar:
+En producción, después de aplicar las migraciones, crea el primer
+**administrador general** (con acceso a todas las sucursales) una sola vez y
+elimina el PIN del entorno al terminar:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm \
@@ -43,6 +46,88 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm \
 ```
 
 El comando rechaza los PIN conocidos de demostración y no imprime el secreto.
+
+## Multi-sucursal
+
+El sistema opera de 1 a N sucursales sobre la misma base de datos, cada una
+con su propio catálogo, inventario, clientes, personal, turnos, folios
+(`S1-P-105`, `S2-P-1`…) y configuración. Hay dos niveles de administración:
+
+- **Administrador general** (sin sede fija): configura TODAS las sedes — las
+  crea y administra, cambia de sucursal desde el panel, crea admins de sede y
+  ve el reporte comparativo consolidado.
+- **Administrador de sucursal**: administra únicamente la suya.
+
+El personal operativo tiene tres roles: **Cajero** (levanta pedidos y cobra),
+**Barista** (prepara y descuenta inventario) y **Caja + barra** (`mostrador`),
+para sedes donde la misma persona hace las dos cosas: entra una sola vez y
+cambia entre Caja y Barra con un toque en la navegación, con contadores de
+bebidas pendientes y pedidos por cobrar.
+
+El frontend pide la sucursal al entrar (se la salta si solo hay una) y el
+personal inicia sesión POR sede. Las garantías de aislamiento entre sedes se
+verifican con `npm run test:multisucursal:live` (en `api/`, contra la API
+corriendo) y con triggers de blindaje en la propia base de datos.
+
+## Del inventario al menú, sin capturar precios a mano
+
+Cada insumo se da de alta **una sola vez**; cada compra posterior se registra
+como un **lote** de ese mismo insumo (botón "Registrar compra" en Inventario:
+cantidad, costo, proveedor, lote y caducidad). El sistema descuenta por PEPS
+(primero el lote más viejo), el costo real de cada venta usa el lote que de
+verdad se consumió, y el costo de la última compra queda como costo de
+referencia del insumo. Las correcciones de conteo físico se hacen con
+"Ajustar stock" (con motivo) y las pérdidas con mermas — así el historial
+explica cada movimiento.
+
+Cada receta tiene dos capas: los **ingredientes base**, que se resuelven con lo
+que el cliente pida (café por shot con gramaje editable por producto, leche por
+tamaño —predeterminada de la sucursal o propia del producto— y vaso/tapa por
+tamaño), y los **ingredientes fijos** del producto tomados del inventario
+(jarabes, chocolate, toppings…). Las dos capas se ven en la receta que consulta
+el barista y se editan desde Admin → Recetas → Editar receta.
+
+El flujo está automatizado: alta de materia prima → receta con sus
+ingredientes del inventario → el sistema calcula el costo prorrateado
+(insumos + parte de renta/sueldos) → tú solo decides el margen (general de la
+sucursal o propio del producto) y aplicas el precio sugerido con un clic → el
+producto aparece en el menú de la app y en la **pantalla del negocio** (una
+URL fija para la TV del local: `/?pantalla=menu&sucursal=<id>`, se actualiza
+sola). La pantalla tiene dos estilos (Admin → Configuración → Pantalla del
+negocio): **Pizarra** (oscuro y dorado, como un menú impreso: columnas por
+categoría con la descripción corta de cada producto, precio normal tachado
+cuando hay precio promocional, columna de extras, lema y pie configurables; sin
+tamaños, el precio es el de la bebida estándar; se ajusta sola para caber en la
+TV) y **Clásico**. La descripción corta y el precio promocional se capturan al
+editar cada producto. Si un insumo sube de precio, el panel avisa qué productos repreciar —
+el menú nunca cambia solo.
+
+Los precios de la personalización (tamaños, tipo de café, tipo de leche y
+extras: lo que el cliente ve como "+6") se ajustan en **Admin → Opciones**.
+Cada opción muestra cuánto cuesta según el inventario (la leche entera y el
+café tradicional son la base) y un ajuste sugerido con el margen de la
+sucursal; el admin decide el ajuste final, puede crear nuevas leches, cafés y
+extras (con el insumo y la porción que descuentan) y desactivar los que no
+ofrezca. El cobro siempre usa estos ajustes en el servidor, y la pantalla del
+negocio los muestra en la leyenda "Personaliza tu bebida".
+
+La parte de renta/sueldos se configura en **Admin → Costos**: ahí se
+capturan los gastos fijos mensuales de la sucursal (renta, personal,
+servicios, transporte, seguros, mantenimiento) y las **unidades que esperas
+vender al mes**. Costo indirecto por bebida = gastos fijos del mes ÷ unidades
+estimadas; ese monto se suma al costo de receta en "Costo y precio". La misma
+sección muestra el punto de equilibrio (cuántas bebidas al mes/día cubren los
+gastos) y la venta real promedio para calibrar la estimación. Los montos que
+trae la base de desarrollo son de ejemplo: sustitúyelos por los reales antes
+de fijar precios.
+
+## Frontend adaptable
+
+`frontend/` es una app React (Vite) con un solo código para cualquier
+pantalla: navegación inferior en el celular, riel de íconos en tablet y barra
+lateral completa en escritorio (la caja, por ejemplo, muestra menú y carrito
+lado a lado en pantallas grandes). `npm run dev` dentro de `frontend/` para
+desarrollo (hace proxy de `/api` a la API local).
 
 ## Por qué no choca con tus otros proyectos en Docker
 
@@ -78,7 +163,7 @@ Este `docker-compose.yml` es para **desarrollo local**. Para producción en
 AWS, lo natural es:
 
 1. **Base de datos → Amazon RDS para PostgreSQL**, no el contenedor `db`. Las
-    migraciones (`db/00` a `db/10`) se corren UNA VEZ contra el endpoint de RDS
+    migraciones (`db/00` a `db/12`) se corren UNA VEZ contra el endpoint de RDS
    (con `psql` desde una instancia con acceso, o con una tarea de ECS/Lambda
    de un solo uso) — el mecanismo de auto-inicio de `docker/00_roles_y_permisos.sh`
    solo aplica al contenedor local, RDS no lo usa.

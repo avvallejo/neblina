@@ -23,7 +23,7 @@ const { prepareOrderLines } = require('../src/services/orderValidation');
 const { createUnverifiedCustomer } = require('../src/services/customerRegistration');
 const { consumeDiscountApproval, createDiscountApproval } = require('../src/services/discountApprovals');
 const { assertStaffPin, assertPaymentAllowed, normalizeDiscount, parseTrustProxyHops } = require('../src/security/policies');
-const { createRequireAuth } = require('../src/middleware/auth');
+const { createRequireAuth, createResolveSucursal, rolCumple } = require('../src/middleware/auth');
 Module._load = originalLoad;
 
 const apiRoot = path.resolve(__dirname, '..');
@@ -118,8 +118,8 @@ test('arbitrary or unavailable rewards are rejected before consumption', async (
 test('normal and offline order entrypoints use the same order validator', () => {
   const normal = fs.readFileSync(path.join(apiRoot, 'src/routes/pedidos.js'), 'utf8');
   const sync = fs.readFileSync(path.join(apiRoot, 'src/routes/sync.js'), 'utf8');
-  assert.match(normal, /prepareOrderLines\(client, items, clienteId\)/);
-  assert.match(sync, /prepareOrderLines\(client, items, clienteId\)/);
+  assert.match(normal, /prepareOrderLines\(client, items, clienteId, req\.sucursalId\)/);
+  assert.match(sync, /prepareOrderLines\(client, items, clienteId, sucursalId\)/);
 });
 
 test('barista and customer principals cannot mark an order paid', () => {
@@ -131,23 +131,52 @@ test('barista and customer principals cannot mark an order paid', () => {
   assert.match(normal, /assertPaymentAllowed\(req\.auth, pago\)/);
 });
 
+test('mostrador role (caja + barra) passes cajero and barista checks, not admin', () => {
+  assert.doesNotThrow(() => assertPaymentAllowed({ tipo: 'staff', rol: 'mostrador' }, { metodoPago: 'efectivo' }));
+  assert.equal(rolCumple('mostrador', ['cajero', 'admin']), true);
+  assert.equal(rolCumple('mostrador', ['barista', 'admin']), true);
+  assert.equal(rolCumple('mostrador', ['admin']), false);
+  assert.equal(rolCumple('barista', ['cajero', 'admin']), false);
+});
+
 test('direct registration never authenticates an existing phone', async () => {
   await assert.rejects(
     createUnverifiedCustomer(
-      { telefono: '9610000000', nombre: 'Victim', apellido: 'User' },
+      { telefono: '9610000000', nombre: 'Victim', apellido: 'User', sucursalId: 'suc-1' },
       async sql => sql.startsWith('SELECT') ? { rows: [{ id: 'victim' }] } : { rows: [] }
     ),
     err => err.status === 409 && /Verifícalo por SMS/.test(err.message)
   );
   const authRoute = fs.readFileSync(path.join(apiRoot, 'src/routes/auth.js'), 'utf8');
-  assert.match(authRoute, /createUnverifiedCustomer\(\{ telefono, nombre, apellido \}\)/);
+  assert.match(authRoute, /createUnverifiedCustomer\(\{ telefono, nombre, apellido, sucursalId \}\)/);
+});
+
+test('direct registration demands a branch before touching the database', async () => {
+  await assert.rejects(
+    createUnverifiedCustomer(
+      { telefono: '9610000000', nombre: 'User', apellido: 'User' },
+      async () => { throw new Error('no debería consultar la base sin sucursal'); }
+    ),
+    err => err.status === 400 && /sucursal/i.test(err.message)
+  );
+});
+
+test('direct registration scopes the duplicate-phone check to the branch', async () => {
+  const selects = [];
+  const queryFn = async (sql, params) => {
+    if (sql.startsWith('SELECT')) { selects.push({ sql, params }); return { rows: [] }; }
+    return { rows: [{ id: 'new' }] };
+  };
+  await createUnverifiedCustomer({ telefono: '9610000001', nombre: 'New', apellido: 'User', sucursalId: 'suc-1' }, queryFn);
+  assert.match(selects[0].sql, /sucursal_id/);
+  assert.deepEqual(selects[0].params, ['9610000001', 'suc-1']);
 });
 
 test('direct registration still creates a genuinely new unverified customer', async () => {
   const queryFn = async sql => sql.startsWith('SELECT')
     ? { rows: [] }
     : { rows: [{ id: 'new', telefono: '9610000001', nombre: 'New', apellido: 'User' }] };
-  const customer = await createUnverifiedCustomer({ telefono: '9610000001', nombre: ' New ', apellido: ' User ' }, queryFn);
+  const customer = await createUnverifiedCustomer({ telefono: '9610000001', nombre: ' New ', apellido: ' User ', sucursalId: 'suc-1' }, queryFn);
   assert.equal(customer.id, 'new');
 });
 
@@ -259,4 +288,75 @@ test('staff management cannot reintroduce known demo PINs', () => {
   assert.throws(() => assertStaffPin('1234'), err => err.status === 400);
   assert.throws(() => assertStaffPin('7777'), err => err.status === 400);
   assert.equal(assertStaffPin('5831'), '5831');
+});
+
+test('a branch-bound staffer operates ONLY their own branch, headers ignored', async () => {
+  const middleware = createResolveSucursal({ queryFn: async () => { throw new Error('no debe consultar'); } });
+  const req = {
+    auth: { tipo: 'staff', rol: 'cajero', sucursalId: 'suc-A' },
+    headers: { 'x-sucursal-id': 'suc-B' },
+    query: {},
+  };
+  const err = await runMiddleware(middleware, req);
+  assert.equal(err, undefined);
+  assert.equal(req.sucursalId, 'suc-A');
+});
+
+test('a general admin must name a branch and it must exist and be active', async () => {
+  const middleware = createResolveSucursal({
+    queryFn: async (sql, params) => ({ rows: params[0] === '11111111-1111-4111-8111-111111111111' ? [{ id: params[0], activo: true }] : [] }),
+  });
+
+  const sinHeader = await runMiddleware(middleware, { auth: { tipo: 'staff', rol: 'admin', sucursalId: null }, headers: {}, query: {} });
+  assert.equal(sinHeader.status, 400);
+
+  const invalida = await runMiddleware(middleware, { auth: { tipo: 'staff', rol: 'admin', sucursalId: null }, headers: { 'x-sucursal-id': 'no-uuid' }, query: {} });
+  assert.equal(invalida.status, 400);
+
+  const inexistente = await runMiddleware(middleware, { auth: { tipo: 'staff', rol: 'admin', sucursalId: null }, headers: { 'x-sucursal-id': '22222222-2222-4222-8222-222222222222' }, query: {} });
+  assert.equal(inexistente.status, 404);
+
+  const ok = { auth: { tipo: 'staff', rol: 'admin', sucursalId: null }, headers: { 'x-sucursal-id': '11111111-1111-4111-8111-111111111111' }, query: {} };
+  assert.equal(await runMiddleware(middleware, ok), undefined);
+  assert.equal(ok.sucursalId, '11111111-1111-4111-8111-111111111111');
+});
+
+test('a non-admin session without a branch cannot pick one via header', async () => {
+  const middleware = createResolveSucursal({ queryFn: async () => ({ rows: [{ id: 'x', activo: true }] }) });
+  const err = await runMiddleware(middleware, {
+    auth: { tipo: 'staff', rol: 'cajero', sucursalId: null },
+    headers: { 'x-sucursal-id': '11111111-1111-4111-8111-111111111111' },
+    query: {},
+  });
+  assert.equal(err.status, 403);
+});
+
+test('a pre-migration customer token (no branch claim) is rejected', async () => {
+  const middleware = createRequireAuth({
+    verifyToken: () => ({ tipo: 'cliente', id: 'c1', telefono: '5512345678' }),
+    queryFn: async () => { throw new Error('no debe consultar'); },
+  });
+  const err = await runMiddleware(middleware, { headers: { authorization: 'Bearer viejo' } });
+  assert.equal(err.status, 401);
+  assert.match(err.message, /versión anterior/);
+});
+
+test('a customer token carries its branch into req.auth', async () => {
+  const middleware = createRequireAuth({
+    verifyToken: () => ({ tipo: 'cliente', id: 'c1', telefono: '5512345678', suc: 'suc-A' }),
+    queryFn: async () => { throw new Error('no debe consultar'); },
+  });
+  const req = { headers: { authorization: 'Bearer nuevo' } };
+  assert.equal(await runMiddleware(middleware, req), undefined);
+  assert.equal(req.auth.sucursalId, 'suc-A');
+});
+
+test('staff branch comes from the database row, not the token claim', async () => {
+  const middleware = createRequireAuth({
+    verifyToken: () => ({ tipo: 'staff', id: 'u1', rol: 'cajero', ver: 1, suc: 'suc-vieja' }),
+    queryFn: async () => ({ rows: [{ id: 'u1', nombre: 'Caja', rol: 'cajero', activo: true, token_version: 1, sucursal_id: 'suc-nueva' }] }),
+  });
+  const req = { headers: { authorization: 'Bearer ok' } };
+  assert.equal(await runMiddleware(middleware, req), undefined);
+  assert.equal(req.auth.sucursalId, 'suc-nueva');
 });

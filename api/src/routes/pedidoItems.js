@@ -1,10 +1,10 @@
 const express = require('express');
 const { query } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth, requireRole('barista', 'admin'));
+router.use(requireAuth, requireRole('barista', 'admin'), resolveSucursal);
 
 // Cola del barista, ordenada por urgencia real: lo inmediato primero, lo
 // programado después según su hora de recogida (misma lógica que el prototipo).
@@ -26,11 +26,12 @@ router.get('/cola', asyncHandler(async (req, res) => {
      LEFT JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN pedido_item_extras pie ON pie.pedido_item_id = pi.id
      LEFT JOIN opciones_extra oe ON oe.id = pie.extra_id
-     WHERE pi.estado IN ('pendiente', 'en_preparacion')
+     WHERE pi.estado IN ('pendiente', 'en_preparacion') AND p.sucursal_id = $1
      GROUP BY pi.id, pr.nombre, pr.icono, pr.tipo, pr.es_frio, ot.codigo, ot.etiqueta,
               ol.codigo, ol.etiqueta, oc.codigo, oc.etiqueta, p.origen, p.hora_recogida, p.creado_en, p.folio,
               c.nombre, c.apellido
-     ORDER BY COALESCE(p.hora_recogida, pi.creado_en)`
+     ORDER BY COALESCE(p.hora_recogida, pi.creado_en)`,
+    [req.sucursalId]
   );
   res.json(rows);
 }));
@@ -38,8 +39,10 @@ router.get('/cola', asyncHandler(async (req, res) => {
 router.patch('/:id/iniciar', asyncHandler(async (req, res) => {
   const { rows } = await query(
     `UPDATE pedido_items SET estado = 'en_preparacion', iniciado_en = now(), barista_id = $1
-     WHERE id = $2 AND estado = 'pendiente' RETURNING *`,
-    [req.auth.id, req.params.id]
+     WHERE id = $2 AND estado = 'pendiente'
+       AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $3)
+     RETURNING *`,
+    [req.auth.id, req.params.id, req.sucursalId]
   );
   if (rows.length === 0) throw new ApiError(409, 'El ticket no está pendiente (¿ya se inició o no existe?).');
   res.json(rows[0]);
@@ -52,8 +55,10 @@ router.patch('/:id/iniciar', asyncHandler(async (req, res) => {
 router.patch('/:id/terminar', asyncHandler(async (req, res) => {
   const { rows } = await query(
     `UPDATE pedido_items SET estado = 'terminado', terminado_en = now(), barista_id = COALESCE(barista_id, $1)
-     WHERE id = $2 AND estado IN ('pendiente', 'en_preparacion') RETURNING *`,
-    [req.auth.id, req.params.id]
+     WHERE id = $2 AND estado IN ('pendiente', 'en_preparacion')
+       AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $3)
+     RETURNING *`,
+    [req.auth.id, req.params.id, req.sucursalId]
   );
   if (rows.length === 0) throw new ApiError(409, 'El ticket no se puede terminar desde su estado actual.');
   res.json(rows[0]);

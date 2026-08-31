@@ -22,5 +22,11 @@ jobs:
             cd ${{ secrets.APP_DIR }}          # p. ej. /opt/cafeteria-movil
             git fetch --all --tags
             git checkout "${{ github.ref_name }}"
+            # 1) Respaldo de la base ANTES de tocar nada (queda en ./backups)
+            mkdir -p backups
+            docker exec cafeteria-db pg_dump -U postgres cafeteria | gzip > "backups/pre-${{ github.ref_name }}-$(date +%F-%H%M).sql.gz"
+            # 2) Migraciones pendientes (db/migrar.sh lleva registro; no repite ninguna)
+            bash db/migrar.sh
+            # 3) Nueva API + frontend
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
             docker image prune -f

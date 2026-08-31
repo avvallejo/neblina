@@ -77,7 +77,7 @@ CREATE OR REPLACE VIEW vw_costo_teorico_receta_12oz AS
 SELECT pr.id AS producto_id, pr.nombre,
   COALESCE(re.gramaje_por_shot, 0) / 1000.0 * COALESCE(mc.costo_unitario, 0)
     + COALESCE(tl.cantidad_ml, 0) / 1000.0 * COALESCE(ml.costo_unitario, 0)
-    + COALESCE((SELECT SUM(rif.cantidad * CASE rif.unidad WHEN 'g' THEN 0.001 WHEN 'ml' THEN 0.001 ELSE 1 END * mp2.costo_unitario)
+    + COALESCE((SELECT SUM(fn_convertir_unidad(rif.cantidad, rif.unidad, mp2.unidad) * mp2.costo_unitario)
                 FROM receta_insumos_fijos rif JOIN materias_primas mp2 ON mp2.id = rif.materia_prima_id
                 WHERE rif.producto_id = pr.id), 0) AS costo_estimado
 FROM productos pr

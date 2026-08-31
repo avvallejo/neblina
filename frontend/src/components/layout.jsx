@@ -69,7 +69,16 @@ export function AppShell({
               {subtitle && <div className="topbar-subtitle">{subtitle}</div>}
             </div>
           </div>
-          <div className="topbar-right">{topRight}</div>
+          <div className="topbar-right">
+            {topRight}
+            {/* En móvil no hay barra lateral: el botón de salir vive aquí. */}
+            {onLogout && (
+              <button className="topbar-logout" aria-label="Cerrar sesión"
+                      onClick={() => { if (window.confirm('¿Cerrar la sesión?')) onLogout(); }}>
+                <LogOut size={16} /><span>Salir</span>
+              </button>
+            )}
+          </div>
         </header>
         <main className={`page${wide ? ' wide' : ''}`}>{children}</main>
       </div>

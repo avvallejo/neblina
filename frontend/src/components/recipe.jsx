@@ -20,8 +20,8 @@ function iconForParam(label) {
   return Coffee;
 }
 
-export function RecipeModal({ ticket, onClose, onFinish, readOnly, override, onEdit }) {
-  const product = getProduct(ticket.productId);
+export function RecipeModal({ ticket, product: selectedProduct, onClose, onFinish, readOnly, override, onEdit }) {
+  const product = selectedProduct || getProduct(ticket.productId);
   const recipe = buildRecipe(product, ticket, override);
   const sizeLabel = product?.sizes ? labelOf(SIZE_OPTIONS, ticket.size || '12') : '—';
   const lecheIng = recipe.ingredientes.find(i => i.label.toLowerCase().includes('leche'));

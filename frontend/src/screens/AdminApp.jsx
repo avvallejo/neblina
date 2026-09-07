@@ -140,16 +140,18 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
   );
 }
 
-function RecetasSection({ onView, recetaOverrides }) {
+function RecetasSection({ productos, onView, recetaOverrides }) {
   return (
     <>
       <p className="promo-summary-card">Toca una bebida para ver su receta (12 oz, leche entera, café tradicional) y desde ahí editarla: ingredientes base (café por shot y leche por tamaño), ingredientes fijos del inventario, pasos y parámetros de extracción. El vaso/tapa y los extras se resuelven solos según lo que el cliente elija.</p>
+      <p className="field-hint">También puedes editar las recetas de bebidas inactivas. Para ponerlas a la venta, revisa sus insumos y empaques y actívalas en Catálogo de productos.</p>
       <div className="product-grid">
-        {PRODUCTS.filter(p => p.tipo !== 'snack' && p.activo !== false).map(p => (
+        {productos.filter(p => p.tipo !== 'snack').map(p => (
           <button key={p.id} className="product-card" onClick={() => onView(p)}>
             {recetaOverrides[p.id] && recetaOverrides[p.id].esPersonalizada && <span className="custom-badge"><Pencil size={11} /></span>}
             <span className="product-icon">{p.icon}</span>
             <span className="product-name">{p.name}</span>
+            {p.activo === false && <span className="field-hint">Inactivo</span>}
           </button>
         ))}
       </div>
@@ -905,7 +907,7 @@ export default function AdminApp(props) {
         />
       )}
 
-      {screen === 'recetas' && <RecetasSection onView={setRecipeProduct} recetaOverrides={recetaOverrides} />}
+      {screen === 'recetas' && <RecetasSection productos={productosAdmin} onView={setRecipeProduct} recetaOverrides={recetaOverrides} />}
       {screen === 'opciones' && <OpcionesSection addToast={addToast} onOpcionesChanged={recargarCatalogo} />}
       {screen === 'costos' && <CostosSection addToast={addToast} sedeNombre={sedeNombre} onCostosChanged={recargarAdmin} />}
       {screen === 'reportes' && <ReportesSection data={reportes} />}
@@ -994,6 +996,7 @@ export default function AdminApp(props) {
 
       {recipeProduct && (
         <RecipeModal
+          product={recipeProduct}
           ticket={{ productId: recipeProduct.id, size: '12', milk: 'entera', coffeeType: 'tradicional', extras: [] }}
           override={recetaOverrides[recipeProduct.id]}
           readOnly

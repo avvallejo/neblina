@@ -290,7 +290,7 @@ function OpcionesSection({ addToast, onOpcionesChanged }) {
     return (
       <div className={`opcion-row${o.activo === false ? ' inactiva' : ''}`}>
         <div className="opcion-main">
-          <div className="opcion-nombre">{o.etiqueta}{o.activo === false ? ' • Inactiva' : ''}</div>
+          <div className="opcion-nombre">{o.etiqueta}{o.activo === false ? ' • Inactiva' : ''}{o.precio_automatico ? ' • Precio automático' : ''}</div>
           <div className="opcion-sub">
             {extraSub ? `${extraSub} · ` : ''}
             {costo === null ? 'costo no calculable' : `costo ≈ ${costo < 0 ? '−' : ''}${money(Math.abs(costo))}`}

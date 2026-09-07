@@ -1,9 +1,10 @@
 // PANTALLA DEL NEGOCIO — menú para una TV o monitor en el local.
 // Se abre con una URL fija (ej. http://<host>:5175/?pantalla=menu&sucursal=<id>)
-// y se actualiza sola cada minuto: al cambiar un precio o activar/desactivar
+// y se actualiza sola cada 10 segundos: al cambiar un precio o activar/desactivar
 // un producto en el panel, la pantalla lo refleja sin tocarla.
 import React, { useState, useEffect } from 'react';
 import { Coffee } from 'lucide-react';
+import CafeMenu from './CafeMenu.jsx';
 import * as api from '../api/client.js';
 
 export default function MenuBoard({ sucursalId }) {
@@ -17,6 +18,7 @@ export default function MenuBoard({ sucursalId }) {
   const [opciones, setOpciones] = useState(null); // tamaños/cafés/leches/extras con su ajuste de precio
   const [cfg, setCfg] = useState({});
   const [promoApertura, setPromoApertura] = useState(null);
+  const [desactualizado, setDesactualizado] = useState(false);
   const [hora, setHora] = useState(new Date());
 
   useEffect(() => {
@@ -26,8 +28,11 @@ export default function MenuBoard({ sucursalId }) {
 
   useEffect(() => {
     let vivo = true;
+    let cargando = false;
 
     const cargar = async () => {
+      if (cargando) return;
+      cargando = true;
       try {
         const sedes = await api.getSucursales();
         const sede = (sucursalId && sedes.find(s => s.id === sucursalId)) || api.getSucursal() && sedes.find(s => s.id === api.getSucursal().id) || sedes[0];
@@ -36,12 +41,12 @@ export default function MenuBoard({ sucursalId }) {
         if (vivo) setSedeNombre(sede.nombre);
 
         const [cfg, cats, prods, turno, fid, ops, aperturas] = await Promise.all([
-          api.getConfig().catch(() => ({})),
-          api.getCategorias().catch(() => []),
-          api.getProductos().catch(() => []),
+          api.getConfig(),
+          api.getCategorias(),
+          api.getProductos(),
           api.getTurnoEstado().catch(() => ({ abierto: false })),
           api.getFidelidad().catch(() => null),
-          api.getOpciones().catch(() => null),
+          api.getOpciones(),
           api.getPromocionesApertura().catch(() => []),
         ]);
         if (!vivo) return;
@@ -55,14 +60,19 @@ export default function MenuBoard({ sucursalId }) {
         setPromo(fid && fid.activo ? fid : null);
         setOpciones(ops);
         setEstado('listo');
+        setDesactualizado(false);
       } catch {
-        if (vivo) setEstado('error');
-      }
+        if (vivo) { setDesactualizado(true); setEstado(previous => previous === 'listo' ? previous : 'error'); }
+      } finally { cargando = false; }
     };
 
     cargar();
-    const t = setInterval(cargar, 60000); // refresco automático
-    return () => { vivo = false; clearInterval(t); };
+    const t = setInterval(cargar, 10000);
+    const visible = () => { if (!document.hidden) cargar(); };
+    window.addEventListener('focus', cargar);
+    window.addEventListener('online', cargar);
+    document.addEventListener('visibilitychange', visible);
+    return () => { vivo = false; clearInterval(t); window.removeEventListener('focus', cargar); window.removeEventListener('online', cargar); document.removeEventListener('visibilitychange', visible); };
   }, [sucursalId]);
 
   if (estado !== 'listo') {
@@ -74,6 +84,10 @@ export default function MenuBoard({ sucursalId }) {
         </div>
       </div>
     );
+  }
+
+  if (new URLSearchParams(window.location.search).get('diseno') === 'ilustrado' || !cfg.pantallaEstilo || cfg.pantallaEstilo === 'ilustrado') {
+    return <CafeMenu brand={brand} sedeNombre={sedeNombre} productos={productos} opciones={opciones} cfg={cfg} abierto={abierto} desactualizado={desactualizado}/>;
   }
 
   if ((cfg.pantallaEstilo || 'pizarra') === 'pizarra') {

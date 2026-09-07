@@ -53,6 +53,7 @@ async function request(path, { method = 'GET', body, useClienteToken = false } =
 
   const res = await fetch(`${BASE}${path}`, {
     method,
+    cache: method === 'GET' ? 'no-store' : 'default',
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -106,6 +107,7 @@ function adaptProducto(p) {
     frio: !!p.es_frio,
     sizes: !!p.permite_tamanos,
     coffeeType: !!p.permite_tipo_cafe,
+    coffeePrices: p.recargos_cafe || {},
     extras: !!p.permite_extras,
     activo: p.activo !== false,
   };

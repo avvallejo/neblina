@@ -45,7 +45,7 @@ router.get('/admin', requireAuth, requireRole('admin'), resolveSucursal, asyncHa
     query('SELECT id, nombre, costo_unitario, unidad, activo FROM materias_primas WHERE sucursal_id = $1', [suc]),
     query('SELECT t.*, tl.cantidad_ml AS leche_ml FROM opciones_tamano t LEFT JOIN tamano_leche_cantidad tl ON tl.tamano_id = t.id WHERE t.sucursal_id = $1 ORDER BY t.onzas', [suc]),
     query('SELECT * FROM opciones_leche WHERE sucursal_id = $1 ORDER BY etiqueta', [suc]),
-    query('SELECT * FROM opciones_cafe WHERE sucursal_id = $1 ORDER BY etiqueta', [suc]),
+    query('SELECT *, fn_recargo_cafe(id) AS delta_precio FROM opciones_cafe WHERE sucursal_id = $1 ORDER BY etiqueta', [suc]),
     query('SELECT * FROM opciones_extra WHERE sucursal_id = $1 ORDER BY etiqueta', [suc]),
     query('SELECT porcentaje_ganancia_normal, redondeo FROM configuracion_margen WHERE sucursal_id = $1 ORDER BY actualizado_en DESC LIMIT 1', [suc]),
     query('SELECT te.tamano_id, te.variante, mv.costo_unitario AS vaso, mt.costo_unitario AS tapa FROM tamano_empaque te JOIN materias_primas mv ON mv.id = te.materia_prima_vaso_id JOIN materias_primas mt ON mt.id = te.materia_prima_tapa_id JOIN opciones_tamano t ON t.id = te.tamano_id WHERE t.sucursal_id = $1', [suc]),
@@ -147,6 +147,9 @@ router.post('/:tipo', requireAuth, requireRole('admin'), resolveSucursal, asyncH
       [codigo, etiqueta.trim(), delta, materia, req.sucursalId]
     ));
   }
+  if (req.params.tipo === 'cafes' && req.body.precioAutomatico === true) {
+    ({ rows } = await query('UPDATE opciones_cafe SET precio_automatico=true WHERE id=$1 RETURNING *', [rows[0].id]));
+  }
   res.status(201).json(rows[0]);
 }));
 
@@ -160,6 +163,10 @@ router.patch('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, a
   const add = (col, val) => { sets.push(`${col} = $${i++}`); values.push(val); };
 
   if (req.body.deltaPrecio !== undefined) add('delta_precio', validarDelta(req.body.deltaPrecio));
+  if (req.params.tipo === 'cafes' && req.body.precioAutomatico !== undefined) {
+    if (typeof req.body.precioAutomatico !== 'boolean') throw new ApiError(400, 'Modo de precio inválido.');
+    add('precio_automatico', req.body.precioAutomatico);
+  }
   if (req.body.etiqueta !== undefined) {
     if (!String(req.body.etiqueta).trim()) throw new ApiError(400, 'El nombre no puede quedar vacío.');
     add('etiqueta', String(req.body.etiqueta).trim());
@@ -215,7 +222,7 @@ router.get('/leches', asyncHandler(async (req, res) => {
 }));
 
 router.get('/cafes', asyncHandler(async (req, res) => {
-  res.json((await query('SELECT * FROM opciones_cafe WHERE activo AND sucursal_id = $1 ORDER BY etiqueta', [req.sucursalId])).rows);
+  res.json((await query('SELECT *, fn_recargo_cafe(id) AS delta_precio FROM opciones_cafe WHERE activo AND sucursal_id = $1 ORDER BY etiqueta', [req.sucursalId])).rows);
 }));
 
 router.get('/extras', asyncHandler(async (req, res) => {

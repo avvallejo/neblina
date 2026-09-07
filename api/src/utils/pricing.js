@@ -49,8 +49,8 @@ async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extra
   }
   if (cafeId) {
     const r = sucursalId
-      ? await queryFn('SELECT delta_precio FROM opciones_cafe WHERE id = $1 AND activo AND sucursal_id = $2', [cafeId, sucursalId])
-      : await queryFn('SELECT delta_precio FROM opciones_cafe WHERE id = $1 AND activo', [cafeId]);
+      ? await queryFn('SELECT fn_recargo_cafe(id, COALESCE((SELECT gramaje_por_shot FROM recetas WHERE producto_id=$3),18)) AS delta_precio FROM opciones_cafe WHERE id = $1 AND activo AND sucursal_id = $2', [cafeId, sucursalId, productoId])
+      : await queryFn('SELECT fn_recargo_cafe(id, COALESCE((SELECT gramaje_por_shot FROM recetas WHERE producto_id=$2),18)) AS delta_precio FROM opciones_cafe WHERE id = $1 AND activo', [cafeId, productoId]);
     if (r.rows.length === 0) throw new ApiError(400, 'Opción de café inválida.');
     total += Number(r.rows[0].delta_precio);
   }

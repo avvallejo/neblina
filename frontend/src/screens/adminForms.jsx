@@ -1107,6 +1107,7 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
   const isNew = !opcion || !opcion.id;
   const esShot = !!(opcion && opcion.es_shot_adicional);
   const [etiqueta, setEtiqueta] = useState(opcion ? opcion.etiqueta || '' : '');
+  const [automatico, setAutomatico] = useState(!!opcion?.precio_automatico);
   const [delta, setDelta] = useState(opcion && opcion.delta_precio !== undefined ? String(Number(opcion.delta_precio)) : '');
   const [materiaId, setMateriaId] = useState((opcion && opcion.materia_prima_id) || (tipo !== 'tamanos' && !esShot && materias[0] ? materias[0].id : ''));
   const [descuenta, setDescuenta] = useState(tipo !== 'extras' || esShot || !!(opcion ? opcion.materia_prima_id : true));
@@ -1149,6 +1150,7 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
     if (tipo === 'extras' && usaInsumo && (!Number.isFinite(Number(cantidad)) || Number(cantidad) <= 0)) { setError('Indica la porción del extra (mayor a 0).'); return; }
     setError('');
     const body = { etiqueta: etiqueta.trim(), deltaPrecio: Math.round(d * 100) / 100 };
+    if (tipo === 'cafes') body.precioAutomatico = automatico;
     if (tipo === 'leches' || tipo === 'cafes') body.materiaPrimaId = materiaId;
     if (tipo === 'extras' && !esShot) {
       body.materiaPrimaId = usaInsumo ? materiaId : null;
@@ -1205,8 +1207,9 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
       )}
 
       <div className="option-group">
+        {tipo === 'cafes' && <label className="field-hint"><input type="checkbox" checked={automatico} onChange={e => setAutomatico(e.target.checked)} /> Calcular automáticamente con costo por gramo, gramaje de la receta, margen y redondeo del negocio</label>}
         <div className="option-label">Ajuste al precio ($, puede ser negativo)</div>
-        <input className="text-input" type="number" step="0.5" inputMode="decimal" value={delta} onChange={e => setDelta(e.target.value)} placeholder="0" />
+        <input className="text-input" type="number" step="0.5" inputMode="decimal" disabled={tipo === 'cafes' && automatico} value={tipo === 'cafes' && automatico ? sugerido ?? delta : delta} onChange={e => setDelta(e.target.value)} placeholder="0" />
         <div className="opcion-costo-card">
           <div>
             <div className="opcion-costo-label">Costo estimado de esta opción</div>
@@ -1216,7 +1219,7 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
             <div className="opcion-costo-label">Sugerido (costo + {Number(margen)}%)</div>
             <div className="opcion-costo-value brand">{sugerido === null ? '—' : `$${sugerido.toFixed(2)}`}</div>
           </div>
-          {sugerido !== null && <button type="button" className="btn-secondary" onClick={() => setDelta(String(sugerido))}>Usar sugerido</button>}
+          {sugerido !== null && !automatico && <button type="button" className="btn-secondary" onClick={() => setDelta(String(sugerido))}>Usar sugerido</button>}
         </div>
         <div className="field-hint">Este ajuste se suma al precio del producto cuando el cliente elige la opción; aparece como "(+{delta || 0})" en la app, en caja y como referencia en la pantalla del negocio.</div>
       </div>
@@ -1241,6 +1244,7 @@ export function PantallaConfigEditor({ cfg, onSave }) {
     <div className="branding-editor" style={{ marginTop: 12 }}>
       <div className="option-label">Estilo de la pantalla</div>
       <div className="option-row">
+        <button type="button" className={`option-chip ${estilo === 'ilustrado' ? 'selected' : ''}`} onClick={() => setEstilo('ilustrado')}>Menú con imágenes</button>
         <button type="button" className={`option-chip ${estilo === 'pizarra' ? 'selected' : ''}`} onClick={() => setEstilo('pizarra')}>Pizarra (oscuro, como el menú impreso)</button>
         <button type="button" className={`option-chip ${estilo === 'clasico' ? 'selected' : ''}`} onClick={() => setEstilo('clasico')}>Clásico</button>
       </div>

@@ -29,7 +29,7 @@ export function calcUnitPrice(product, sel) {
   let price = product.price;
   if (product.sizes && sel.size) price += (SIZE_OPTIONS.find(s => s.id === sel.size) || {}).delta || 0;
   if (product.leche && sel.milk) price += (MILK_OPTIONS.find(m => m.id === sel.milk) || {}).delta || 0;
-  if (product.coffeeType && sel.coffeeType) price += (COFFEE_OPTIONS.find(c => c.id === sel.coffeeType) || {}).delta || 0;
+  if (product.coffeeType && sel.coffeeType) price += Number(product.coffeePrices?.[sel.coffeeType] ?? (COFFEE_OPTIONS.find(c => c.id === sel.coffeeType) || {}).delta ?? 0);
   (sel.extras || []).forEach(ex => { price += (EXTRA_OPTIONS.find(e => e.id === ex) || {}).delta || 0; });
   return price;
 }

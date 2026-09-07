@@ -27,7 +27,9 @@ router.get('/', requireAdminForInactiveCatalog, resolveSucursalPublico, asyncHan
   if (categoria) { values.push(categoria); condiciones.push(`cp.nombre = $${values.length}`); }
   const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
   const { rows } = await query(
-    `SELECT p.*, cp.nombre AS categoria, fn_precio_efectivo(p.id) AS precio_efectivo
+    `SELECT p.*, cp.nombre AS categoria, fn_precio_efectivo(p.id) AS precio_efectivo,
+       (SELECT jsonb_object_agg(oc.codigo,fn_recargo_cafe(oc.id,COALESCE((SELECT gramaje_por_shot FROM recetas WHERE producto_id=p.id),18)))
+        FROM opciones_cafe oc WHERE oc.sucursal_id=p.sucursal_id AND oc.activo) AS recargos_cafe
      FROM productos p JOIN categorias_producto cp ON cp.id = p.categoria_id
      ${where} ORDER BY cp.orden, p.nombre`,
     values

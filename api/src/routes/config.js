@@ -25,7 +25,7 @@ async function leerConfig(sucursalId) {
     // Pantalla del negocio (TV): frase bajo el nombre, pie de página y estilo.
     lema: typeof map.lema === 'string' ? map.lema : '',
     piePantalla: typeof map.pie_pantalla === 'string' ? map.pie_pantalla : '',
-    pantallaEstilo: map.pantalla_estilo === 'clasico' ? 'clasico' : 'pizarra',
+    pantallaEstilo: ['clasico','ilustrado'].includes(map.pantalla_estilo) ? map.pantalla_estilo : 'pizarra',
   };
 }
 
@@ -52,7 +52,7 @@ router.put('/', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler
   if ('logo' in req.body) await guardar(req.sucursalId, 'logo', String(req.body.logo || ''));
   if ('lema' in req.body) await guardar(req.sucursalId, 'lema', String(req.body.lema || '').slice(0, 80));
   if ('piePantalla' in req.body) await guardar(req.sucursalId, 'pie_pantalla', String(req.body.piePantalla || '').slice(0, 120));
-  if ('pantallaEstilo' in req.body) await guardar(req.sucursalId, 'pantalla_estilo', req.body.pantallaEstilo === 'clasico' ? 'clasico' : 'pizarra');
+  if ('pantallaEstilo' in req.body) await guardar(req.sucursalId, 'pantalla_estilo', ['clasico','ilustrado'].includes(req.body.pantallaEstilo) ? req.body.pantallaEstilo : 'pizarra');
   res.json(await leerConfig(req.sucursalId));
 }));
 

@@ -79,7 +79,7 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
       )}
       {product.sizes && optionBlock('Tamaño', SIZE_OPTIONS, sel.size, id => setSel(s => ({ ...s, size: id })))}
       {product.leche && optionBlock('Leche', MILK_OPTIONS, sel.milk, id => setSel(s => ({ ...s, milk: id })))}
-      {product.coffeeType && optionBlock('Café', COFFEE_OPTIONS, sel.coffeeType, id => setSel(s => ({ ...s, coffeeType: id })))}
+      {product.coffeeType && optionBlock('Café', COFFEE_OPTIONS.map(o => ({...o, delta:Number(product.coffeePrices?.[o.id] ?? o.delta)})), sel.coffeeType, id => setSel(s => ({ ...s, coffeeType: id })))}
       {product.extras && (
         <div className="option-group">
           <div className="option-label">Extras</div>

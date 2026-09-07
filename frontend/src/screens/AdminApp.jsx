@@ -95,8 +95,14 @@ function ProveedoresSection({ proveedores, materias, onEdit, onAdd, onToggleActi
   );
 }
 
-function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, revisiones, onCosto, onAplicarSugerido }) {
+function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, revisiones, onCosto, onAplicarSugerido, onMantenerPrecio }) {
   const [filtro, setFiltro] = useState('Todas');
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false);
+  const decidirPrecio = async (r, action) => {
+    if (guardandoPrecio) return;
+    setGuardandoPrecio(true);
+    try { await action(r); } finally { setGuardandoPrecio(false); }
+  };
   const categorias = ['Todas', ...CATEGORIES.map(c => c.id)];
   const lista = filtro === 'Todas' ? productos : productos.filter(p => p.cat === filtro);
   return (
@@ -104,12 +110,15 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
       {revisiones && revisiones.length > 0 && (
         <div className="reprecio-banner">
           <div className="reprecio-head"><AlertTriangle size={15} /> {revisiones.length} precio(s) por revisar</div>
-          <div className="reprecio-sub">El costo de estos productos cambió (insumos, receta o gastos fijos) y su precio de menú ya no corresponde a su margen. El precio no cambia solo: aplícalo con un clic o ajústalo en "Costo y precio".</div>
+          <div className="reprecio-sub">Revisa el precio sugerido o conserva el actual con "Mantener precio". Si lo mantienes, el aviso se oculta hasta que cambie la receta o el costo de sus insumos.</div>
           {revisiones.map(r => (
             <div key={r.id} className="reprecio-row">
               <span>{r.icono} {r.nombre}</span>
               <span className="reprecio-detalle">costo ${Number(r.costo_total).toFixed(2)} · margen {Number(r.margen_aplicado)}% · ${Number(r.precio_base).toFixed(2)} → ${Number(r.precio_sugerido).toFixed(2)}</span>
-              <button className="btn-primary small" onClick={() => onAplicarSugerido(r)}>Aplicar ${Number(r.precio_sugerido).toFixed(2)}</button>
+              <div className="reprecio-actions">
+                <button className="btn-secondary small" disabled={guardandoPrecio} onClick={() => decidirPrecio(r, onMantenerPrecio)}>Mantener precio</button>
+                <button className="btn-primary small" disabled={guardandoPrecio} onClick={() => decidirPrecio(r, onAplicarSugerido)}>Aplicar ${Number(r.precio_sugerido).toFixed(2)}</button>
+              </div>
             </div>
           ))}
         </div>
@@ -722,6 +731,17 @@ export default function AdminApp(props) {
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };
 
+  const mantenerPrecio = async r => {
+    try {
+      await api.mantenerPrecio(r.id, r.revision);
+      await recargarAdmin();
+      addToast(`Precio conservado: $${Number(r.precio_base).toFixed(2)}`, 'success');
+    } catch (e) {
+      addToast(e.message, 'warn');
+      await recargarAdmin();
+    }
+  };
+
   const pedidosHoy = kpis ? Number(kpis.pedidos || 0) : 0;
   const ventasHoy = kpis ? Number(kpis.ventas || 0) : 0;
   const ticketProm = kpis ? Number(kpis.ticket_promedio || 0) : 0;
@@ -903,6 +923,7 @@ export default function AdminApp(props) {
           onDelete={deleteProducto}
           revisiones={preciosPorRevisar || []}
           onCosto={p => setPrecioProducto(p)}
+          onMantenerPrecio={mantenerPrecio}
           onAplicarSugerido={r => aplicarPrecio(r.id, { price: Number(r.precio_sugerido), margenPorcentaje: r.margen_propio ? Number(r.margen_aplicado) : null })}
         />
       )}

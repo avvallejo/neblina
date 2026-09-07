@@ -44,6 +44,7 @@ services:
       - ./db/16_rol_mostrador.sql:/docker-entrypoint-initdb.d/16_rol_mostrador.sql:ro
       - ./db/17_descripcion_producto.sql:/docker-entrypoint-initdb.d/17_descripcion_producto.sql:ro
       - ./db/18_cafe_frappes_seleccionable.sql:/docker-entrypoint-initdb.d/18_cafe_frappes_seleccionable.sql:ro
+      - ./db/19_mantener_precio.sql:/docker-entrypoint-initdb.d/19_mantener_precio.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

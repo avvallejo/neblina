@@ -381,6 +381,9 @@ export function eliminarProducto(id) { return request(`/productos/${id}`, { meth
 // Flujo costo → margen → precio.
 export function getPrecioSugerido(id) { return request(`/productos/${id}/precio-sugerido`); }
 export function getPreciosPorRevisar() { return request('/productos/precios-por-revisar'); }
+export function mantenerPrecio(id, revision) {
+  return request(`/productos/${id}/mantener-precio`, { method: 'POST', body: { revision } });
+}
 
 // Costos indirectos: gastos fijos mensuales de la sede (renta, sueldos…) y la
 // configuración de margen/volumen con la que se prorratean por bebida.

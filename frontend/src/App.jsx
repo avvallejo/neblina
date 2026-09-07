@@ -406,6 +406,7 @@ export default function App() {
       if (override === null) { await api.restaurarReceta(productId); addToast('Receta restaurada a su versión predeterminada', 'success'); }
       else { await api.guardarReceta(productId, override); addToast('Receta actualizada', 'success'); }
       await recargarRecetas();
+      await recargarAdmin();
     } catch (e) { addToast(e.message, 'warn'); }
   };
 

@@ -3,6 +3,7 @@ const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = require('../middleware/auth');
 const { cleanText, parseNumber, toBoolean } = require('../utils/catalogValidation');
+const { preciosPorRevisar, mantenerPrecio } = require('../services/priceReview');
 
 const router = express.Router();
 
@@ -72,13 +73,11 @@ router.get('/:id/precio-sugerido', requireAuth, requireRole('admin'), resolveSuc
 // Aviso de reprecio: productos activos cuyo precio de menú ya no corresponde
 // a su costo + margen. El precio NUNCA cambia solo — el admin lo aplica.
 router.get('/precios-por-revisar', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {
-  const { rows } = await query(
-    `SELECT * FROM vw_precios_por_revisar
-     WHERE sucursal_id = $1 AND ABS(diferencia) >= 0.01
-     ORDER BY ABS(diferencia) DESC`,
-    [req.sucursalId]
-  );
-  res.json(rows);
+  res.json(await preciosPorRevisar({ query }, req.sucursalId));
+}));
+
+router.post('/:id/mantener-precio', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {
+  res.json(await mantenerPrecio({ query }, { id:req.params.id, sucursalId:req.sucursalId, revision:req.body.revision }));
 }));
 
 router.get('/:id/desglose-costo', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {

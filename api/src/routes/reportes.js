@@ -4,6 +4,7 @@ const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
 
 const router = express.Router();
+const { validateDate, dailySalesSql } = require('../services/dailySales');
 router.use(requireAuth, requireRole('admin'));
 
 // Dos modos:
@@ -34,6 +35,12 @@ async function reporte(req, vista, { orden = '', limite = '' } = {}) {
   const { rows } = await query(`SELECT v.* FROM ${vista} v WHERE v.sucursal_id = $1 ${orden} ${limite}`, [req.sucursalId]);
   return rows;
 }
+
+router.get('/resumen-dia', asyncHandler(async (req, res) => {
+  if (req.consolidado) throw new ApiError(400, 'Selecciona una sucursal para consultar el día.');
+  const { rows } = await query(dailySalesSql, [req.sucursalId, validateDate(req.query.fecha)]);
+  res.json(rows[0]);
+}));
 
 router.get('/ventas-por-metodo-pago', asyncHandler(async (req, res) => {
   res.json(await reporte(req, 'vw_ventas_por_metodo_pago'));

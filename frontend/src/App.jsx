@@ -52,6 +52,8 @@ export default function App() {
   const [reportes, setReportes] = useState(null);
   const [preciosPorRevisar, setPreciosPorRevisar] = useState([]);
   const [kpis, setKpis] = useState(null);
+  const [fechaVentas, setFechaVentas] = useState('');
+  const [ventasError, setVentasError] = useState('');
   const [smsActivo, setSmsActivo] = useState(true); // falla cerrado hasta poder leer la configuración
   const [nombreNegocio, setNombreNegocio] = useState('');
   const [logo, setLogo] = useState('');
@@ -251,19 +253,18 @@ export default function App() {
 
   // ---- Datos de administración ----
   const recargarAdmin = React.useCallback(async () => {
-    try {
-      const [us, prov, mats, prodsAdmin] = await Promise.all([api.getUsuarios(), api.getProveedores(), api.getMaterias(), api.getProductosAdmin()]);
-      setUsuarios(us);
-      setProveedores(prov);
-      setMaterias(mats.map(adaptMateria));
-      setProductosAdmin(prodsAdmin);
-      api.getMateriasCategorias(); api.getCategoriasProducto(); // llenan los mapas nombre->id
-      const fid = await api.getFidelidad();
-      if (fid) setPromoConfig({ activo: fid.activo, cada: fid.cada_n_pedidos, premioId: fid.producto_premio_id });
-      const [rep, k] = await Promise.all([api.getReportes(), api.getKpisTurno()]);
-      setReportes(rep); setKpis(k);
-      try { setPreciosPorRevisar(await api.getPreciosPorRevisar()); } catch { /* la vista llega con la migración 13 */ }
-    } catch { /* conserva lo último */ }
+    await Promise.allSettled([
+      api.getUsuarios().then(setUsuarios),
+      api.getProveedores().then(setProveedores),
+      api.getMaterias().then(rows => setMaterias(rows.map(adaptMateria))),
+      api.getProductosAdmin().then(setProductosAdmin),
+      api.getMateriasCategorias(), api.getCategoriasProducto(),
+      api.getFidelidad().then(fid => {
+        if (fid) setPromoConfig({ activo: fid.activo, cada: fid.cada_n_pedidos, premioId: fid.producto_premio_id });
+      }),
+      api.getReportes().then(setReportes).catch(() => setReportes(null)),
+      api.getPreciosPorRevisar().then(setPreciosPorRevisar),
+    ]);
   }, []);
 
   useEffect(() => {
@@ -272,6 +273,27 @@ export default function App() {
     const t = setInterval(recargarAdmin, 5000);
     return () => clearInterval(t);
   }, [role, sede, recargarAdmin]);
+
+  useEffect(() => {
+    if (role !== 'admin') return undefined;
+    let vigente = true;
+    let consultando = false;
+    setKpis(null);
+    setVentasError('');
+    const actualizar = async () => {
+      if (consultando) return;
+      consultando = true;
+      try {
+        const datos = await api.getKpisDia(fechaVentas);
+        if (vigente) { setKpis(datos); setVentasError(''); }
+      } catch (error) {
+        if (vigente) { setKpis(null); setVentasError(`No se pudieron actualizar las ventas: ${error.message}`); }
+      } finally { consultando = false; }
+    };
+    actualizar();
+    const intervalo = setInterval(actualizar, 5000);
+    return () => { vigente = false; clearInterval(intervalo); };
+  }, [role, sede, fechaVentas]);
 
   const recargarRecetas = React.useCallback(async () => {
     try {
@@ -317,11 +339,11 @@ export default function App() {
     catch (e) { addToast(e.message, 'warn'); return false; }
   };
   const deleteMateria = async materia => {
-    if (!window.confirm(`¿Eliminar "${materia.nombre}"? Si ya tiene movimientos, se desactivará para conservar el historial.`)) return;
+    if (!window.confirm(`¿Eliminar "${materia.nombre}"? Si tiene compras, movimientos o vínculos con recetas y opciones, se desactivará para conservar el historial.`)) return;
     try {
       const r = await api.eliminarMateria(materia.id);
       await recargarAdmin();
-      addToast(r.modo_eliminacion === 'definitivo' ? 'Materia prima eliminada' : 'Materia prima desactivada por historial', 'success');
+      addToast(r.modo_eliminacion === 'definitivo' ? 'Materia prima eliminada' : 'Materia prima desactivada: tiene historial o vínculos con recetas/opciones', 'success');
     } catch (e) { addToast(e.message, 'warn'); }
   };
 
@@ -454,7 +476,7 @@ export default function App() {
           sedeActivaId={sede ? sede.id : null}
           onChangeSede={cambiarSedeAdmin}
           onSedesChanged={cargarSedes}
-          kpis={kpis} reportes={reportes} recargarCatalogo={cargarCatalogo} recargarAdmin={recargarAdmin} addToast={addToast}
+          kpis={kpis} fechaVentas={fechaVentas} setFechaVentas={setFechaVentas} ventasError={ventasError} reportes={reportes} recargarCatalogo={cargarCatalogo} recargarAdmin={recargarAdmin} addToast={addToast}
           smsActivo={smsActivo} onToggleSms={guardarSmsConfig}
           nombreNegocio={nombreNegocio} logo={logo} pantallaCfg={pantallaCfg} onSaveBranding={guardarBranding}
           onLogout={logout} turnoAbierto={turnoAbierto} promoConfig={promoConfig} setPromoConfig={guardarPromo}

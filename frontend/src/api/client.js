@@ -218,6 +218,7 @@ export function getTurnoEstado() { return request(pub('/turnos/estado')); } // {
 export function abrirTurno() { return request('/turnos/abrir', { method: 'POST' }); }
 export function cerrarTurno() { return request('/turnos/cerrar', { method: 'POST' }); }
 export function getKpisTurno() { return request('/turnos/actual/kpis'); }
+export function getKpisDia(fecha = '') { return request(`/reportes/resumen-dia?fecha=${encodeURIComponent(fecha)}`); }
 
 /* ============================================================
    PEDIDOS

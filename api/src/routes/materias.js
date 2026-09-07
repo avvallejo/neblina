@@ -207,6 +207,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
 router.delete('/:id', asyncHandler(async (req, res) => {
   const result = await withTransaction(async client => {
+    const materia = await client.query('SELECT id FROM materias_primas WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
+    if (!materia.rows.length) throw new ApiError(404, 'Materia prima no encontrada.');
     const usado = await client.query(
       `SELECT
          (SELECT COUNT(*) FROM lotes WHERE materia_prima_id = $1)

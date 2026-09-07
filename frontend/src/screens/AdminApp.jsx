@@ -643,7 +643,7 @@ function ComparativoSection({ addToast }) {
 export default function AdminApp(props) {
   const {
     brand, sedeNombre, esGeneral, sedes, sedeActivaId, onChangeSede,
-    kpis, reportes, addToast, smsActivo, onToggleSms,
+    kpis, fechaVentas, setFechaVentas, ventasError, reportes, addToast, smsActivo, onToggleSms,
     nombreNegocio, logo, pantallaCfg, onSaveBranding, onLogout, turnoAbierto,
     promoConfig, setPromoConfig, usuarios, addUsuario, updateUsuario, currentUser,
     materias, addMateria, updateMateria, deleteMateria,
@@ -752,7 +752,7 @@ export default function AdminApp(props) {
     recetas: ['Recetas', 'Vista estándar por producto'],
     costos: ['Costos indirectos', 'Gastos fijos, margen y punto de equilibrio'],
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
-    reportes: ['Reportes', sedeNombre ? `De ${sedeNombre}` : 'Del turno actual'],
+    reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],
     comparativo: ['Comparativo de sucursales', 'Todas las sedes'],
     sucursales: ['Sucursales', 'Administración del negocio completo'],
     config: ['Configuración', sedeNombre ? `De ${sedeNombre}` : 'De la sucursal'],
@@ -784,11 +784,18 @@ export default function AdminApp(props) {
               <span>Estado del turno{sedeNombre ? ` — ${sedeNombre}` : ''}</span>
               <span className={turnoAbierto ? 'status-open-text' : 'status-closed-text'}>{turnoAbierto ? 'Abierto' : 'Cerrado'}</span>
             </div>
+            <label>Fecha de ventas (hora de Ciudad de México)
+              <input type="date" value={fechaVentas} onChange={e => setFechaVentas(e.target.value)} />
+            </label>
+            <button className="link-toggle" onClick={() => setFechaVentas('')}>Hoy</button>
+            <p>Pedidos registrados el {kpis?.fecha || fechaVentas || 'día de hoy'}. Solo las ventas cobradas se suman; no hace falta cerrar turno.</p>
+            {ventasError && <p role="alert">{ventasError}</p>}
+            {!kpis && !ventasError && <p role="status">Cargando ventas…</p>}
             <div className="kpi-grid">
-              <div className="kpi-card"><span className="kpi-label">Ventas hoy</span><span className="kpi-value brand">{money(ventasHoy)}</span></div>
-              <div className="kpi-card"><span className="kpi-label">Pedidos hoy</span><span className="kpi-value">{pedidosHoy}</span></div>
-              <div className="kpi-card"><span className="kpi-label">Ticket promedio</span><span className="kpi-value">{money(ticketProm)}</span></div>
-              <div className="kpi-card"><span className="kpi-label">Mermas hoy</span><span className="kpi-value">{kpis ? Number(kpis.mermas || 0) : 0}</span></div>
+              <div className="kpi-card"><span className="kpi-label">Ventas del día</span><span className="kpi-value brand">{kpis ? money(ventasHoy) : '—'}</span></div>
+              <div className="kpi-card"><span className="kpi-label">Pedidos del día</span><span className="kpi-value">{kpis ? pedidosHoy : '—'}</span></div>
+              <div className="kpi-card"><span className="kpi-label">Ticket promedio</span><span className="kpi-value">{kpis ? money(ticketProm) : '—'}</span></div>
+              <div className="kpi-card"><span className="kpi-label">Mermas del día</span><span className="kpi-value">{kpis ? Number(kpis.mermas || 0) : '—'}</span></div>
             </div>
 
             {materiasBajas.length > 0 && (

@@ -5,6 +5,7 @@ const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
 const { assertPaymentAllowed, normalizeDiscount, assertDiscountRole } = require('../security/policies');
 const { createDiscountApproval, consumeDiscountApproval } = require('../services/discountApprovals');
+const { validateDate } = require('../services/dailySales');
 const { prepareOrderLines } = require('../services/orderValidation');
 
 const router = express.Router();
@@ -102,6 +103,7 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
+  const fecha = validateDate(req.query.fecha);
   // Se agregan nombre del cliente y conteo de items para que la pantalla de
   // Caja muestre "N producto(s) — Nombre" sin pedir cada pedido por separado.
   const { rows } = await query(
@@ -109,22 +111,22 @@ router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) =>
             (SELECT COUNT(*) FROM pedido_items pi WHERE pi.pedido_id = v.id) AS num_items
      FROM vw_pedidos_con_estado v
      LEFT JOIN clientes c ON c.id = v.cliente_id
-     WHERE v.sucursal_id = $1
-     ORDER BY v.creado_en DESC LIMIT 200`,
-    [req.sucursalId]
+     WHERE v.sucursal_id = $1 AND ($2::date IS NULL OR (v.creado_en >= $2::date::timestamp AT TIME ZONE 'America/Mexico_City' AND v.creado_en < ($2::date+1)::timestamp AT TIME ZONE 'America/Mexico_City'))
+     ORDER BY v.creado_en DESC LIMIT 2000`,
+    [req.sucursalId, fecha]
   );
   res.json(rows);
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
-  const pedido = await query('SELECT * FROM vw_pedidos_con_estado WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.sucursalId]);
+  const pedido = await query('SELECT v.*,p.registrado_en,p.motivo_registro,p.registro_manual FROM vw_pedidos_con_estado v JOIN pedidos p ON p.id=v.id WHERE v.id = $1 AND v.sucursal_id = $2', [req.params.id, req.sucursalId]);
   if (pedido.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
   if (req.auth.tipo === 'cliente' && pedido.rows[0].cliente_id !== req.auth.id) {
     throw new ApiError(403, 'No puedes ver un pedido que no es tuyo.');
   }
   const items = await query(
-    `SELECT pi.*, pr.nombre AS producto_nombre, pr.icono
-     FROM pedido_items pi JOIN productos pr ON pr.id = pi.producto_id
+    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono
+     FROM pedido_items pi LEFT JOIN productos pr ON pr.id = pi.producto_id
      WHERE pi.pedido_id = $1 ORDER BY pi.creado_en`,
     [req.params.id]
   );

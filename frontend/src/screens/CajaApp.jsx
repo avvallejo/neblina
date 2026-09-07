@@ -1,6 +1,8 @@
 // PUNTO DE VENTA (Caja). En escritorio: menú + carrito lado a lado; en móvil:
 // pestañas Menú / Carrito / Turno en la navegación inferior.
 import React, { useState } from 'react';
+import VentaDirecta from './VentaDirecta';
+import { adaptPedido } from '../lib/adapters';
 import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets } from 'lucide-react';
 import * as api from '../api/client.js';
 import { getProduct, NO_SHOW_WARNING_MS } from '../lib/catalog.js';
@@ -25,16 +27,27 @@ function ConfirmedView({ order, onNewSale }) {
   );
 }
 
-function TurnoView({ orders, now, onCancel, onCobrar, onNoShow }) {
-  const total = orders.filter(o => o.cobrado && !o.noShow).reduce((s, o) => s + o.total, 0);
+function DetalleVenta({id}) {
+  const [data,setData]=useState(null),[error,setError]=useState('');
+  return <details style={{marginTop:8}} onToggle={e=>{if(e.currentTarget.open&&!data)api.getPedido(id).then(setData).catch(e=>setError(e.message));}}><summary style={{cursor:'pointer'}}>Ver detalle</summary>
+    {error&&<p>{error}</p>}{data&&<div style={{paddingTop:8,fontSize:13}}>
+      {data.registro_manual&&<p>Captura directa · {data.motivo_registro}<br/>Ingresada al sistema: {new Date(data.registrado_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}</p>}
+      {data.items.map(i=><p key={i.id}>{i.cantidad} × {i.producto_nombre} · {money(i.precio_unitario)} c/u{i.motivo_precio&&<><br/>Motivo: {i.motivo_precio} {i.precio_catalogo!==null&&`(catálogo: ${money(i.precio_catalogo)})`}</>}</p>)}
+    </div>}
+  </details>;
+}
 
-  if (orders.length === 0) {
-    return <EmptyState icon={Receipt} title="Aún no hay ventas en este turno" />;
-  }
+function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
+  const [fecha,setFecha]=useState(()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City'}).format(new Date()));
+  const [orders,setOrders]=useState([]),[error,setError]=useState('');
+  React.useEffect(()=>{let alive=true;setOrders([]);setError('');api.getPedidos(fecha).then(rows=>{if(alive)setOrders(rows.map(adaptPedido));}).catch(e=>{if(alive)setError(e.message);});return()=>{alive=false;};},[fecha,liveOrders]);
+  const total = orders.filter(o => o.cobrado && !o.noShow && o.estado!=='cancelado').reduce((s, o) => s + o.total, 0);
 
   return (
     <div style={{ maxWidth: 760 }}>
-      <div className="turno-total"><span>Total del turno</span><span className="price-total">{money(total)}</span></div>
+      <label className="option-label">Consultar ventas del día<input className="text-input" type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/></label>
+      {error&&<p role="alert">{error}</p>}
+      <div className="turno-total"><span>Total del día</span><span className="price-total">{money(total)}</span></div>
       {orders.map(o => {
         const status = o.estado;
         const vencido = status === 'listo' && o.horaRecogida && now - o.horaRecogida > NO_SHOW_WARNING_MS;
@@ -46,6 +59,7 @@ function TurnoView({ orders, now, onCancel, onCobrar, onNoShow }) {
                 {new Date(o.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} • {o.numItems} producto(s) • {o.payMethod}
                 {o.origen === 'app' && o.cliente && ` • 🌐 En línea — ${o.cliente.nombre} ${o.cliente.apellido}`}
               </div>
+              <DetalleVenta id={o.id}/>
               {vencido && <div className="vencido-warning"><AlertTriangle size={11} /> Pasada la hora de recogida sin cobrarse</div>}
             </div>
             <div className="turno-right">
@@ -138,7 +152,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
   const navItems = [
     { id: 'menu', label: 'Menú', Icon: Coffee },
     { id: 'cart', label: 'Carrito', Icon: ShoppingCart, badge: cartCount },
-    { id: 'turno', label: 'Turno', Icon: Receipt },
+    { id: 'turno', label: 'Ventas', Icon: Receipt },
     ...(mostrador ? [{ id: 'barra', label: 'Barra', Icon: Droplets, badge: mostrador.pendientes }] : []),
   ];
 
@@ -147,7 +161,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
     cart: ['Carrito', `${cartCount} producto(s)`],
     checkout: ['Cobro', chargingOrder ? `Pedido ${chargingOrder.folio}` : 'Venta de mostrador'],
     confirmed: ['Venta registrada', ''],
-    turno: ['Turno', 'Ventas y pedidos en curso'],
+    turno: ['Ventas', 'Consulta por fecha y pedidos en curso'],
+    directa: ['Venta directa o atrasada', 'Precio real y salida de inventario'],
   };
   const [title, subtitle] = TITLES[screen] || TITLES.menu;
 
@@ -181,6 +196,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
       {screen === 'menu' && (
         <div className="pos-layout">
           <div>
+            <button className="btn-ghost" style={{marginBottom:16}} onClick={()=>setScreen('directa')}>Registrar venta atrasada / precio especial / venta libre</button>
             <CategoryTabs active={activeCat} onSelect={setActiveCat} />
             <ProductGrid activeCat={activeCat} onTap={p => (p.tipo === 'snack' ? quickAdd(p) : setCustomizing(p))} />
           </div>
@@ -188,6 +204,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
           <div className="pos-cart-panel hide-mobile">{cartPanel}</div>
         </div>
       )}
+      {screen === 'directa' && <VentaDirecta onBack={()=>setScreen('menu')} addToast={addToast}/>}
       {screen === 'cart' && <div style={{ maxWidth: 640 }}>{cartPanel}</div>}
       {screen === 'checkout' && <CheckoutView amounts={amounts} onBack={backFromCheckout} onConfirm={handleConfirmPay} />}
       {screen === 'confirmed' && lastOrder && <ConfirmedView order={lastOrder} onNewSale={() => setScreen('menu')} />}

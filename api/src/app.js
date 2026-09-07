@@ -39,6 +39,7 @@ app.use('/api/gastos-fijos', require('./routes/gastosFijos'));
 app.use('/api/sync', require('./routes/sync'));
 app.use('/api/clientes', require('./routes/clientes'));
 app.use('/api/turnos', require('./routes/turnos'));
+app.use('/api/ventas-directas', require('./routes/ventasDirectas'));
 app.use('/api/pedidos', require('./routes/pedidos'));
 app.use('/api/pedido-items', require('./routes/pedidoItems'));
 app.use('/api/mermas', require('./routes/mermas'));

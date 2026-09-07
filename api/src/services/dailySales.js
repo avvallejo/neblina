@@ -10,7 +10,7 @@ function validateDate(value) {
   return value;
 }
 
-// El esquema conserva la fecha de registro, no la fecha de cobro.
+// creado_en es la fecha de la venta; registrado_en conserva cuándo se capturó.
 const dailySalesSql = `
 WITH dia AS (
   SELECT COALESCE($2::date, (now() AT TIME ZONE 'America/Mexico_City')::date) AS fecha

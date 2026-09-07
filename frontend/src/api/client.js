@@ -258,7 +258,7 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
   });
 }
 
-export function getPedidos() { return request('/pedidos'); }
+export function getPedidos(fecha) { return request(fecha ? `/pedidos?fecha=${encodeURIComponent(fecha)}` : '/pedidos'); }
 export function getPedido(id) { return request(`/pedidos/${id}`); }
 export function cobrarPedido(id, { metodoPago, montoRecibido } = {}) {
   return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido } });
@@ -461,3 +461,6 @@ export function guardarReceta(productoId, ov) {
   });
 }
 export function restaurarReceta(productoId) { return request(`/recetas/${productoId}/restaurar`, { method: 'POST' }); }
+
+export function getInsumosVenta(){return request('/ventas-directas/insumos');}
+export function registrarVentaDirecta({cart,...body}){return request('/ventas-directas',{method:'POST',body:{...body,items:cart.map(x=>({...itemToApi(x),precioUnitario:x.unitPrice,motivoPrecio:x.motivoPrecio,concepto:x.concepto,insumoId:x.insumoId,cantidadInsumo:x.cantidadInsumo,unidadInsumo:x.unidadInsumo}))}});}

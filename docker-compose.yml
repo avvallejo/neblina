@@ -46,6 +46,7 @@ services:
       - ./db/18_cafe_frappes_seleccionable.sql:/docker-entrypoint-initdb.d/18_cafe_frappes_seleccionable.sql:ro
       - ./db/19_mantener_precio.sql:/docker-entrypoint-initdb.d/19_mantener_precio.sql:ro
       - ./db/20_recargo_cafe_costo.sql:/docker-entrypoint-initdb.d/20_recargo_cafe_costo.sql:ro
+      - ./db/21_ventas_directas.sql:/docker-entrypoint-initdb.d/21_ventas_directas.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

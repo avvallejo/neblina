@@ -339,8 +339,8 @@ export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTota
     body: { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad },
   });
 }
-export function ajustarStock(materiaId, { nuevaCantidad, motivo }) {
-  return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo } });
+export function ajustarStock(materiaId, { nuevaCantidad, motivo, stockEsperado, fechaCaducidad }) {
+  return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo, stockEsperado, fechaCaducidad } });
 }
 
 export async function getCategoriasProducto() {

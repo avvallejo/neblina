@@ -272,7 +272,7 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
           <input className="text-input" type="number" step={unidadStep(unidad)} value={stockActual}
                  disabled={!isNew && item?.requiereLote}
                  onChange={e => setStockActual(e.target.value)} placeholder={unidad === 'kg' || unidad === 'l' ? '0.000' : '0'} />
-          {!isNew && item?.requiereLote && <div className="field-hint">Puedes cambiar el nombre y guardar sin modificar las existencias. Este insumo se controla por lote: el stock se mueve con "Registrar compra" y con mermas; por eso no aparece "Ajustar stock".</div>}
+          {!isNew && item?.requiereLote && <div className="field-hint">Puedes cambiar el nombre y guardar sin modificar las existencias. Para corregir las existencias usa "Ajustar stock" en el inventario. Las compras se registran con "Registrar compra".</div>}
         </div>
         <div>
           <div className="option-label">Stock mínimo ({unidadDisplay(unidad)})</div>
@@ -929,13 +929,12 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
 }
 
 // AJUSTAR STOCK: para correcciones de conteo físico (se contó de más o de
-// menos). Deja rastro en el historial como "ajuste", con su motivo. Los
-// insumos controlados por lote no se ajustan aquí: ahí el stock sale de sus
-// lotes (compra o merma).
+// menos). Deja rastro en el historial y mantiene el saldo de los lotes.
 export function AjusteStockSheet({ materia, onClose, onSave }) {
   const unidadMateria = normalizeUnidad(materia.unidad);
   const [nuevaCantidad, setNuevaCantidad] = useState(String(materia.stockActual ?? ''));
   const [motivo, setMotivo] = useState('');
+  const [fechaCaducidad, setFechaCaducidad] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -943,10 +942,11 @@ export function AjusteStockSheet({ materia, onClose, onSave }) {
   const diferencia = Number.isFinite(nuevaNum) ? nuevaNum - Number(materia.stockActual || 0) : null;
 
   const submit = async () => {
-    if (!Number.isFinite(nuevaNum) || nuevaNum < 0) { setError('Indica la cantidad contada (0 o más).'); return; }
+    if (!nuevaCantidad.trim() || !Number.isFinite(nuevaNum) || nuevaNum < 0) { setError('Indica la cantidad contada (0 o más).'); return; }
+    if (materia.requiereLote && !motivo.trim()) { setError('Indica el motivo de la corrección.'); return; }
     setError('');
     setSaving(true);
-    const ok = await onSave(materia, { nuevaCantidad: nuevaNum, motivo: motivo.trim() || undefined });
+    const ok = await onSave(materia, { nuevaCantidad: nuevaNum, motivo: motivo.trim() || undefined, stockEsperado: Number(materia.stockActual), fechaCaducidad: fechaCaducidad || undefined });
     setSaving(false);
     if (ok !== false) onClose();
   };
@@ -956,6 +956,13 @@ export function AjusteStockSheet({ materia, onClose, onSave }) {
       <div className="field-hint" style={{ marginBottom: 14 }}>
         En el sistema hay <strong>{materia.stockActual} {unidadDisplay(unidadMateria)}</strong>. Escribe lo que contaste físicamente; la diferencia queda registrada como ajuste. Para compras usa "Registrar compra" y para pérdidas usa una merma — así el historial explica cada cambio.
       </div>
+      {materia.requiereLote && <div className="field-hint" style={{ marginBottom: 14 }}>
+        Si reduces la cantidad, se descontará de los lotes más antiguos. Si la aumentas, se creará un lote identificado como ajuste, sin registrar un gasto de compra. Los costos del insumo se conservan.
+      </div>}
+      {materia.requiereLote && diferencia > 0 && <div className="option-group">
+        <div className="option-label">Caducidad de las existencias encontradas (si aplica)</div>
+        <input className="text-input" type="date" value={fechaCaducidad} onChange={e => setFechaCaducidad(e.target.value)} />
+      </div>}
       <div className="option-group">
         <div className="option-label">Cantidad contada ({unidadDisplay(unidadMateria)})</div>
         <input className="text-input" type="number" min="0" step={unidadStep(unidadMateria)} value={nuevaCantidad} onChange={e => setNuevaCantidad(e.target.value)} />
@@ -964,8 +971,8 @@ export function AjusteStockSheet({ materia, onClose, onSave }) {
         )}
       </div>
       <div className="option-group">
-        <div className="option-label">Motivo (opcional)</div>
-        <input className="text-input" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej. Conteo físico de fin de mes" />
+        <div className="option-label">Motivo {materia.requiereLote ? '(obligatorio)' : '(opcional)'}</div>
+        <input className="text-input" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej. Corrección de cantidad al dar de alta" />
       </div>
       <FormError>{error}</FormError>
       <div className="sheet-footer">

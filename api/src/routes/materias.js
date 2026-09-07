@@ -10,6 +10,7 @@ const {
 } = require('../utils/catalogValidation');
 
 const { eliminarMateria } = require('../services/deleteMateria');
+const { ajustarStock } = require('../services/adjustStock');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
@@ -220,24 +221,9 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 // movimientos_inventario como 'ajuste' para no perder el rastro de por qué
 // cambió el número.
 router.post('/:id/ajustar-stock', asyncHandler(async (req, res) => {
-  const { nuevaCantidad, motivo } = req.body;
-  const cantidad = parseNumber(nuevaCantidad, 'la nueva cantidad', { required: true, min: 0 });
-
-  const result = await withTransaction(async client => {
-    const actual = await client.query('SELECT stock_actual, requiere_lote FROM materias_primas WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
-    if (actual.rows.length === 0) throw new ApiError(404, 'Materia prima no encontrada.');
-    if (actual.rows[0].requiere_lote) {
-      throw new ApiError(400, 'Este insumo se controla por lote: registra una compra (lote) o una merma en vez de ajustar el stock directo.');
-    }
-
-    const diferencia = cantidad - Number(actual.rows[0].stock_actual);
-    const { rows } = await client.query('UPDATE materias_primas SET stock_actual = $1 WHERE id = $2 RETURNING *', [cantidad, req.params.id]);
-    await client.query(
-      `INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, usuario_id, motivo) VALUES ($1,'ajuste',$2,$3,$4)`,
-      [req.params.id, diferencia, req.auth.id, cleanText(motivo, { field: 'motivo', max: 500 }) || 'Ajuste manual de stock']
-    );
-    return rows[0];
-  });
+  const result = await withTransaction(client => ajustarStock(client, {
+    ...req.body, id: req.params.id, sucursalId: req.sucursalId, usuarioId: req.auth.id,
+  }));
 
   res.json(result);
 }));

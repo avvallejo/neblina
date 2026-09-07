@@ -52,7 +52,7 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
               <div className="list-row-actions" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
                 <button className="icon-btn small" onClick={() => onEdit(m)} aria-label="Editar"><Pencil size={14} /></button>
                 <button className="link-toggle" onClick={() => onCompra(m)}>Registrar compra</button>
-                {!m.requiereLote && <button className="link-toggle" onClick={() => onAjuste(m)}>Ajustar stock</button>}
+                <button className="link-toggle" onClick={() => onAjuste(m)}>Ajustar stock</button>
                 <button className="link-toggle" onClick={() => onToggleActivo(m.id, m.activo)}>{m.activo ? 'Desactivar' : 'Activar'}</button>
                 <button className="link-danger" onClick={() => onDelete(m)}>Eliminar</button>
               </div>

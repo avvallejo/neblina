@@ -231,7 +231,11 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
     setSaving(true);
     const ok = await onSave({
       id: isNew ? undefined : item.id, nombre: nombre.trim(), categoria, unidad,
-      stockActual: stockNum, stockMinimo: minimoNum,
+      // No reenviar existencias al editar datos: los lotes rechazan el stock
+      // manual y un valor sin cambios podría sobrescribir movimientos recientes.
+      ...(isNew || (!item.requiereLote && (stockNum !== Number(item.stockActual) || unidad !== normalizeUnidad(item.unidad)))
+        ? { stockActual: stockNum } : {}),
+      stockMinimo: minimoNum,
       costoUnitario: costoNum, proveedorId: proveedorId || null,
       activo: isNew ? true : item.activo,
     });
@@ -268,7 +272,7 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
           <input className="text-input" type="number" step={unidadStep(unidad)} value={stockActual}
                  disabled={!isNew && item?.requiereLote}
                  onChange={e => setStockActual(e.target.value)} placeholder={unidad === 'kg' || unidad === 'l' ? '0.000' : '0'} />
-          {!isNew && item?.requiereLote && <div className="field-hint">Este insumo se controla por lote: su stock se mueve con "Registrar compra" y con mermas, no a mano.</div>}
+          {!isNew && item?.requiereLote && <div className="field-hint">Puedes cambiar el nombre y guardar sin modificar las existencias. Este insumo se controla por lote: el stock se mueve con "Registrar compra" y con mermas; por eso no aparece "Ajustar stock".</div>}
         </div>
         <div>
           <div className="option-label">Stock mínimo ({unidadDisplay(unidad)})</div>

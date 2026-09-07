@@ -69,13 +69,13 @@ export function buildRecipe(product, sel, override) {
   const pushFijos = () => fijosReales.forEach(f => ingredientes.push({ label: f.label, cantidad: formatCantidad(f.cantidad, f.unidad) }));
 
   if (product.tipo === 'frappe') {
+    if (product.coffeeType) ingredientes.push({ label: coffeeLabel, cantidad: `${gramaje} g` });
     const lecheFr = lecheMlPara(size, ov);
     if (fijosReales) {
       if (product.leche !== false) ingredientes.push({ label: milkLabel, cantidad: `${lecheFr} ml` });
       pushFijos();
     } else {
       const hielo = { 8: 120, 12: 180, 16: 240 }[size] || 180;
-      ingredientes.push({ label: 'Café molido grueso', cantidad: '14 g' });
       ingredientes.push({ label: milkLabel, cantidad: `${lecheFr} ml` });
       ingredientes.push({ label: 'Hielo', cantidad: `${hielo} g` });
       ingredientes.push({ label: 'Base de frappé', cantidad: '30 ml' });

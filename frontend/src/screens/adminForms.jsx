@@ -521,14 +521,14 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
         lecheMlPorTamano[t.id] = n;
       }
     }
-    if (!isFrappe) {
+    if (!isFrappe || product.coffeeType) {
       const g = Number(gramaje);
       if (!Number.isFinite(g) || g <= 0) { setError('El gramaje de café por shot debe ser mayor a 0.'); return; }
     }
     setError('');
     const insumosFijos = (insumos || []).map(i => ({ materiaPrimaId: i.materiaPrimaId, cantidad: Number(i.cantidad), unidad: i.unidad }));
     onSave(product.id, isFrappe
-      ? { pasos: pasosArr, molienda, tiempoLicuado: tiempoExtraccion, temperatura, insumosFijos, lecheMlPorTamano }
+      ? { pasos: pasosArr, gramajePorShot: product.coffeeType ? Number(gramaje) : undefined, molienda, tiempoLicuado: tiempoExtraccion, temperatura, insumosFijos, lecheMlPorTamano }
       : { pasos: pasosArr, gramajePorShot: Number(gramaje) || 18, molienda, moliendaEspecial, ajusteMolino, ajusteMolinoEspecial, tiempoExtraccion, tiempoExtraccionEspecial, temperatura, texturaLeche, insumosFijos, lecheMlPorTamano }
     );
     onClose();
@@ -539,7 +539,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
       <div className="option-group">
         <div className="option-label">Ingredientes base (se ajustan al tamaño y opciones que elija el cliente)</div>
         <div className="spec-table">
-          {!isFrappe && (
+          {(!isFrappe || product.coffeeType) && (
             <div className="spec-row base-ing-row">
               <span className="spec-label">☕ Café <small>(el tipo lo elige el cliente)</small></span>
               <span className="base-ing-inputs">
@@ -575,7 +575,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
             <span className="spec-value">1 pieza c/u</span>
           </div>
         </div>
-        <div className="field-hint" style={{ marginTop: 8 }}>Estos tres se descuentan del inventario con la materia prima que corresponda a lo que el cliente pida (tipo de café, tipo de leche, tamaño). El vaso y la tapa de cada tamaño son los mismos para todas las bebidas de la sucursal.</div>
+        <div className="field-hint" style={{ marginTop: 8 }}>El café se elige al vender y su recargo se configura en Opciones → Cafés. No lo agregues otra vez como ingrediente fijo. Los ingredientes base se descuentan del inventario con la materia prima que corresponda a lo que el cliente pida (tipo de café, tipo de leche, tamaño). El vaso y la tapa de cada tamaño son los mismos para todas las bebidas de la sucursal.</div>
       </div>
 
       <div className="option-group">

@@ -46,6 +46,9 @@ router.put('/:productoId', requireRole('admin'), asyncHandler(async (req, res) =
   const { pasos, gramajePorShot, molienda, moliendaEspecial, ajusteMolino, ajusteMolinoEspecial, tiempoExtraccion, tiempoExtraccionEspecial, temperaturaServicio, texturaLeche, insumosFijos, lecheMlPorTamano } = req.body;
   if (!Array.isArray(pasos) || pasos.length === 0) throw new ApiError(400, 'Agrega al menos un paso de preparación.');
   if (insumosFijos !== undefined && !Array.isArray(insumosFijos)) throw new ApiError(400, 'insumosFijos debe ser una lista.');
+  if (gramajePorShot !== undefined && (!Number.isFinite(Number(gramajePorShot)) || Number(gramajePorShot) <= 0 || Number(gramajePorShot) > 1000)) {
+    throw new ApiError(400, 'Indica un gramaje de café mayor a 0 y hasta 1000 g por shot.');
+  }
 
   // Leche por tamaño de ESTE producto: { "8": 180, "12": 280, ... } con los
   // códigos de tamaño de la sede; null/undefined = predeterminado de la sede.
@@ -65,9 +68,17 @@ router.put('/:productoId', requireRole('admin'), asyncHandler(async (req, res) =
   }
 
   const receta = await withTransaction(async client => {
+    if (insumosFijos?.length) {
+      const duplicado = await client.query(
+        `SELECT 1 FROM productos p JOIN opciones_cafe oc ON oc.sucursal_id = p.sucursal_id
+         WHERE p.id=$1 AND p.sucursal_id=$2 AND p.permite_tipo_cafe
+           AND oc.materia_prima_id = ANY($3::uuid[]) LIMIT 1`,
+        [req.params.productoId, req.sucursalId, insumosFijos.map(i => i.materiaPrimaId)]);
+      if (duplicado.rows.length) throw new ApiError(400, 'El café se toma de los ingredientes base según la elección de la venta. Quítalo de los ingredientes fijos para no descontarlo dos veces.');
+    }
     const { rows } = await client.query(
       `UPDATE recetas SET
-         pasos = $1::jsonb, gramaje_por_shot = $2, molienda = $3, molienda_especial = $4,
+         pasos = $1::jsonb, gramaje_por_shot = COALESCE($2, gramaje_por_shot), molienda = $3, molienda_especial = $4,
          ajuste_molino = $5, ajuste_molino_especial = $6, tiempo_extraccion = $7, tiempo_extraccion_especial = $8,
          temperatura_servicio = $9, textura_leche = $10, es_personalizada = true,
          leche_ml_por_tamano = CASE WHEN $14::boolean THEN $15::jsonb ELSE leche_ml_por_tamano END,

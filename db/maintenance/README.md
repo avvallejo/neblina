@@ -67,3 +67,25 @@ La última prueba usa Docker local y crea una base temporal con solo el esquema
 de `cafeteria`, introduce datos ficticios y la elimina al terminar. Verifica
 límites de medianoche, múltiples turnos, turno abierto/cerrado, estados de cobro,
 aislación de sucursales, vista previa, borrado repetible y conservación de historial.
+
+## Borrado individual desde Inventario (v2.0.3)
+
+El botón Eliminar ya no desactiva silenciosamente. Si hay lotes, movimientos,
+mermas o pedidos vinculados, informa cantidades y conserva el registro sin
+modificarlo. El botón Desactivar sigue disponible por separado.
+
+Si solo hay configuración y ningún historial, presenta una segunda confirmación
+con las opciones, recetas, empaques y productos afectados. Al aceptar, elimina
+el insumo y sus vínculos de recetas/empaques, y conserva las opciones desactivadas
+con su referencia vacía para poder asignarles un nuevo insumo. También desactiva
+los productos afectados por recetas o por la variante de empaque retirada;
+se deben revisar y completar antes de reactivarlos. Esto puede incluir todos los
+productos de una variante (por ejemplo, frappés) porque cada producto admite
+varios tamaños. No se cambian pedidos existentes.
+
+La comprobación incluye pedidos pendientes aunque todavía no tengan consumos.
+Comprobación, desvinculación, desactivaciones y borrado ocurren en una transacción,
+con bloqueos breves para impedir nuevos usos simultáneos. Se guarda el insumo y
+la configuración retirada en auditoría, incluyendo sucursal y administrador.
+El script masivo anterior mantiene su comportamiento conservador: solo elimina
+insumos completamente libres de referencias y no desvincula menús.

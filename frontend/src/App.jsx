@@ -339,12 +339,29 @@ export default function App() {
     catch (e) { addToast(e.message, 'warn'); return false; }
   };
   const deleteMateria = async materia => {
-    if (!window.confirm(`¿Eliminar "${materia.nombre}"? Si tiene compras, movimientos o vínculos con recetas y opciones, se desactivará para conservar el historial.`)) return;
+    if (!window.confirm(`¿Eliminar definitivamente "${materia.nombre}"? Si tiene historial, se conservará y te mostraremos el motivo.`)) return;
     try {
-      const r = await api.eliminarMateria(materia.id);
+      let resultado;
+      try { resultado = await api.eliminarMateria(materia.id); }
+      catch (e) {
+        if (e.details?.codigo !== 'CONFIRMAR_DESVINCULACION') throw e;
+        const d = e.details;
+        const aviso = [
+          `"${materia.nombre}" no tiene historial. Para borrarlo:`,
+          d.opciones.length ? `Se desvincularán y desactivarán estas opciones: ${d.opciones.join(', ')}.` : '',
+          d.recetas ? `Se retirará de ${d.recetas} receta(s).` : '',
+          d.empaques ? `Se retirarán ${d.empaques} configuración(es) de vaso/tapa.` : '',
+          d.productos.length ? `Estos productos se desactivarán hasta que completes sus ingredientes o empaques: ${d.productos.join(', ')}.` : '',
+          '¿Confirmas la eliminación y estos cambios en el menú?',
+        ].filter(Boolean).join('\n\n');
+        if (!window.confirm(aviso)) return;
+        resultado = await api.eliminarMateria(materia.id, true);
+      }
       await recargarAdmin();
-      addToast(r.modo_eliminacion === 'definitivo' ? 'Materia prima eliminada' : 'Materia prima desactivada: tiene historial o vínculos con recetas/opciones', 'success');
-    } catch (e) { addToast(e.message, 'warn'); }
+      await cargarCatalogo();
+      await recargarRecetas();
+      addToast(resultado.productos_desactivados?.length ? 'Insumo eliminado; revisa los productos desactivados antes de volver a venderlos' : 'Insumo eliminado definitivamente', 'success');
+    } catch (e) { window.alert(e.message); }
   };
 
   const addProveedor = async p => {

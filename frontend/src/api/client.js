@@ -330,7 +330,7 @@ export function actualizarMateria(id, m) {
   if (m.activo !== undefined) body.activo = m.activo;
   return request(`/materias-primas/${id}`, { method: 'PATCH', body });
 }
-export function eliminarMateria(id) { return request(`/materias-primas/${id}`, { method: 'DELETE' }); }
+export function eliminarMateria(id, desvincular = false) { return request(`/materias-primas/${id}${desvincular ? '?desvincular=true' : ''}`, { method: 'DELETE' }); }
 
 // Compras (lotes) y ajustes de conteo físico — el kardex del inventario.
 export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad }) {

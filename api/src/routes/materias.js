@@ -9,6 +9,8 @@ const {
   toBoolean,
 } = require('../utils/catalogValidation');
 
+const { eliminarMateria } = require('../services/deleteMateria');
+
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
 
@@ -205,35 +207,12 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   res.json(updated);
 }));
 
+// El intento de borrar informa el bloqueo por historial sin cambiar el estado.
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const result = await withTransaction(async client => {
-    const materia = await client.query('SELECT id FROM materias_primas WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
-    if (!materia.rows.length) throw new ApiError(404, 'Materia prima no encontrada.');
-    const usado = await client.query(
-      `SELECT
-         (SELECT COUNT(*) FROM lotes WHERE materia_prima_id = $1)
-         + (SELECT COUNT(*) FROM movimientos_inventario WHERE materia_prima_id = $1)
-         + (SELECT COUNT(*) FROM mermas WHERE materia_prima_id = $1)
-         + (SELECT COUNT(*) FROM opciones_leche WHERE materia_prima_id = $1)
-         + (SELECT COUNT(*) FROM opciones_cafe WHERE materia_prima_id = $1)
-         + (SELECT COUNT(*) FROM opciones_extra WHERE materia_prima_id = $1)
-         + (SELECT COUNT(*) FROM tamano_empaque WHERE materia_prima_vaso_id = $1 OR materia_prima_tapa_id = $1)
-         + (SELECT COUNT(*) FROM receta_insumos_fijos WHERE materia_prima_id = $1) AS refs`,
-      [req.params.id]
-    );
-    const refs = Number(usado.rows[0]?.refs || 0);
-
-    if (refs === 0) {
-      const { rows } = await client.query('DELETE FROM materias_primas WHERE id = $1 AND sucursal_id = $2 RETURNING *', [req.params.id, req.sucursalId]);
-      if (rows.length === 0) throw new ApiError(404, 'Materia prima no encontrada.');
-      return { ...rows[0], eliminado: true, modo_eliminacion: 'definitivo' };
-    }
-
-    const { rows } = await client.query('UPDATE materias_primas SET activo = false WHERE id = $1 AND sucursal_id = $2 RETURNING *', [req.params.id, req.sucursalId]);
-    if (rows.length === 0) throw new ApiError(404, 'Materia prima no encontrada.');
-    return { ...rows[0], eliminado: true, modo_eliminacion: 'desactivado_por_historial' };
-  });
-
+  const result = await withTransaction(client => eliminarMateria(client, {
+    id: req.params.id, sucursalId: req.sucursalId, usuarioId: req.auth.id,
+    desvincular: req.query.desvincular === 'true',
+  }));
   res.json(result);
 }));
 

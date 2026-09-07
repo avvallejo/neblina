@@ -74,6 +74,13 @@ try:
     assert sql('SELECT count(*) FROM pedidos') == '9', 'Preserve sales'
     sql(cleanup, '-v', f'sucursal_id={sede}', '-v', 'aplicar=true')
     assert sql('SELECT count(*) FROM materias_primas') == '3', 'Cleanup is repeatable'
+    sql('GRANT ALL ON ALL TABLES IN SCHEMA public TO cafeteria_app; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO cafeteria_app;')
+    test_code = (root / 'api/test/live-delete-materia.js').read_text()
+    result = subprocess.run(['docker','exec','-i','-e',f'PGDATABASE={database}','cafeteria-api','node'],
+                            input=test_code,text=True,capture_output=True)
+    if result.returncode:
+        raise RuntimeError(result.stderr + result.stdout)
+    print(result.stdout.strip())
     print('PASS: calendar boundaries, two shifts, open/closed, unpaid/cancelled/no-show, branch isolation, preview, cleanup and history preservation')
 finally:
     docker('dropdb', '-U', 'postgres', database)

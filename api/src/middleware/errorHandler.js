@@ -8,6 +8,9 @@ function errorHandler(err, req, res, next) {
 
   // Errores de PostgreSQL que sí queremos traducir a algo legible, en vez de
   // un 500 genérico que no le dice nada al frontend.
+  if (err.code === '55P03') {
+    return res.status(409).json({ error: 'Hay otra operación usando estos datos. Intenta de nuevo en unos segundos.' });
+  }
   if (err.code === '23505') {
     return res.status(409).json({ error: 'Ya existe un registro con ese valor único.' });
   }

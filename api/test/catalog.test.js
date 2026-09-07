@@ -30,7 +30,9 @@ test('catalog routes expose safe delete endpoints', () => {
   assert.match(materias, /router\.delete\('\/:id'/);
   assert.match(productos, /router\.delete\('\/:id'/);
   assert.match(proveedores, /desactivado_por_historial/);
-  assert.match(materias, /desactivado_por_historial/);
+  const deleteMateria = fs.readFileSync(path.join(apiRoot, 'src/services/deleteMateria.js'), 'utf8');
+  assert.match(deleteMateria, /INSUMO_CON_HISTORIAL/);
+  assert.match(deleteMateria, /CONFIRMAR_DESVINCULACION/);
   assert.match(productos, /desactivado_por_historial/);
 });
 

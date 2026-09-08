@@ -14,3 +14,11 @@
 @media(min-width:1000px) and (min-height:600px){.cafe-menu{height:100svh;overflow:hidden}.cm-main{overflow:hidden}.cm-center .cm-photo.large{width:min(12vw,18vh)}.cm-seal{padding-top:.7vh;gap:.2vh}.cm-drink{overflow:hidden}.cm-drink .cm-photo{height:100%;max-height:6.8vw;width:auto;aspect-ratio:1}.cool .cm-drink .cm-photo{max-height:8.7vw}}
 @media(max-width:999px){.cafe-menu{gap:20px;padding:20px}.cm-header-message{display:none}.cm-main{grid-template-columns:1fr 1fr}.cm-center{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:1fr 1fr}.cm-photo.large{width:160px}.cm-photo,.cool .cm-photo{width:100px}.cm-drink{min-height:115px}.cm-customize{grid-template-columns:1fr}.cm-options{grid-template-columns:1fr 1fr;gap:16px}.cm-footer{flex-wrap:wrap}}
 @media(max-width:600px){.cm-main{grid-template-columns:1fr}.cm-center{grid-row:auto;grid-column:auto}.cm-brand h1{font-size:30px}.cm-drink h3{font-size:19px}.cm-drink-copy small{font-size:10px}.cm-price strong{font-size:32px}.cm-section-head h2{font-size:30px}}
+/* Several cold drinks share the available height, just like the other columns. */
+.cm-many-cold{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.1fr)}
+.cm-many-cold .cm-center{text-align:left;padding:0 .9vw}
+.cm-many-cold .cm-center>.cm-column{flex:1}
+.cm-many-cold .cm-center .cm-photo{width:clamp(66px,6.8vw,145px);max-height:6.8vw}
+.cm-many-cold .cm-drink-icon{flex-shrink:0;display:grid;place-items:center;width:clamp(66px,6.8vw,145px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,#92c7d423,transparent 70%);font-size:clamp(38px,4vw,80px)}
+@media(max-width:999px){.cm-many-cold{grid-template-columns:1fr 1fr}.cm-many-cold .cm-center{display:flex}.cm-many-cold .cm-center .cm-photo{width:100px;max-height:none}}
+@media(max-width:600px){.cm-many-cold{grid-template-columns:1fr}}

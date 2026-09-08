@@ -6,8 +6,9 @@ const dinero = n => `$${Number(n).toLocaleString('es-MX', { maximumFractionDigit
 const recargo = n => Number(n) === 0 ? 'Incluido' : `${n > 0 ? '+' : '−'}${dinero(Math.abs(n))}`;
 function foto(p) {
   const name = p.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  if (name.includes('chocomilk') || name.includes('esquimo')) return null;
   if (p.tipo === 'frappe') return name.includes('oreo') ? 7 : name.includes('moka') || name.includes('mocha') ? 8 : 6;
-  if (p.frio) return 5;
+  if (p.frio) return name.includes('latte') ? 5 : null;
   if (name.includes('espresso')) return 0;
   if (name.includes('americano')) return 1;
   if (name.includes('cortado')) return 2;
@@ -17,7 +18,8 @@ function foto(p) {
 }
 function FotoBebida({ p, grande=false }) {
   const n=foto(p);
-  return n === null ? <span className="cm-drink-icon">{p.icon}</span> : <span className={`cm-photo ${grande?'large':''}`} role="img" aria-label={p.name}
+  const icon=/chocomilk/i.test(p.name)?'🍫':/esquimo/i.test(p.name)?'🍓':p.icon;
+  return n === null ? <span className="cm-drink-icon">{icon}</span> : <span className={`cm-photo ${grande?'large':''}`} role="img" aria-label={p.name}
     style={{backgroundPosition:`${(n%3)*50}% ${Math.floor(n/3)*50}%`}} />;
 }
 function Bebida({ p }) {
@@ -38,10 +40,11 @@ function Columna({ titulo, subtitulo, productos, tono='' }) {
 export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abierto,desactualizado }) {
   const size=opciones?.tamanos?.find(o=>Number(o.delta)===0)||opciones?.tamanos?.[0];
   productos=productos.map(p=>p.sizes&&size?{...p,price:p.price+Number(size.delta),precioBase:p.precioBase+Number(size.delta),sizeLabel:`${size.label} · tamaño disponible`}:p);
-  const calientes=productos.filter(p=>p.tipo!=='frappe'&&!p.frio&&p.tipo!=='snack');
-  const frappes=productos.filter(p=>p.tipo==='frappe');
-  const frios=productos.filter(p=>p.frio&&p.tipo!=='frappe');
-  const snacks=productos.filter(p=>p.tipo==='snack');
+  const categoria=p=>p.cat || (p.tipo==='snack'?'Snacks':p.tipo==='frappe'?'Frappés':p.frio?'Fríos':'Calientes');
+  const calientes=productos.filter(p=>categoria(p)==='Calientes');
+  const frappes=productos.filter(p=>categoria(p)==='Frappés');
+  const frios=productos.filter(p=>categoria(p)==='Fríos');
+  const snacks=productos.filter(p=>categoria(p)==='Snacks');
   const groups=opciones ? [
     {title:'Elige tu café',hint:'Recargo por shot de 18 g',items:opciones.cafes},
     {title:'Tu leche favorita',hint:'Para bebidas con leche',items:opciones.leches},
@@ -54,14 +57,14 @@ export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abier
       <div className="cm-header-message"><span>Una pausa. Un buen café.</span><small>{cfg.lema || 'Encuentra tu favorito'}</small></div>
       <div className="cm-status"><span className={abierto?'open':''}>{abierto?'● Abierto':'Menú de la casa'}</span><small>PRECIOS EN MXN</small></div>
     </header>
-    <main className="cm-main">
+    <main className={`cm-main ${frios.length>1?'cm-many-cold':''}`}>
       <Columna titulo="Calientes" subtitulo="Clásicos que reconfortan" productos={calientes}/>
       <div className="cm-center">
-        <section className="cm-cold"><div className="cm-section-head"><span>Tu pausa más fresca</span><h2>Fríos</h2></div>
+        {frios.length>1 ? <Columna titulo="Fríos" subtitulo="Tu pausa más fresca" productos={frios} tono="cool"/> : <section className="cm-cold"><div className="cm-section-head"><span>Tu pausa más fresca</span><h2>Fríos</h2></div>
           {frios.map(p=><article key={p.id} className="cm-cold-item"><FotoBebida p={p} grande/><div><h3>{p.name}</h3><strong>{dinero(p.price)}</strong></div><small>{p.sizes?p.sizeLabel || 'Tamaño disponible':'Presentación de la casa'}</small></article>)}
           {!frios.length && <div className="cm-center-note"><Coffee/><p>Café a tu gusto</p></div>}
-        </section>
-        <div className="cm-seal"><Sparkles/><span>TU CAFÉ,<br/>A TU MANERA</span><small>Elige café, leche y extras</small></div>
+        </section>}
+        {frios.length<=1&&<div className="cm-seal"><Sparkles/><span>TU CAFÉ,<br/>A TU MANERA</span><small>Elige café, leche y extras</small></div>}
         {snacks.map(p=><div key={p.id} className="cm-snack"><span>{p.icon} {p.name}</span><b>{dinero(p.price)}</b></div>)}
       </div>
       <Columna titulo="Frappés" subtitulo="Cremosos, frescos, irresistibles" productos={frappes} tono="cool"/>

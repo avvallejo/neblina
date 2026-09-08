@@ -13,7 +13,7 @@ export default function VentaDirecta({onBack,addToast}){
  const [key,setKey]=useState(()=>crypto.randomUUID());
  useEffect(()=>{api.getInsumosVenta().then(setMaterias).catch(e=>setError(e.message));},[]);
  const edit=(uid,field,value)=>{setReview(false);setItems(xs=>xs.map(x=>x.uid===uid?{...x,[field]:value}:x));};
- const add=item=>{setItems(xs=>[...xs,{...item,uid:crypto.randomUUID(),motivoPrecio:''}]);setReview(false);};
+ const add=item=>{setItems(xs=>[...xs,{motivoPrecio:'',...item,uid:crypto.randomUUID()}]);setReview(false);};
  const total=Math.round(items.reduce((s,x)=>s+Number(x.unitPrice||0)*Number(x.qty||0),0)*100)/100;
  const valid=items.length>0&&motivo.trim().length>=3&&fecha&&hora&&items.every(x=>Number(x.qty)>=1&&Number.isInteger(Number(x.qty))&&x.unitPrice!==''&&Number(x.unitPrice)>=0&&(x.productId||(x.concepto?.trim().length>=3&&x.inventarioElegido))&&((x.productId&&Number(x.unitPrice)===x.originalPrice)||x.motivoPrecio?.trim().length>=3)&&(!x.insumoId||Number(x.cantidadInsumo)>0));
  async function save(){
@@ -41,6 +41,6 @@ export default function VentaDirecta({onBack,addToast}){
   <div className="direct-summary"><span>Total de la venta</span><strong>{money(total)}</strong></div>
   {error&&<p role="alert" className="direct-error">{error}</p>}
   {review?<div className="direct-review"><h3>Confirma esta captura</h3><p>{fecha} · {hora} · {items.reduce((n,x)=>n+Number(x.qty),0)} unidad(es) · {money(total)} · {metodo}</p><p>Se registrará como pagada y entregada. Se descontarán las recetas e insumos vinculados.</p><button className="btn-primary" disabled={busy||!valid} onClick={save}>{busy?'Guardando…':'Registrar venta y descontar inventario'}</button><button className="btn-ghost" disabled={busy} onClick={()=>setReview(false)}>Seguir editando</button></div>:<button className="btn-primary" disabled={!valid} onClick={()=>setReview(true)}>Revisar venta</button>}
-  {custom&&<CustomizeSheet product={custom} onClose={()=>setCustom(null)} onAdd={item=>add({...item,originalPrice:item.unitPrice})}/>}
+  {custom&&<CustomizeSheet allowPriceOverride product={custom} onClose={()=>setCustom(null)} onAdd={add}/>}
  </div>;
 }

@@ -40,7 +40,7 @@ export function ProductGrid({ activeCat, onTap }) {
   );
 }
 
-export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
+export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe, allowPriceOverride = false }) {
   const [sel, setSel] = useState({
     size: product.sizes ? defaultSize() : null,
     milk: product.leche ? 'entera' : null,
@@ -54,7 +54,13 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
     setSel(s => ({ ...s, extras: s.extras.includes(id) ? s.extras.filter(e => e !== id) : [...s.extras, id] }));
   };
 
-  const unitPrice = calcUnitPrice(product, sel);
+  const catalogPrice = calcUnitPrice(product, sel);
+  const [enteredPrice, setEnteredPrice] = useState(null);
+  const [priceReason, setPriceReason] = useState('');
+  const priceValid = enteredPrice === null || (enteredPrice.trim() !== '' && Number.isFinite(Number(enteredPrice)) && Number(enteredPrice) >= 0 && Number(enteredPrice) <= 100000);
+  const unitPrice = allowPriceOverride && enteredPrice !== null && priceValid ? Math.round(Number(enteredPrice) * 100) / 100 : catalogPrice;
+  const changedPrice = allowPriceOverride && unitPrice !== catalogPrice;
+  const canAdd = !allowPriceOverride || (priceValid && (!changedPrice || priceReason.trim().length >= 3));
   const lineTotal = unitPrice * sel.qty;
 
   const optionBlock = (label, options, selectedId, onPick) => (
@@ -92,6 +98,14 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
           </div>
         </div>
       )}
+      {allowPriceOverride && <div className="option-group" style={{padding:16,background:'#f5eee3',borderRadius:12}}>
+        <label className="option-label" htmlFor="sale-unit-price">Precio cobrado por unidad ($)</label>
+        <input id="sale-unit-price" className="text-input" type="number" inputMode="decimal" min="0" max="100000" step="0.01" value={enteredPrice ?? catalogPrice} onChange={e=>setEnteredPrice(e.target.value)} />
+        <div className="field-hint">Catálogo con esta personalización: {money(catalogPrice)}. Escribe el precio final que cobraste, incluidos los extras. Se descontarán los insumos de la receta y las opciones elegidas.</div>
+        {enteredPrice !== null && <button type="button" className="link-toggle" onClick={()=>{setEnteredPrice(null);setPriceReason('');}}>Usar precio del catálogo</button>}
+        {changedPrice && <><label className="option-label" htmlFor="sale-price-reason" style={{marginTop:12}}>Motivo del precio</label><input id="sale-price-reason" className="text-input" maxLength={300} placeholder="Ej. promoción de apertura / precio acordado" value={priceReason} onChange={e=>setPriceReason(e.target.value)}/></>}
+        {!priceValid && <FormError>Indica un precio válido entre $0 y $100,000.</FormError>}
+      </div>}
       <div className="option-group">
         <div className="option-label">Cantidad</div>
         <Stepper value={sel.qty} onChange={v => setSel(s => ({ ...s, qty: v }))} />
@@ -105,8 +119,8 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
           <div className="footer-label">Total</div>
           <div className="price-total">{money(lineTotal)}</div>
         </div>
-        <button className="btn-primary" onClick={() => { onAdd({ uid: `${product.id}-${Date.now()}`, productId: product.id, ...sel, unitPrice }); onClose(); }}>
-          Agregar al carrito
+        <button className="btn-primary" disabled={!canAdd} onClick={() => { onAdd({ uid: `${product.id}-${Date.now()}`, productId: product.id, ...sel, unitPrice, ...(allowPriceOverride ? {originalPrice:catalogPrice,motivoPrecio:changedPrice ? priceReason.trim() : ''} : {}) }); onClose(); }}>
+          {allowPriceOverride ? `Agregar a la venta · ${money(lineTotal)}` : 'Agregar al carrito'}
         </button>
       </div>
     </Sheet>

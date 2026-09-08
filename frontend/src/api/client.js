@@ -217,7 +217,9 @@ export async function getOpciones() {
    ============================================================ */
 
 export function getTurnoEstado() { return request(pub('/turnos/estado')); } // { abierto, turno }
-export function abrirTurno() { return request('/turnos/abrir', { method: 'POST' }); }
+export function abrirTurno(fondoInicial) { return request('/turnos/abrir', { method: 'POST',body:{fondoInicial} }); }
+export function getCajaTurno(){return request('/turnos/actual/caja');}
+export function registrarFondoTurno(id,fondoInicial){return request(`/turnos/${id}/fondo`,{method:'PATCH',body:{fondoInicial}});}
 export function cerrarTurno() { return request('/turnos/cerrar', { method: 'POST' }); }
 export function getKpisTurno() { return request('/turnos/actual/kpis'); }
 export function getKpisDia(fecha = '') { return request(`/reportes/resumen-dia?fecha=${encodeURIComponent(fecha)}`); }
@@ -260,8 +262,8 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
 
 export function getPedidos(fecha) { return request(fecha ? `/pedidos?fecha=${encodeURIComponent(fecha)}` : '/pedidos'); }
 export function getPedido(id) { return request(`/pedidos/${id}`); }
-export function cobrarPedido(id, { metodoPago, montoRecibido } = {}) {
-  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido } });
+export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo } = {}) {
+  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo } });
 }
 export function cancelarPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH' }); }
 export function cancelarMiPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', useClienteToken: true }); }

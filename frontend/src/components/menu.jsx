@@ -292,7 +292,7 @@ export function CheckoutView({ amounts, onConfirm, onBack }) {
         <button
           className="btn-primary"
           disabled={!canConfirm}
-          onClick={() => onConfirm({ method, cashGiven: method === 'efectivo' ? cashGiven : null, change: method === 'efectivo' ? change : null })}
+          onClick={() => onConfirm({ method, importeEfectivo:method==='mixto'?Number(mixCash):undefined, cashGiven: method === 'efectivo' ? cashGiven : null, change: method === 'efectivo' ? change : null })}
         >
           Confirmar pago
         </button>

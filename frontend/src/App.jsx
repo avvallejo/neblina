@@ -214,7 +214,7 @@ export default function App() {
     return adaptPedido(r.pedido);
   };
   const cobrarPedidoApi = async (orderId, payInfo = null) => {
-    await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido } : {});
+    await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo } : {});
     await refrescarPedidos(); await refrescarCola();
     addToast('Cobro confirmado', 'success');
   };
@@ -243,13 +243,14 @@ export default function App() {
     catch (e) { addToast(e.message, 'warn'); }
   };
 
-  const toggleTurno = async () => {
+  const toggleTurno = async ({fondoInicial} = {}) => {
     try {
       if (turnoAbierto) { await api.cerrarTurno(); addToast('Turno cerrado', 'warn'); }
-      else { await api.abrirTurno(); addToast('Turno abierto — ¡a vender!', 'success'); }
+      else { await api.abrirTurno(fondoInicial); addToast('Turno abierto — ¡a vender!', 'success'); }
       await refrescarTurno();
       await refrescarPedidos();
-    } catch (e) { addToast(e.message, 'warn'); }
+      return true;
+    } catch (e) { addToast(e.message, 'warn'); return false; }
   };
 
   // ---- Datos de administración ----

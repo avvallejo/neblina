@@ -8,6 +8,7 @@ const { createDiscountApproval, consumeDiscountApproval } = require('../services
 const { validateDate } = require('../services/dailySales');
 const { prepareOrderLines } = require('../services/orderValidation');
 
+const {cashPart}=require('../services/cashDrawer');
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // personal y cliente operan pedidos, siempre dentro de SU sede
 
@@ -70,14 +71,14 @@ router.post('/', asyncHandler(async (req, res) => {
     const pedidoRes = await client.query(
       `INSERT INTO pedidos (turno_id, origen, cliente_id, cajero_id, hora_recogida, subtotal,
           descuento_porcentaje, descuento_autorizado_por, total, metodo_pago, monto_recibido, cambio,
-          cobrado, es_regalo_fidelidad, sucursal_id)
-       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          cobrado, es_regalo_fidelidad, sucursal_id, importe_efectivo)
+       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [origen, clienteId, esStaff && ['cajero', 'mostrador', 'admin'].includes(req.auth.rol) ? req.auth.id : null, horaRecogida || null, subtotal,
         descuentoFinal, autorizadoPor, total,
         cobradoInicial ? pago.metodoPago : null, cobradoInicial ? pago.montoRecibido : null,
         cobradoInicial && pago.montoRecibido ? Math.round((pago.montoRecibido - total) * 100) / 100 : null,
-        cobradoInicial, esRegaloPedido, req.sucursalId]
+        cobradoInicial, esRegaloPedido, req.sucursalId, cobradoInicial?cashPart(pago.metodoPago,total,pago.importeEfectivo):null]
     );
     const pedido = pedidoRes.rows[0];
 
@@ -137,7 +138,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 // Aquí — y solo aquí — el trigger de la base de datos acredita el punto de
 // fidelidad, nunca al crear el pedido.
 router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
-  const { metodoPago, montoRecibido } = req.body;
+  const { metodoPago, montoRecibido, importeEfectivo } = req.body;
   const actual = await query('SELECT total, cobrado FROM pedidos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.sucursalId]);
   if (actual.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
   if (actual.rows[0].cobrado) throw new ApiError(409, 'Este pedido ya estaba cobrado.');
@@ -145,9 +146,10 @@ router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (
   const total = Number(actual.rows[0].total);
   const cambio = total > 0 && montoRecibido !== undefined ? Math.round((montoRecibido - total) * 100) / 100 : null;
   const { rows } = await query(
-    `UPDATE pedidos SET cobrado = true, metodo_pago = $1, monto_recibido = $2, cambio = $3 WHERE id = $4 AND sucursal_id = $5 RETURNING *`,
-    [metodoPago || 'efectivo', montoRecibido || null, cambio, req.params.id, req.sucursalId]
+    `UPDATE pedidos SET cobrado = true, metodo_pago = $1, monto_recibido = $2, cambio = $3, importe_efectivo=$6 WHERE id = $4 AND sucursal_id = $5 AND NOT cobrado RETURNING *`,
+    [metodoPago || 'efectivo', montoRecibido || null, cambio, req.params.id, req.sucursalId,cashPart(metodoPago||'efectivo',total,importeEfectivo)]
   );
+  if(!rows.length) throw new ApiError(409,'Este pedido ya estaba cobrado.');
   res.json(rows[0]);
 }));
 

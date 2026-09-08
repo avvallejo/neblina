@@ -1,7 +1,9 @@
 const express = require('express');
-const { query } = require('../db');
+const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = require('../middleware/auth');
+
+const {moneyAmount,setOpeningFund,drawerSql}=require('../services/cashDrawer');
 
 const router = express.Router();
 
@@ -18,14 +20,18 @@ router.get('/estado', resolveSucursalPublico, asyncHandler(async (req, res) => {
 router.use(requireAuth, requireRole('cajero', 'admin'), resolveSucursal);
 
 router.post('/abrir', asyncHandler(async (req, res) => {
+  const fondo=moneyAmount(req.body.fondoInicial,'Fondo inicial');
   const abierto = await query('SELECT id FROM turnos WHERE cerrado_en IS NULL AND sucursal_id = $1', [req.sucursalId]);
   if (abierto.rows.length > 0) throw new ApiError(409, 'Ya hay un turno abierto en esta sucursal.');
   const { rows } = await query(
-    'INSERT INTO turnos (abierto_por, sucursal_id) VALUES ($1, $2) RETURNING *',
-    [req.auth.id, req.sucursalId]
+    'INSERT INTO turnos (abierto_por, sucursal_id, fondo_inicial) VALUES ($1, $2, $3) RETURNING *',
+    [req.auth.id, req.sucursalId, fondo]
   );
   res.status(201).json(rows[0]);
 }));
+
+router.get('/actual/caja',asyncHandler(async(req,res)=>{const {rows:[t]}=await query(drawerSql,[req.sucursalId]);res.json(t||null);}));
+router.patch('/:id/fondo',asyncHandler(async(req,res)=>res.json(await withTransaction(c=>setOpeningFund(c,{id:req.params.id,sucursalId:req.sucursalId,usuarioId:req.auth.id,monto:req.body.fondoInicial})))));
 
 router.post('/cerrar', asyncHandler(async (req, res) => {
   const { rows } = await query(

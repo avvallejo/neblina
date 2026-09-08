@@ -3,6 +3,7 @@ const { ApiError } = require('../utils/asyncHandler');
 const { calcularPrecioItem } = require('../utils/pricing');
 const { normalizeItems } = require('./orderValidation');
 const { validateDate } = require('./dailySales');
+const {cashPart}=require('./cashDrawer');
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function texto(v, nombre) {
   if(typeof v!=='string'||v.trim().length<3||v.trim().length>300) throw new ApiError(400,`${nombre}: escribe entre 3 y 300 caracteres.`);
@@ -58,8 +59,8 @@ async function registrarVenta(client, body, auth, sucursalId) {
   if(total>99999999.99) throw new ApiError(400,'El total excede el límite de una venta.');
   const recibido=body.metodoPago==='efectivo'?importe(body.montoRecibido):total;
   if(recibido<total) throw new ApiError(400,'El efectivo recibido no cubre el total.');
-  const {rows:[pedido]}=await client.query(`INSERT INTO pedidos(origen,cajero_id,subtotal,total,metodo_pago,monto_recibido,cambio,cobrado,sucursal_id,creado_en,registro_manual,motivo_registro,clave_registro,captura_hash)
-    VALUES ('mostrador',$1,$2,$2,$3,$4,$5,true,$6,$7,true,$8,$9,$10) RETURNING *`,[auth.id,total,body.metodoPago,recibido,Math.round((recibido-total)*100)/100,sucursalId,tiempo.venta,motivo,body.claveRegistro,hash]);
+  const {rows:[pedido]}=await client.query(`INSERT INTO pedidos(origen,cajero_id,subtotal,total,metodo_pago,monto_recibido,cambio,cobrado,sucursal_id,creado_en,registro_manual,motivo_registro,clave_registro,captura_hash,importe_efectivo)
+    VALUES ('mostrador',$1,$2,$2,$3,$4,$5,true,$6,$7,true,$8,$9,$10,$11) RETURNING *`,[auth.id,total,body.metodoPago,recibido,Math.round((recibido-total)*100)/100,sucursalId,tiempo.venta,motivo,body.claveRegistro,hash,cashPart(body.metodoPago,total,body.importeEfectivo)]);
   for(const l of lines) {
     const {rows:[item]}=await client.query(`INSERT INTO pedido_items(pedido_id,producto_id,tamano_id,leche_id,cafe_id,cantidad,precio_unitario,notas,concepto_libre,precio_catalogo,motivo_precio,insumo_directo_id,cantidad_insumo,unidad_insumo,barista_id,creado_en,estado,terminado_en)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,

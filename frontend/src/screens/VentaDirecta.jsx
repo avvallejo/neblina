@@ -10,15 +10,16 @@ export default function VentaDirecta({onBack,addToast}){
  const [fecha,setFecha]=useState(fechaLocal),[hora,setHora]=useState(horaLocal),[motivo,setMotivo]=useState('Venta pendiente de capturar');
  const [items,setItems]=useState([]),[custom,setCustom]=useState(null),[materias,setMaterias]=useState([]),[error,setError]=useState('');
  const [metodo,setMetodo]=useState('efectivo'),[busy,setBusy]=useState(false),[review,setReview]=useState(false),[done,setDone]=useState(null);
+ const [cashPart,setCashPart]=useState('');
  const [key,setKey]=useState(()=>crypto.randomUUID());
  useEffect(()=>{api.getInsumosVenta().then(setMaterias).catch(e=>setError(e.message));},[]);
  const edit=(uid,field,value)=>{setReview(false);setItems(xs=>xs.map(x=>x.uid===uid?{...x,[field]:value}:x));};
  const add=item=>{setItems(xs=>[...xs,{motivoPrecio:'',...item,uid:crypto.randomUUID()}]);setReview(false);};
  const total=Math.round(items.reduce((s,x)=>s+Number(x.unitPrice||0)*Number(x.qty||0),0)*100)/100;
- const valid=items.length>0&&motivo.trim().length>=3&&fecha&&hora&&items.every(x=>Number(x.qty)>=1&&Number.isInteger(Number(x.qty))&&x.unitPrice!==''&&Number(x.unitPrice)>=0&&(x.productId||(x.concepto?.trim().length>=3&&x.inventarioElegido))&&((x.productId&&Number(x.unitPrice)===x.originalPrice)||x.motivoPrecio?.trim().length>=3)&&(!x.insumoId||Number(x.cantidadInsumo)>0));
+ const valid=(metodo!=='mixto'||(cashPart.trim()!==''&&Number.isFinite(Number(cashPart))&&Number(cashPart)>=0&&Number(cashPart)<=total))&&items.length>0&&motivo.trim().length>=3&&fecha&&hora&&items.every(x=>Number(x.qty)>=1&&Number.isInteger(Number(x.qty))&&x.unitPrice!==''&&Number(x.unitPrice)>=0&&(x.productId||(x.concepto?.trim().length>=3&&x.inventarioElegido))&&((x.productId&&Number(x.unitPrice)===x.originalPrice)||x.motivoPrecio?.trim().length>=3)&&(!x.insumoId||Number(x.cantidadInsumo)>0));
  async function save(){
   if(busy)return;setBusy(true);setError('');
-  try{const r=await api.registrarVentaDirecta({cart:items,fecha,hora,motivo,metodoPago:metodo,montoRecibido:total,claveRegistro:key});setDone(r.pedido);addToast('Venta registrada e inventario descontado','success');}
+  try{const r=await api.registrarVentaDirecta({cart:items,fecha,hora,motivo,metodoPago:metodo,importeEfectivo:metodo==='mixto'?Number(cashPart):undefined,montoRecibido:total,claveRegistro:key});setDone(r.pedido);addToast('Venta registrada e inventario descontado','success');}
   catch(e){setError(e.message);}finally{setBusy(false);}
  }
  if(done)return <div className="direct-sale"><h2>Venta registrada · {done.folio}</h2><p>{fecha} a las {hora} · {money(done.total)}</p><p>Ya entregada. Los insumos vinculados se descontaron del inventario.</p><button className="btn-primary" onClick={()=>{setDone(null);setItems([]);setKey(crypto.randomUUID());setReview(false);}}>Capturar otra venta</button><button className="btn-ghost" onClick={onBack}>Volver a Caja</button></div>;
@@ -38,6 +39,7 @@ export default function VentaDirecta({onBack,addToast}){
    <strong>{money(Number(x.qty)*Number(x.unitPrice||0))}</strong>
   </article>)}
   <label>Forma de pago ya recibida<select className="text-input" value={metodo} onChange={e=>{setMetodo(e.target.value);setReview(false);}}><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="transferencia">Transferencia</option><option value="mixto">Mixto</option></select></label>
+  {metodo==='mixto'&&<label>Parte cobrada en efectivo<input className="text-input" type="number" min="0" max={total} step="0.01" value={cashPart} onChange={e=>{setCashPart(e.target.value);setReview(false);}}/><small>El resto ({money(total-Number(cashPart||0))}) corresponde a tarjeta o transferencia.</small></label>}
   <div className="direct-summary"><span>Total de la venta</span><strong>{money(total)}</strong></div>
   {error&&<p role="alert" className="direct-error">{error}</p>}
   {review?<div className="direct-review"><h3>Confirma esta captura</h3><p>{fecha} · {hora} · {items.reduce((n,x)=>n+Number(x.qty),0)} unidad(es) · {money(total)} · {metodo}</p><p>Se registrará como pagada y entregada. Se descontarán las recetas e insumos vinculados.</p><button className="btn-primary" disabled={busy||!valid} onClick={save}>{busy?'Guardando…':'Registrar venta y descontar inventario'}</button><button className="btn-ghost" disabled={busy} onClick={()=>setReview(false)}>Seguir editando</button></div>:<button className="btn-primary" disabled={!valid} onClick={()=>setReview(true)}>Revisar venta</button>}

@@ -2,6 +2,7 @@
 // pestañas Menú / Carrito / Turno en la navegación inferior.
 import React, { useState } from 'react';
 import VentaDirecta from './VentaDirecta';
+import CajaDinero from './CajaDinero';
 import { adaptPedido } from '../lib/adapters';
 import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets } from 'lucide-react';
 import * as api from '../api/client.js';
@@ -88,6 +89,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
 // (rol "mostrador"): agrega el acceso "Barra" a la navegación.
 export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null }) {
   const [screen, setScreen] = useState('menu');
+  const [drawerOpen,setDrawerOpen]=useState(false);
   const [activeCat, setActiveCat] = useState('Calientes');
   const [customizing, setCustomizing] = useState(null);
   const [cart, setCart] = useState([]);
@@ -116,7 +118,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
 
   const handleConfirmPay = async payInfo => {
     if (chargingOrder) {
-      await confirmarEntrega(chargingOrder.id, { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven });
+      await confirmarEntrega(chargingOrder.id, { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo });
       setChargingOrder(null);
       setAmounts(null);
       setScreen('turno');
@@ -127,7 +129,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
         cart,
         descuentoPorcentaje: discount?.porcentaje,
         autorizacionDescuento: discount?.autorizacion,
-        pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven },
+        pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo },
       });
       setLastOrder(order);
       setCart([]);
@@ -188,11 +190,12 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
       subtitle={subtitle}
       wide
       topRight={
-        <button className={`turno-pill ${turnoAbierto ? 'open' : 'closed'}`} onClick={onToggleTurno}>
+        <button className={`turno-pill ${turnoAbierto ? 'open' : 'closed'}`} onClick={()=>setDrawerOpen(true)}>
           {turnoAbierto ? '● Turno abierto' : 'Abrir turno'}
         </button>
       }
     >
+      <CajaDinero open={drawerOpen} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>
       {screen === 'menu' && (
         <div className="pos-layout">
           <div>

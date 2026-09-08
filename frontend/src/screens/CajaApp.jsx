@@ -40,15 +40,26 @@ function DetalleVenta({id}) {
 
 function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
   const [fecha,setFecha]=useState(()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City'}).format(new Date()));
-  const [orders,setOrders]=useState([]),[error,setError]=useState('');
-  React.useEffect(()=>{let alive=true;setOrders([]);setError('');api.getPedidos(fecha).then(rows=>{if(alive)setOrders(rows.map(adaptPedido));}).catch(e=>{if(alive)setError(e.message);});return()=>{alive=false;};},[fecha,liveOrders]);
+  const [sales,setSales]=useState({fecha:null,orders:[]}),[error,setError]=useState('');
+  React.useEffect(()=>{
+    let alive=true;
+    setError('');
+    // Keep the current day's rows mounted while polling, including open details.
+    api.getPedidos(fecha).then(rows=>{
+      if(alive)setSales({fecha,orders:rows.map(adaptPedido)});
+    }).catch(e=>{if(alive)setError(e.message);});
+    return()=>{alive=false;};
+  },[fecha,liveOrders]);
+  const loading=sales.fecha!==fecha;
+  const orders=loading?[]:sales.orders;
   const total = orders.filter(o => o.cobrado && !o.noShow && o.estado!=='cancelado').reduce((s, o) => s + o.total, 0);
 
   return (
     <div style={{ maxWidth: 760 }}>
       <label className="option-label">Consultar ventas del día<input className="text-input" type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/></label>
       {error&&<p role="alert">{error}</p>}
-      <div className="turno-total"><span>Total del día</span><span className="price-total">{money(total)}</span></div>
+      <div className="turno-total"><span>Total del día</span><span className="price-total">{loading?'—':money(total)}</span></div>
+      {loading&&!error&&<p role="status">Cargando ventas…</p>}
       {orders.map(o => {
         const status = o.estado;
         const vencido = status === 'listo' && o.horaRecogida && now - o.horaRecogida > NO_SHOW_WARNING_MS;

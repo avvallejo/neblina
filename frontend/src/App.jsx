@@ -51,6 +51,7 @@ export default function App() {
   const [productosAdmin, setProductosAdmin] = useState([]);
   const [reportes, setReportes] = useState(null);
   const [preciosPorRevisar, setPreciosPorRevisar] = useState([]);
+  const revisionCargaPrecios = React.useRef(0);
   const [kpis, setKpis] = useState(null);
   const [fechaVentas, setFechaVentas] = useState('');
   const [ventasError, setVentasError] = useState('');
@@ -253,6 +254,7 @@ export default function App() {
 
   // ---- Datos de administración ----
   const recargarAdmin = React.useCallback(async () => {
+    const revisionCarga = ++revisionCargaPrecios.current;
     await Promise.allSettled([
       api.getUsuarios().then(setUsuarios),
       api.getProveedores().then(setProveedores),
@@ -263,7 +265,7 @@ export default function App() {
         if (fid) setPromoConfig({ activo: fid.activo, cada: fid.cada_n_pedidos, premioId: fid.producto_premio_id });
       }),
       api.getReportes().then(setReportes).catch(() => setReportes(null)),
-      api.getPreciosPorRevisar().then(setPreciosPorRevisar),
+      api.getPreciosPorRevisar().then(rows => { if (revisionCarga === revisionCargaPrecios.current) setPreciosPorRevisar(rows); }),
     ]);
   }, []);
 

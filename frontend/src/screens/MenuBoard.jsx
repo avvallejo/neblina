@@ -180,6 +180,8 @@ export default function MenuBoard({ sucursalId }) {
 const fmt$ = n => `$${Number(n).toFixed(Number.isInteger(Number(n)) ? 0 : 2)}`;
 
 function Pizarra({ brand, sedeNombre, cfg, categorias, productos, abierto, hora, opciones, promoApertura, promoFidelidad }) {
+  const size=opciones?.tamanos?.find(o=>Number(o.delta)===0)||opciones?.tamanos?.[0];
+  productos=productos.map(p=>p.sizes&&size?{...p,price:p.price+Number(size.delta),precioBase:p.precioBase+Number(size.delta)}:p);
   const enPromo = productos.some(p => p.precioBase > p.price);
   const tituloPromo = promoApertura ? promoApertura.nombre : (enPromo ? 'Promoción' : null);
   const columnas = categorias.map(cat => ({ cat, items: productos.filter(p => p.cat === cat) })).filter(c => c.items.length > 0);

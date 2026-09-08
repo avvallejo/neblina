@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee, ShoppingCart, Clock, Lock, History, User, Sparkles, AlertCircle, Check } from 'lucide-react';
 import * as api from '../api/client.js';
-import { getProduct } from '../lib/catalog.js';
+import { getProduct, defaultSize } from '../lib/catalog.js';
 import { adaptCliente, adaptPedido, estadoPedidoCliente } from '../lib/adapters.js';
 import { money, fmtHora, validPhone } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
@@ -340,7 +340,7 @@ export default function ClienteApp({ brand, sede, turnoAbierto, promoConfig, sms
     if (!premio) { addToast('No hay premio configurado.', 'warn'); return; }
     const rewardCart = [{
       uid: `reward-${Date.now()}`, productId: premio.id, qty: 1, unitPrice: 0,
-      size: premio.sizes ? '12' : null,
+      size: premio.sizes ? defaultSize() : null,
       milk: premio.leche ? 'entera' : null,
       coffeeType: premio.coffeeType ? 'tradicional' : null,
       extras: [], notas: 'Regalo de fidelidad', isReward: true,

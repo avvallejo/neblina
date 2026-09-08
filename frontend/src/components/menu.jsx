@@ -1,7 +1,7 @@
 // Piezas del menú/POS compartidas por Caja y Cliente.
 import React, { useState } from 'react';
 import { Coffee, ShoppingCart, Snowflake, Trash2, ClipboardList, AlertTriangle, Banknote, CreditCard, ArrowLeftRight, Wallet } from 'lucide-react';
-import { CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, getProduct, calcUnitPrice, customizationSummary, precioDesde } from '../lib/catalog.js';
+import { CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, getProduct, defaultSize, calcUnitPrice, customizationSummary, precioDesde } from '../lib/catalog.js';
 import { money } from '../lib/helpers.js';
 import { Sheet, Stepper, EmptyState, FormError } from './ui.jsx';
 
@@ -42,7 +42,7 @@ export function ProductGrid({ activeCat, onTap }) {
 
 export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe }) {
   const [sel, setSel] = useState({
-    size: product.sizes ? '12' : null,
+    size: product.sizes ? defaultSize() : null,
     milk: product.leche ? 'entera' : null,
     coffeeType: product.coffeeType ? 'tradicional' : null,
     extras: [],

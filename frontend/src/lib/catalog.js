@@ -22,6 +22,8 @@ export const MILK_OPTIONS = [];
 export const COFFEE_OPTIONS = [];
 export const EXTRA_OPTIONS = [];
 
+export function defaultSize(){return (SIZE_OPTIONS.find(o=>Number(o.delta)===0)||SIZE_OPTIONS[0])?.id || null;}
+
 export function getProduct(id) { return PRODUCTS.find(p => p.id === id); }
 export function labelOf(list, id) { const f = list.find(x => x.id === id); return f ? f.label : id; }
 

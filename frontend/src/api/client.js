@@ -464,3 +464,5 @@ export function restaurarReceta(productoId) { return request(`/recetas/${product
 
 export function getInsumosVenta(){return request('/ventas-directas/insumos');}
 export function registrarVentaDirecta({cart,...body}){return request('/ventas-directas',{method:'POST',body:{...body,items:cart.map(x=>({...itemToApi(x),precioUnitario:x.unitPrice,motivoPrecio:x.motivoPrecio,concepto:x.concepto,insumoId:x.insumoId,cantidadInsumo:x.cantidadInsumo,unidadInsumo:x.unidadInsumo}))}});}
+
+export function eliminarOpcion(tipo,id){return request(`/opciones/${tipo}/${id}`,{method:'DELETE'});}

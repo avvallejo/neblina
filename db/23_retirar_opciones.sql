@@ -1,0 +1,11 @@
+BEGIN;
+ALTER TABLE opciones_tamano ADD COLUMN activo BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE opciones_tamano ADD COLUMN retirado BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE opciones_cafe ADD COLUMN retirado BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE opciones_leche ADD COLUMN retirado BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE opciones_extra ADD COLUMN retirado BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE opciones_tamano ADD CONSTRAINT tamano_retirado_inactivo CHECK(NOT retirado OR NOT activo);
+ALTER TABLE opciones_cafe ADD CONSTRAINT cafe_retirado_inactivo CHECK(NOT retirado OR NOT activo);
+ALTER TABLE opciones_leche ADD CONSTRAINT leche_retirada_inactiva CHECK(NOT retirado OR NOT activo);
+ALTER TABLE opciones_extra ADD CONSTRAINT extra_retirado_inactivo CHECK(NOT retirado OR NOT activo);
+COMMIT;

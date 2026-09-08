@@ -27,6 +27,15 @@ const { mantenerPrecio, preciosPorRevisar } = require('./src/services/priceRevie
     await c.query('UPDATE materias_primas SET stock_actual=12 WHERE id=$1',[m.id]);
     await c.query('UPDATE productos SET margen_porcentaje=90 WHERE id=$1',[p.id]);
     assert.equal(await current(),undefined);
+    await c.query("SET LOCAL TIME ZONE 'America/Mexico_City'");
+    assert.equal(await current(),undefined);
+    await c.query("SET LOCAL TIME ZONE 'UTC'");
+    assert.equal(await current(),undefined);
+    await c.query('UPDATE recetas SET actualizado_en=clock_timestamp() WHERE producto_id=$1',[p.id]);
+    assert.equal(await current(),undefined);
+    await c.query(`INSERT INTO opciones_cafe (codigo,etiqueta,sucursal_id,materia_prima_id,delta_precio) VALUES ('qa_opcional','QA café alternativo',$1,$2,5)`,[cat.sucursal_id,m.id]);
+    await c.query(`INSERT INTO opciones_leche (codigo,etiqueta,sucursal_id,materia_prima_id,delta_precio) VALUES ('qa_opcional','QA leche alternativa',$1,$2,5)`,[cat.sucursal_id,m.id]);
+    assert.equal(await current(),undefined);
     await c.query('UPDATE materias_primas SET costo_unitario=3 WHERE id=$1',[m.id]);
     row = await current(); assert.ok(row); assert.notEqual(row.revision,initial);
     await assert.rejects(()=>keep(initial),e=>e.status===409);

@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict');
+const {pool}=require('./src/db');
+const {changeOption}=require('./src/services/optionLifecycle');
+const {calcularPrecioItem}=require('./src/utils/pricing');
+(async()=>{assert.equal(process.env.NODE_ENV,'development');const c=await pool.connect();try{
+await c.query('BEGIN');
+const {rows:[u]}=await c.query('SELECT id,sucursal_id FROM usuarios WHERE sucursal_id IS NOT NULL LIMIT 1');
+const s=u.sucursal_id;
+const {rows:sizes}=await c.query('SELECT * FROM opciones_tamano WHERE sucursal_id=$1 AND activo ORDER BY onzas',[s]);assert.ok(sizes.length>=2);
+const {rows:[cat]}=await c.query('SELECT id FROM categorias_producto WHERE sucursal_id=$1 LIMIT 1',[s]);
+const {rows:[p]}=await c.query(`INSERT INTO productos(nombre,sucursal_id,categoria_id,tipo,precio_base,permite_tamanos,permite_leche,permite_tipo_cafe) VALUES('QA tamaño',$1,$2,'bebida',50,true,false,false) RETURNING id`,[s,cat.id]);
+const {rows:[order]}=await c.query("INSERT INTO pedidos(sucursal_id,origen) VALUES($1,'mostrador') RETURNING id",[s]);
+await c.query('INSERT INTO pedido_items(pedido_id,producto_id,tamano_id,cantidad,precio_unitario) VALUES($1,$2,$3,1,50)',[order.id,p.id,sizes[0].id]);
+const change=(id,activo,retirar=false)=>changeOption(c,{tipo:'tamanos',id,sucursalId:s,activo,retirar,usuarioId:u.id});
+await change(sizes[0].id,false);await assert.rejects(()=>calcularPrecioItem({productoId:p.id,tamanoId:sizes[0].id,sucursalId:s},c.query.bind(c)),e=>e.status===400);
+await change(sizes[0].id,true);assert.ok(await calcularPrecioItem({productoId:p.id,tamanoId:sizes[0].id,sucursalId:s},c.query.bind(c)));
+await change(sizes[0].id,false,true);assert.equal((await c.query('SELECT retirado FROM opciones_tamano WHERE id=$1',[sizes[0].id])).rows[0].retirado,true);
+assert.equal((await c.query('SELECT tamano_id FROM pedido_items WHERE pedido_id=$1',[order.id])).rows[0].tamano_id,sizes[0].id);
+await assert.rejects(()=>change(sizes[0].id,true),e=>e.status===409);
+for(const size of sizes.slice(1,-1))await change(size.id,false);
+await assert.rejects(()=>change(sizes.at(-1).id,false,true),e=>e.status===400);
+await assert.rejects(()=>changeOption(c,{tipo:'tamanos',id:sizes.at(-1).id,sucursalId:'00000000-0000-4000-8000-000000000000',activo:false,usuarioId:u.id}),e=>e.status===404);
+console.log('PASS: desactivar/reactivar, bloquear cobro de tamaño inactivo, retirar conservando historial, impedir retirar último tamaño y aislar sucursales.');
+}finally{await c.query('ROLLBACK');c.release();await pool.end();}})().catch(e=>{console.error(e);process.exitCode=1});

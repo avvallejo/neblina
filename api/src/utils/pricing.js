@@ -35,8 +35,8 @@ async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extra
 
   if (tamanoId) {
     const r = sucursalId
-      ? await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1 AND sucursal_id = $2', [tamanoId, sucursalId])
-      : await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1', [tamanoId]);
+      ? await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1 AND activo AND NOT retirado AND sucursal_id = $2', [tamanoId, sucursalId])
+      : await queryFn('SELECT delta_precio FROM opciones_tamano WHERE id = $1 AND activo AND NOT retirado', [tamanoId]);
     if (r.rows.length === 0) throw new ApiError(400, 'Tamaño inválido.');
     total += Number(r.rows[0].delta_precio);
   }

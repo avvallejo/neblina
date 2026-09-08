@@ -24,7 +24,7 @@ function Bebida({ p }) {
   return <article className="cm-drink">
     <FotoBebida p={p}/>
     <div className="cm-drink-copy"><h3>{p.name}</h3>{p.descripcion && <p>{p.descripcion}</p>}
-      <small>{p.sizes ? '12 oz · tamaño estándar' : 'Presentación de la casa'}</small>
+      <small>{p.sizes ? p.sizeLabel || 'Tamaño disponible' : 'Presentación de la casa'}</small>
     </div>
     <div className="cm-price">{p.precioBase > p.price && <del>{dinero(p.precioBase)}</del>}<strong>{dinero(p.price)}</strong></div>
   </article>;
@@ -36,6 +36,8 @@ function Columna({ titulo, subtitulo, productos, tono='' }) {
   </section>;
 }
 export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abierto,desactualizado }) {
+  const size=opciones?.tamanos?.find(o=>Number(o.delta)===0)||opciones?.tamanos?.[0];
+  productos=productos.map(p=>p.sizes&&size?{...p,price:p.price+Number(size.delta),precioBase:p.precioBase+Number(size.delta),sizeLabel:`${size.label} · tamaño disponible`}:p);
   const calientes=productos.filter(p=>p.tipo!=='frappe'&&!p.frio&&p.tipo!=='snack');
   const frappes=productos.filter(p=>p.tipo==='frappe');
   const frios=productos.filter(p=>p.frio&&p.tipo!=='frappe');
@@ -56,7 +58,7 @@ export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abier
       <Columna titulo="Calientes" subtitulo="Clásicos que reconfortan" productos={calientes}/>
       <div className="cm-center">
         <section className="cm-cold"><div className="cm-section-head"><span>Tu pausa más fresca</span><h2>Fríos</h2></div>
-          {frios.map(p=><article key={p.id} className="cm-cold-item"><FotoBebida p={p} grande/><div><h3>{p.name}</h3><strong>{dinero(p.price)}</strong></div><small>{p.sizes?'12 oz · tamaño estándar':'Presentación de la casa'}</small></article>)}
+          {frios.map(p=><article key={p.id} className="cm-cold-item"><FotoBebida p={p} grande/><div><h3>{p.name}</h3><strong>{dinero(p.price)}</strong></div><small>{p.sizes?p.sizeLabel || 'Tamaño disponible':'Presentación de la casa'}</small></article>)}
           {!frios.length && <div className="cm-center-note"><Coffee/><p>Café a tu gusto</p></div>}
         </section>
         <div className="cm-seal"><Sparkles/><span>TU CAFÉ,<br/>A TU MANERA</span><small>Elige café, leche y extras</small></div>

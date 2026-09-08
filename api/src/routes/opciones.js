@@ -1,5 +1,6 @@
 const express = require('express');
-const { query } = require('../db');
+const { query, withTransaction } = require('../db');
+const { changeOption } = require('../services/optionLifecycle');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = require('../middleware/auth');
 
@@ -96,7 +97,7 @@ router.get('/admin', requireAuth, requireRole('admin'), resolveSucursal, asyncHa
 
   res.json({
     margen, redondeo, leche_ml_base: mlBase, tamano_base: base ? base.codigo : null,
-    tamanos, leches, cafes, extras,
+    tamanos: tamanos.filter(o=>!o.retirado), leches: leches.filter(o=>!o.retirado), cafes: cafes.filter(o=>!o.retirado), extras: extras.filter(o=>!o.retirado),
     materias: mats.rows.filter(m => m.activo !== false).map(m => ({ id: m.id, nombre: m.nombre, unidad: m.unidad, costo_unitario: m.costo_unitario })),
   });
 }));
@@ -159,6 +160,10 @@ router.patch('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, a
   if (!tabla) throw new ApiError(404, 'Tipo de opción desconocido.');
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) throw new ApiError(400, 'Id inválido.');
+  if (req.body.activo !== undefined) {
+    if(Object.keys(req.body).length!==1) throw new ApiError(400,'Cambia el estado por separado de los demás datos.');
+    return res.json(await withTransaction(c=>changeOption(c,{tipo:req.params.tipo,id,sucursalId:req.sucursalId,activo:req.body.activo,usuarioId:req.auth.id})));
+  }
   const sets = []; const values = []; let i = 1;
   const add = (col, val) => { sets.push(`${col} = $${i++}`); values.push(val); };
 
@@ -170,10 +175,6 @@ router.patch('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, a
   if (req.body.etiqueta !== undefined) {
     if (!String(req.body.etiqueta).trim()) throw new ApiError(400, 'El nombre no puede quedar vacío.');
     add('etiqueta', String(req.body.etiqueta).trim());
-  }
-  if (req.body.activo !== undefined) {
-    if (req.params.tipo === 'tamanos') throw new ApiError(400, 'Los tamaños no se desactivan.');
-    add('activo', !!req.body.activo);
   }
   if (req.params.tipo !== 'tamanos' && req.body.materiaPrimaId !== undefined) {
     add('materia_prima_id', await validarMateria(req.body.materiaPrimaId, req.sucursalId));
@@ -191,17 +192,15 @@ router.patch('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, a
   }
   if (sets.length === 0) throw new ApiError(400, 'No se envió ningún campo para actualizar.');
 
-  // La leche "entera" y el café "tradicional" son la referencia de costos y
-  // de las recetas: se pueden repreciar pero no desactivar.
-  if (req.body.activo === false) {
-    const ref = await query(`SELECT codigo FROM ${tabla} WHERE id = $1 AND sucursal_id = $2`, [id, req.sucursalId]);
-    if (ref.rows[0] && ['entera', 'tradicional'].includes(ref.rows[0].codigo)) throw new ApiError(400, 'Esta opción es la base de las recetas y no se puede desactivar.');
-  }
-
   values.push(id, req.sucursalId);
-  const { rows } = await query(`UPDATE ${tabla} SET ${sets.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1} RETURNING *`, values);
+  const { rows } = await query(`UPDATE ${tabla} SET ${sets.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1} AND NOT retirado RETURNING *`, values);
   if (rows.length === 0) throw new ApiError(404, 'Opción no encontrada.');
   res.json(rows[0]);
+}));
+
+router.delete('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async(req,res)=>{
+  await withTransaction(c=>changeOption(c,{tipo:req.params.tipo,id:Number(req.params.id),sucursalId:req.sucursalId,activo:false,retirar:true,usuarioId:req.auth.id}));
+  res.json({ok:true});
 }));
 
 // El catálogo de opciones es de lectura pública, pero POR SEDE:
@@ -214,7 +213,7 @@ router.get('/tamanos', asyncHandler(async (req, res) => {
   res.json((await query(
     `SELECT t.*, tl.cantidad_ml AS leche_ml
      FROM opciones_tamano t LEFT JOIN tamano_leche_cantidad tl ON tl.tamano_id = t.id
-     WHERE t.sucursal_id = $1 ORDER BY t.onzas`, [req.sucursalId])).rows);
+     WHERE t.sucursal_id = $1 AND t.activo AND NOT t.retirado ORDER BY t.onzas`, [req.sucursalId])).rows);
 }));
 
 router.get('/leches', asyncHandler(async (req, res) => {

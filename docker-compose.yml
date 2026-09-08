@@ -47,6 +47,8 @@ services:
       - ./db/19_mantener_precio.sql:/docker-entrypoint-initdb.d/19_mantener_precio.sql:ro
       - ./db/20_recargo_cafe_costo.sql:/docker-entrypoint-initdb.d/20_recargo_cafe_costo.sql:ro
       - ./db/21_ventas_directas.sql:/docker-entrypoint-initdb.d/21_ventas_directas.sql:ro
+      - ./db/22_revision_precio_estable.sql:/docker-entrypoint-initdb.d/22_revision_precio_estable.sql:ro
+      - ./db/23_retirar_opciones.sql:/docker-entrypoint-initdb.d/23_retirar_opciones.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

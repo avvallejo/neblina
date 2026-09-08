@@ -258,6 +258,15 @@ function OpcionesSection({ addToast, onOpcionesChanged }) {
     } catch (e) { addToast(e.message, 'warn'); }
   };
 
+  const eliminar = async (tipo, o) => {
+    if (!window.confirm(`¿Eliminar "${o.etiqueta}" de la lista? Dejará de ofrecerse. Las ventas anteriores se conservan. Para ocultarlo temporalmente, usa Desactivar.`)) return;
+    try {
+      await api.eliminarOpcion(tipo, o.id);
+      await cargar(); if (onOpcionesChanged) await onOpcionesChanged();
+      addToast('Opción eliminada de la lista; historial conservado', 'success');
+    } catch(e) { addToast(e.message, 'warn'); }
+  };
+
   if (!data) return <EmptyState icon={SlidersHorizontal} title="Cargando opciones…" />;
 
   const materiaDe = id => data.materias.find(m => m.id === id);
@@ -300,8 +309,8 @@ function OpcionesSection({ addToast, onOpcionesChanged }) {
         <span className={`opcion-delta${delta === 0 ? ' neutro' : ''}`}>{fmtDelta(delta)}</span>
         <div className="list-row-actions" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
           <button className="icon-btn small" onClick={() => setEditing({ tipo, opcion: o })} aria-label="Editar"><Pencil size={14} /></button>
-          {tipo !== 'tamanos' && !['entera', 'tradicional'].includes(o.codigo) && (
-            <button className="link-toggle" onClick={() => toggle(tipo, o)}>{o.activo === false ? 'Activar' : 'Desactivar'}</button>
+          {!['entera', 'tradicional'].includes(o.codigo) && (
+            <><button className="link-toggle" onClick={() => toggle(tipo, o)}>{o.activo === false ? 'Activar' : 'Desactivar'}</button><button className="link-danger" onClick={() => eliminar(tipo,o)}>Eliminar de la lista</button></>
           )}
         </div>
       </div>

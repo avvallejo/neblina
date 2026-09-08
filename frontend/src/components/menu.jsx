@@ -30,7 +30,7 @@ export function ProductGrid({ activeCat, onTap }) {
         list.map(p => (
           <button key={p.id} className="product-card" onClick={() => onTap(p)}>
             {p.frio && <span className="frio-tag"><Snowflake size={12} /></span>}
-            <span className="product-icon">{p.icon}</span>
+            <span className="product-icon">{p.imagen?<img src={p.imagen} alt="" style={{width:64,height:64,objectFit:'contain',borderRadius:8}}/>:p.icon}</span>
             <span className="product-name">{p.name}</span>
             <span className="product-price">{p.sizes ? `desde ${money(precioDesde(p))}` : money(p.price)}</span>
           </button>

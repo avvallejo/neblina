@@ -5,6 +5,7 @@ const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = re
 const { cleanText, parseNumber, toBoolean } = require('../utils/catalogValidation');
 const { preciosPorRevisar, mantenerPrecio } = require('../services/priceReview');
 
+const { productImage } = require('../utils/productImage');
 const router = express.Router();
 
 function requireAdminForInactiveCatalog(req, res, next) {
@@ -34,7 +35,15 @@ router.get('/', requireAdminForInactiveCatalog, resolveSucursalPublico, asyncHan
      ${where} ORDER BY cp.orden, p.nombre`,
     values
   );
-  res.json(rows);
+  res.json(rows.map(({imagen,...p})=>({...p,imagen_url:imagen?`/api/productos/${p.id}/imagen?sucursal=${req.sucursalId}&v=${require('crypto').createHash('sha256').update(imagen).digest('hex').slice(0,16)}`:null})));
+}));
+
+router.get('/:id/imagen', resolveSucursalPublico, asyncHandler(async (req,res)=>{
+  const {rows:[p]}=await query('SELECT imagen FROM productos WHERE id=$1 AND sucursal_id=$2',[req.params.id,req.sucursalId]);
+  if(!p?.imagen) throw new ApiError(404,'Imagen no encontrada.');
+  const [header,data]=p.imagen.split(',');
+  res.set('Cache-Control','public, max-age=3600');
+  res.type(header.slice(5,header.indexOf(';'))).send(Buffer.from(data,'base64'));
 }));
 
 router.get('/categorias', resolveSucursalPublico, asyncHandler(async (req, res) => {
@@ -100,6 +109,7 @@ function parseMargen(valor) {
 
 router.post('/', asyncHandler(async (req, res) => {
   const { nombre, categoriaId, tipo, icono, precioBase, permiteTamanos, permiteLeche, permiteTipoCafe, permiteExtras, esFrio, margenPorcentaje } = req.body;
+  const imagen = productImage(req.body.imagen);
   const nombreLimpio = cleanText(nombre, { required: true, field: 'un nombre', max: 120 });
   if (!['bebida', 'frappe', 'snack'].includes(tipo)) throw new ApiError(400, 'Tipo inválido.');
   if (!categoriaId) throw new ApiError(400, 'Selecciona una categoría.');
@@ -134,6 +144,7 @@ router.post('/', asyncHandler(async (req, res) => {
           ? null : parseNumber(req.body.precioPromocional, 'precio promocional', { min: 0 }),
       ]
     );
+    if(imagen) await client.query('UPDATE productos SET imagen=$2 WHERE id=$1',[rows[0].id,imagen]);
     if (tipo !== 'snack') {
       await client.query('INSERT INTO recetas (producto_id) VALUES ($1)', [rows[0].id]);
       await client.query('SELECT fn_resetear_receta($1)', [rows[0].id]);
@@ -149,6 +160,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   let i = 1;
   const add = (columna, value) => { sets.push(`${columna} = $${i++}`); values.push(value); };
 
+  if (req.body.imagen !== undefined) add('imagen', productImage(req.body.imagen));
   if (req.body.nombre !== undefined) add('nombre', cleanText(req.body.nombre, { required: true, field: 'un nombre', max: 120 }));
   if (req.body.categoriaId !== undefined) {
     if (!req.body.categoriaId) throw new ApiError(400, 'Selecciona una categoría.');

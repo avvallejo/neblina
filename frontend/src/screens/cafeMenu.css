@@ -22,3 +22,4 @@
 .cm-many-cold .cm-drink-icon{flex-shrink:0;display:grid;place-items:center;width:clamp(66px,6.8vw,145px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,#92c7d423,transparent 70%);font-size:clamp(38px,4vw,80px)}
 @media(max-width:999px){.cm-many-cold{grid-template-columns:1fr 1fr}.cm-many-cold .cm-center{display:flex}.cm-many-cold .cm-center .cm-photo{width:100px;max-height:none}}
 @media(max-width:600px){.cm-many-cold{grid-template-columns:1fr}}
+.cm-photo.cm-uploaded{background:none;mix-blend-mode:normal;object-fit:contain;border-radius:12px}

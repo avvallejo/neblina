@@ -17,6 +17,7 @@ function foto(p) {
   return null;
 }
 function FotoBebida({ p, grande=false }) {
+  if(p.imagen)return <img className={`cm-photo cm-uploaded ${grande?'large':''}`} src={p.imagen} alt={p.name}/>;
   const n=foto(p);
   const icon=/chocomilk/i.test(p.name)?'🍫':/esquimo/i.test(p.name)?'🍓':p.icon;
   return n === null ? <span className="cm-drink-icon">{icon}</span> : <span className={`cm-photo ${grande?'large':''}`} role="img" aria-label={p.name}

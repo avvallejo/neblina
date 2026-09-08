@@ -320,6 +320,19 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
   const [frio, setFrio] = useState(producto ? !!producto.frio : false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [imagen,setImagen]=useState(producto?.imagen||'');
+  const [imagenCambiada,setImagenCambiada]=useState(false);
+  const [leyendoImagen,setLeyendoImagen]=useState(false);
+  const imagenRef=useRef(null);
+  const subirImagen=async e=>{
+    const file=e.target.files?.[0]; e.target.value='';
+    if(!file)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>15000000){setError('Elige una imagen JPG, PNG o WebP de hasta 15 MB.');return;}
+    setLeyendoImagen(true);setError('');
+    try{const data=await redimensionarImagen(file,512);if(data.length>1400000)throw new Error();setImagen(data);setImagenCambiada(true);}
+    catch{setError('No se pudo leer la imagen. Prueba con otro archivo.');}
+    finally{setLeyendoImagen(false);}
+  };
 
   const submit = async () => {
     if (!name.trim()) { setError('Ingresa un nombre.'); return; }
@@ -329,7 +342,7 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
     if (promoNum !== null && (isNaN(promoNum) || promoNum < 0)) { setError('El precio promocional debe ser un número (o déjalo vacío).'); return; }
     if (promoNum !== null && promoNum >= precioNum) { setError('El precio promocional debe ser menor al precio normal.'); return; }
     setError('');
-    const base = { name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim() };
+    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim() };
     setSaving(true);
     const ok = await onSave(
       tipo === 'snack'
@@ -345,6 +358,18 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
       <div className="option-group">
         <div className="option-label">Nombre</div>
         <input className="text-input" value={name} onChange={e => setName(e.target.value)} placeholder="Ej. Chai Latte" />
+      </div>
+      <div className="option-group">
+        <div className="option-label">Imagen del producto</div>
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          {imagen?<img src={imagen} alt="Vista previa del producto" style={{width:110,height:110,objectFit:'contain',borderRadius:12,background:'#f3eee5'}}/>:<span style={{fontSize:48}}>{icon}</span>}
+          <div>
+            <button className="btn-secondary" disabled={leyendoImagen||saving} onClick={()=>imagenRef.current?.click()}>{leyendoImagen?'Preparando imagen…':imagen?'Cambiar imagen':'Subir imagen'}</button>
+            {imagen&&<button className="link-danger" disabled={leyendoImagen||saving} onClick={()=>{setImagen('');setImagenCambiada(true);}}>Quitar imagen</button>}
+          </div>
+        </div>
+        <input ref={imagenRef} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Seleccionar imagen del producto" hidden onChange={subirImagen}/>
+        <div className="field-hint">JPG, PNG o WebP. La imagen se ajusta automáticamente y aparece en el menú al guardar.</div>
       </div>
       <div className="option-group two-col">
         <div>
@@ -398,7 +423,7 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
       <FormError>{error}</FormError>
       <div className="sheet-footer">
         <span />
-        <button className="btn-primary" disabled={saving} onClick={submit}>{saving ? 'Guardando…' : (isNew ? 'Agregar producto' : 'Guardar cambios')}</button>
+        <button className="btn-primary" disabled={saving||leyendoImagen} onClick={submit}>{saving ? 'Guardando…' : (isNew ? 'Agregar producto' : 'Guardar cambios')}</button>
       </div>
     </Sheet>
   );

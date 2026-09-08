@@ -101,6 +101,7 @@ function adaptProducto(p) {
     price: Number(p.precio_efectivo ?? p.precio_base),
     precioBase: Number(p.precio_base),            // para tachar el precio normal cuando hay promoción
     precioPromocional: p.precio_promocional === null || p.precio_promocional === undefined ? null : Number(p.precio_promocional),
+    imagen: p.imagen_url || '',
     descripcion: p.descripcion || '',
     tipo: p.tipo,
     leche: !!p.permite_leche,
@@ -358,12 +359,13 @@ export function crearProducto(p) {
     body: {
       nombre: p.name, categoriaId: prodCatId[p.cat], tipo: p.tipo, icono: p.icon, precioBase: p.price,
       permiteTamanos: p.sizes, permiteLeche: p.leche, permiteTipoCafe: p.coffeeType, permiteExtras: p.extras, esFrio: p.frio,
-      margenPorcentaje: p.margenPorcentaje, descripcion: p.descripcion, precioPromocional: p.precioPromocional,
+      imagen: p.imagen, margenPorcentaje: p.margenPorcentaje, descripcion: p.descripcion, precioPromocional: p.precioPromocional,
     },
   });
 }
 export function actualizarProducto(id, p) {
   const body = {};
+  if (p.imagen !== undefined) body.imagen = p.imagen;
   if (p.name !== undefined) body.nombre = p.name;
   if (p.cat !== undefined) body.categoriaId = prodCatId[p.cat];
   if (p.tipo !== undefined) body.tipo = p.tipo;

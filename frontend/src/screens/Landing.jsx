@@ -122,7 +122,7 @@ export default function Landing({ sedes, sede, onPickSede, onSelectCliente, onSt
             <button className="client-cta" onClick={onSelectCliente}>
               <span className="client-cta-icon"><Coffee size={26} /></span>
               <span style={{ flex: 1 }}>
-                <span className="client-cta-title">Ordenar mi café</span>
+                <span className="client-cta-title">Ordenar</span>
                 <span className="client-cta-sub">Regístrate, mira el menú y levanta tu pedido</span>
               </span>
               <ChevronRight size={18} />

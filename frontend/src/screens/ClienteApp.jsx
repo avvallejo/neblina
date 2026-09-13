@@ -451,7 +451,7 @@ export default function ClienteApp({ brand, sede, turnoAbierto, promoConfig, sms
                 </button>
               )}
               <CategoryTabs active={activeCat} onSelect={setActiveCat} />
-              <ProductGrid activeCat={activeCat} onTap={p => (p.tipo === 'snack' ? quickAddClient(p) : setCustomizing(p))} />
+              <ProductGrid bloquearAgotados activeCat={activeCat} onTap={p => (p.tipo === 'snack' ? quickAddClient(p) : setCustomizing(p))} />
             </div>
           )}
           {screen === 'cart' && (

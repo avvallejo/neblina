@@ -31,6 +31,7 @@ router.get('/yo', requireAuth, asyncHandler(async (req, res) => {
     nombre: req.auth.nombre || null,
     rol: req.auth.rol || null,
     sucursalId: req.auth.sucursalId ?? null,
+    estaciones: req.auth.estaciones || null,
   });
 }));
 
@@ -51,7 +52,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const sucursalId = await validarSucursal(req.body.sucursalId);
 
   const { rows } = await query(
-    `SELECT id, nombre, rol, pin_hash, token_version, sucursal_id FROM usuarios
+    `SELECT id, nombre, rol, pin_hash, token_version, sucursal_id, estaciones FROM usuarios
      WHERE activo = true AND (sucursal_id = $1 OR (rol = 'admin' AND sucursal_id IS NULL))`,
     [sucursalId]
   );
@@ -74,7 +75,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   );
   res.json({
     token,
-    usuario: { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, sucursalId: encontrado.sucursal_id || null },
+    usuario: { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, sucursalId: encontrado.sucursal_id || null, estaciones: encontrado.estaciones || ['barra', 'parrilla'] },
   });
 }));
 

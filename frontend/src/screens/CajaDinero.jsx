@@ -4,8 +4,10 @@ import {money} from '../lib/helpers';
 import * as api from '../api/client';
 export default function CajaDinero({open,onClose,turnoAbierto,onToggleTurno,addToast}){
  const [data,setData]=useState(null),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[fund,setFund]=useState(''),[busy,setBusy]=useState(false);
+ const [plan,setPlan]=useState(null); // cupo de cortesías del mes (compartido por la sucursal)
  async function refresh(){const r=await api.getCajaTurno();setData(r);setLoaded(true);setError('');}
  useEffect(()=>{let alive=true;const load=()=>api.getCajaTurno().then(r=>{if(alive){setData(r);setLoaded(true);setError('');}}).catch(e=>{if(alive)setError(e.message);});load();const t=setInterval(load,5000);return()=>{alive=false;clearInterval(t);};},[turnoAbierto,open]);
+ useEffect(()=>{if(!open)return undefined;let alive=true;api.getPlanCortesias().then(p=>{if(alive)setPlan(p);}).catch(()=>{if(alive)setPlan(null);});return()=>{alive=false;};},[open,data?.cortesias_turno]);
  const missing=data?.fondo_inicial===null;
  const unknown=Number(data?.pagos_sin_desglose||0)>0;
  const expected=data&&!missing&&!unknown?Number(data.fondo_inicial)+Number(data.ventas_efectivo):null;
@@ -15,7 +17,9 @@ export default function CajaDinero({open,onClose,turnoAbierto,onToggleTurno,addT
   <div><div className="footer-label">Ventas en efectivo del turno</div><strong>{money(data.ventas_efectivo)}</strong></div>
   <div><div className="footer-label">Otros medios del turno</div><strong>{money(data.ventas_no_efectivo)}</strong></div>
   <div><div className="footer-label">Efectivo esperado en caja</div><strong style={{color:'var(--brand)',fontSize:22}}>{expected===null?'Pendiente':money(expected)}</strong></div>
+  <div><div className="footer-label">Cortesías del turno</div><strong>{Number(data.cortesias_turno||0)} · {money(data.cortesias_valor_turno||0)}</strong>{Number(data.cortesias_pendientes_turno||0)>0&&<div className="field-hint" style={{color:'var(--danger)'}}>{data.cortesias_pendientes_turno} pendiente(s) de autorización</div>}</div>
  </div>;
+ const planCortesias=plan&&<p className="field-hint">Cortesías de {plan.mesNombre} (cupo de la sucursal): {plan.usadas} de {plan.limite} usadas{plan.restantes>0?` · quedan ${plan.restantes}`:' · cupo agotado: las siguientes requieren autorización'}{plan.pendientes>0?` · ${plan.pendientes} pendiente(s) de autorizar`:''}.</p>;
  async function save(){setBusy(true);setError('');try{
   if(data){await api.registrarFondoTurno(data.id,Number(fund));addToast('Fondo inicial registrado, separado de las ventas','success');}
   else if(await onToggleTurno({fondoInicial:Number(fund)})===false)return;
@@ -27,7 +31,8 @@ export default function CajaDinero({open,onClose,turnoAbierto,onToggleTurno,addT
  {error&&!open&&<p role="alert">No se pudo actualizar Caja: {error}</p>}
  {open&&<Sheet title={data?'Caja del turno':'Abrir turno'} onClose={onClose}>
   {metrics}
-  {data&&<p className="field-hint">Turno abierto el {new Date(data.abierto_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}. Ventas totales del turno: {money(data.ventas_turno)}.</p>}
+  {data&&<p className="field-hint">Turno abierto el {new Date(data.abierto_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}. Ventas totales del turno: {money(data.ventas_turno)} (las cortesías no suman).</p>}
+  {planCortesias}
   {(!data||missing)&&<><label className="option-label" htmlFor="opening-fund">¿Con cuánto efectivo comenzó la caja?</label><input id="opening-fund" className="text-input" type="number" min="0" step="0.01" inputMode="decimal" placeholder="Ej. 500.00" value={fund} onChange={e=>setFund(e.target.value)}/><p className="field-hint">Es el dinero para cambio al iniciar, sin incluir ventas. Si comenzaste sin fondo, escribe 0.{missing?' El turno sigue abierto y sus ventas se conservan.':''}</p><button className="btn-primary" disabled={!loaded||busy||fund.trim()===''||!Number.isFinite(Number(fund))||Number(fund)<0} onClick={save}>{busy?'Guardando…':data?'Registrar fondo inicial':'Abrir turno con este fondo'}</button></>}
   {unknown&&<p role="alert">Hay {data.pagos_sin_desglose} pago(s) mixto(s) antiguos sin desglose. El efectivo esperado queda pendiente para no sumar un monto incorrecto.</p>}
   {data&&<><p className="field-hint">Efectivo esperado = fondo inicial + ventas cobradas en efectivo. No incluye retiros ni gastos pagados fuera del sistema.</p><button className="btn-ghost" disabled={busy} onClick={closeShift}>Cerrar turno</button></>}

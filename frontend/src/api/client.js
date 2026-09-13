@@ -111,6 +111,15 @@ function adaptProducto(p) {
     coffeePrices: p.recargos_cafe || {},
     extras: !!p.permite_extras,
     activo: p.activo !== false,
+    estacion: p.estacion || 'barra', // barra | parrilla | caja (sin comanda)
+    // Snack de reventa: insumo del inventario que se descuenta por venta y sus existencias.
+    reventa: p.reventa ? {
+      insumoId: p.reventa.insumoId, nombre: p.reventa.nombre, cantidad: Number(p.reventa.cantidad || 1), unidad: p.reventa.unidad,
+      stock: Number(p.reventa.stock || 0), stockMinimo: Number(p.reventa.stockMinimo || 0),
+      stockMaximo: p.reventa.stockMaximo === null || p.reventa.stockMaximo === undefined ? null : Number(p.reventa.stockMaximo),
+      costoUnitario: Number(p.reventa.costoUnitario || 0), aPedir: Number(p.reventa.aPedir || 0),
+    } : null,
+    agotado: !!p.reventa && Number(p.reventa.stock || 0) < Number(p.reventa.cantidad || 1),
   };
 }
 
@@ -246,7 +255,7 @@ export function crearAprobacionDescuento({ pin, descuentoPorcentaje }) {
   return request('/pedidos/aprobaciones-descuento', { method: 'POST', body: { pin, descuentoPorcentaje } });
 }
 
-export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente }) {
+export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente, destino, mesa }) {
   return request('/pedidos', {
     method: 'POST',
     useClienteToken: !!comoCliente,
@@ -257,15 +266,25 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
       autorizacionDescuento,
       clienteTelefono,
       horaRecogida,
+      destino, // Caja: 'mesa' | 'barra' | 'llevar' (obligatorio); cliente: no aplica
+      mesa,
     },
   });
 }
 
 export function getPedidos(fecha) { return request(fecha ? `/pedidos?fecha=${encodeURIComponent(fecha)}` : '/pedidos'); }
 export function getPedido(id) { return request(`/pedidos/${id}`); }
-export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo } = {}) {
-  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo } });
+export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo, motivoCortesia } = {}) {
+  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo, motivoCortesia } });
 }
+
+/* ============================================================
+   CORTESÍAS (cupo mensual por sucursal y autorizaciones)
+   ============================================================ */
+export function getPlanCortesias() { return request('/cortesias/plan'); } // { limite, usadas, restantes, pendientes, mes, mesNombre }
+export function getCortesias(estado = '') { return request(estado ? `/cortesias?estado=${encodeURIComponent(estado)}` : '/cortesias'); } // admin
+export function autorizarCortesia(id, nota) { return request(`/cortesias/${id}/autorizar`, { method: 'PATCH', body: { nota } }); }
+export function rechazarCortesia(id, nota) { return request(`/cortesias/${id}/rechazar`, { method: 'PATCH', body: { nota } }); }
 export function cancelarPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH' }); }
 export function cancelarMiPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', useClienteToken: true }); }
 export function noShowPedido(id) { return request(`/pedidos/${id}/no-show`, { method: 'PATCH' }); }
@@ -308,18 +327,33 @@ export function crearProveedor(body) { return request('/proveedores', { method: 
 export function actualizarProveedor(id, body) { return request(`/proveedores/${id}`, { method: 'PATCH', body }); }
 export function eliminarProveedor(id) { return request(`/proveedores/${id}`, { method: 'DELETE' }); }
 
+export function crearCategoriaMateria(nombre) { return request('/materias-primas/categorias', { method: 'POST', body: { nombre } }); }
+export function actualizarCategoriaMateria(id, nombre) { return request(`/materias-primas/categorias/${id}`, { method: 'PATCH', body: { nombre } }); }
+export function eliminarCategoriaMateria(id) { return request(`/materias-primas/categorias/${id}`, { method: 'DELETE' }); }
+export function crearCategoriaProducto(nombre) { return request('/productos/categorias', { method: 'POST', body: { nombre } }); }
+export function actualizarCategoriaProducto(id, nombre) { return request(`/productos/categorias/${id}`, { method: 'PATCH', body: { nombre } }); }
+export function eliminarCategoriaProducto(id) { return request(`/productos/categorias/${id}`, { method: 'DELETE' }); }
+export function ordenarCategoriasProducto(ids) { return request('/productos/categorias/orden', { method: 'PUT', body: { ids } }); }
 export async function getMateriasCategorias() {
   const rows = await request('/materias-primas/categorias');
   rows.forEach(c => { matCatId[c.nombre] = c.id; });
   return rows;
+}
+function presentacionToApi(p) {
+  if (p === undefined) return undefined;
+  if (!p) return null;
+  return { nombre: p.nombre, cantidad: p.cantidad, unidad: normalizeUnidadMedida(p.unidad) };
 }
 export function crearMateria(m) {
   return request('/materias-primas', {
     method: 'POST',
     body: {
       nombre: m.nombre, categoriaId: matCatId[m.categoria], unidad: normalizeUnidadMedida(m.unidad),
-      stockActual: m.stockActual, stockMinimo: m.stockMinimo, costoUnitario: m.costoUnitario,
+      stockActual: m.stockActual, stockMinimo: m.stockMinimo, stockMaximo: m.stockMaximo, costoUnitario: m.costoUnitario,
       proveedorId: m.proveedorId || null,
+      presentacion: presentacionToApi(m.presentacion),
+      // Primera compra: { paquetes | cantidadComprada + unidad, costoTotal } → el servidor deriva el costo unitario.
+      primeraCompra: m.primeraCompra ? { ...m.primeraCompra, unidad: m.primeraCompra.unidad ? normalizeUnidadMedida(m.primeraCompra.unidad) : undefined } : undefined,
     },
   });
 }
@@ -330,6 +364,8 @@ export function actualizarMateria(id, m) {
   if (m.unidad !== undefined) body.unidad = normalizeUnidadMedida(m.unidad);
   if (m.stockActual !== undefined) body.stockActual = m.stockActual;
   if (m.stockMinimo !== undefined) body.stockMinimo = m.stockMinimo;
+  if (m.stockMaximo !== undefined) body.stockMaximo = m.stockMaximo;
+  if (m.presentacion !== undefined) body.presentacion = presentacionToApi(m.presentacion);
   if (m.costoUnitario !== undefined) body.costoUnitario = m.costoUnitario;
   if (m.proveedorId !== undefined) body.proveedorId = m.proveedorId;
   if (m.activo !== undefined) body.activo = m.activo;
@@ -338,10 +374,11 @@ export function actualizarMateria(id, m) {
 export function eliminarMateria(id, desvincular = false) { return request(`/materias-primas/${id}${desvincular ? '?desvincular=true' : ''}`, { method: 'DELETE' }); }
 
 // Compras (lotes) y ajustes de conteo físico — el kardex del inventario.
-export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad }) {
+export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad, paquetes }) {
   return request(`/materias-primas/${materiaId}/lotes`, {
     method: 'POST',
-    body: { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad },
+    // Con `paquetes`, el servidor usa la presentación del insumo (N paquetes × contenido).
+    body: paquetes ? { paquetes, costoTotal, proveedorId, numeroLote, fechaCaducidad } : { cantidadComprada, unidad: unidad ? normalizeUnidadMedida(unidad) : undefined, costoTotal, proveedorId, numeroLote, fechaCaducidad },
   });
 }
 export function ajustarStock(materiaId, { nuevaCantidad, motivo, stockEsperado, fechaCaducidad }) {
@@ -360,6 +397,7 @@ export function crearProducto(p) {
       nombre: p.name, categoriaId: prodCatId[p.cat], tipo: p.tipo, icono: p.icon, precioBase: p.price,
       permiteTamanos: p.sizes, permiteLeche: p.leche, permiteTipoCafe: p.coffeeType, permiteExtras: p.extras, esFrio: p.frio,
       imagen: p.imagen, margenPorcentaje: p.margenPorcentaje, descripcion: p.descripcion, precioPromocional: p.precioPromocional,
+      estacion: p.estacion, reventa: p.reventa,
     },
   });
 }
@@ -376,6 +414,8 @@ export function actualizarProducto(id, p) {
   if (p.coffeeType !== undefined) body.permiteTipoCafe = p.coffeeType;
   if (p.extras !== undefined) body.permiteExtras = p.extras;
   if (p.frio !== undefined) body.esFrio = p.frio;
+  if (p.estacion !== undefined) body.estacion = p.estacion;
+  if (p.reventa !== undefined) body.reventa = p.reventa; // { insumoId, cantidad } | null
   if (p.activo !== undefined) body.activo = p.activo;
   if (p.margenPorcentaje !== undefined) body.margenPorcentaje = p.margenPorcentaje;
   if (p.descripcion !== undefined) body.descripcion = p.descripcion;

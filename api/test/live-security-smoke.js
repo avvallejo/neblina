@@ -186,20 +186,20 @@ async function main() {
 
   const discounted = await request('/pedidos', {
     token: cashierToken,
-    body: { items: [{ productoId, cantidad: 1 }], descuentoPorcentaje: 10, autorizacionDescuento: approval.data.token },
+    body: { items: [{ productoId, cantidad: 1 }], destino: 'llevar', descuentoPorcentaje: 10, autorizacionDescuento: approval.data.token },
   });
   assert(discounted.status === 201, `pedido autorizado esperado 201, recibido ${discounted.status}`);
   createdOrders.push(discounted.data.pedido.id);
 
   const replay = await request('/pedidos', {
     token: cashierToken,
-    body: { items: [{ productoId, cantidad: 1 }], descuentoPorcentaje: 10, autorizacionDescuento: approval.data.token },
+    body: { items: [{ productoId, cantidad: 1 }], destino: 'llevar', descuentoPorcentaje: 10, autorizacionDescuento: approval.data.token },
   });
   assert(replay.status === 401, `reutilización esperada 401, recibido ${replay.status}`);
 
   const legacyPin = await request('/pedidos', {
     token: cashierToken,
-    body: { items: [{ productoId, cantidad: 1 }], descuentoPorcentaje: 10, pinAutorizacion: '5831' },
+    body: { items: [{ productoId, cantidad: 1 }], destino: 'llevar', descuentoPorcentaje: 10, pinAutorizacion: '5831' },
   });
   assert(legacyPin.status === 400, `PIN dentro del pedido esperado 400, recibido ${legacyPin.status}`);
 

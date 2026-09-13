@@ -121,6 +121,69 @@ gastos) y la venta real promedio para calibrar la estimación. Los montos que
 trae la base de desarrollo son de ejemplo: sustitúyelos por los reales antes
 de fijar precios.
 
+## Cortesías en Caja
+
+En **Configuración → Cortesías** el administrador fija cuántas cortesías al
+mes puede dar el rol cajero (cupo compartido por la sucursal; se reinicia cada
+mes). Al cobrar, junto a los montos de billetes hay un botón **Cortesía**: el
+ticket completo sale en $0, la venta se procesa y pasa a la barra como
+cualquier otra. Mientras quede cupo, la cortesía "entra en el plan"; cuando se
+agota, la Caja ve la leyenda de que esa cortesía ya no entra en su plan
+mensual y debe autorizarla un administrador — pero la venta se procesa de
+todos modos. Esas cortesías aparecen en **Admin → Autorizaciones** (con badge
+de pendientes) para aprobarlas o rechazarlas con una nota; rechazar solo la
+marca, no revierte la venta. La caja del turno muestra las cortesías dadas
+(cantidad y valor) y el cupo del mes; en **Reportes → Ventas por forma de
+pago** aparece la fila **Cortesías** con el valor regalado (no suma a ventas).
+Migración `db/26_cortesias.sql`.
+
+## Mesas, para llevar y comandas por estación
+
+En **Configuración → Mesas** se indica cuántas mesas tiene la sucursal (4 por
+defecto). En Caja, el carrito pide **a dónde va el pedido** — Mesa 1…N, Barra
+o Para llevar — y no deja cobrar hasta elegirlo; la comanda lo muestra en
+grande en cada tarjeta (los pedidos en línea aparecen como "En línea ·
+recoger"). Cada producto dice **quién lo prepara**: Barra (barista), Parrilla
+(parrillero) o "Se entrega en caja" (snacks empacados que no pasan por
+ninguna comanda y nacen entregados). Al personal de preparación se le asignan
+sus **estaciones**: solo Barra = barista, solo Parrilla = parrillero, ambas =
+ve todos los pedidos (los usuarios existentes quedan con ambas). Migración
+`db/27_mesas_y_estaciones.sql`.
+
+## Snacks comprados hechos (reventa) con existencias
+
+Al dar de alta un snack que no se prepara sino que se compra hecho, en
+**Existencias → Controlar existencias** se liga a un insumo del inventario en
+piezas (o se crea ahí mismo con existencia inicial, costo por pieza, "avísame
+cuando queden menos de" y "reabastecer hasta"). Cada venta descuenta las
+piezas; el catálogo muestra **Quedan N pzas** y, al bajar del mínimo, cuánto
+**pedir** (también en Resumen → Stock bajo). En 0 el menú lo marca
+**Agotado**: la Caja puede seguir vendiéndolo con un aviso, la app del
+cliente no. Las compras se registran en Inventario → Registrar compra y el
+costo del snack pasa a ser el costo de compra, así entra a "Costo y precio" y
+a la revisión de precios. Migración `db/28_reventa_snacks.sql`.
+
+## Alta de insumos sin calcular costos a mano
+
+Al dar de alta una materia prima ya no se captura "costo unitario": eliges en
+qué unidad la cuentas (kg, g, l, ml o pieza), opcionalmente cómo la compras
+(**presentación**: "bolsa de 900 g", "caja de 12 l", "paquete de 50 piezas")
+y registras la **primera compra** tal como llegó: N paquetes, o una cantidad
+en la unidad en que venga, y cuánto pagaste en total. El sistema convierte a
+tu unidad de control, deja esa cantidad como existencia inicial y calcula el
+costo de referencia (por ejemplo, 2 bolsas de 900 g a $340 = 1.8 kg a
+$188.89/kg). Si ya tienes existencias sin ticket, "capturar a mano" sigue
+disponible. **Registrar compra** usa la misma lógica y, con presentación,
+acepta "3 paquetes por $480". Migración `db/29_presentacion_insumos.sql`.
+
+## Categorías del menú y de insumos, editables
+
+Las categorías ya no son fijas. Al dar de alta un producto o una materia
+prima, el chip **+ Nueva** crea una categoría al momento y la deja
+seleccionada; en **Configuración → Categorías** se renombran, se reordenan
+(las del menú, que son las pestañas de Caja, app y pantalla) y se borran si
+nada las usa. Los proveedores admiten categorías libres con **+ Otra**.
+
 ## Frontend adaptable
 
 `frontend/` es una app React (Vite) con un solo código para cualquier

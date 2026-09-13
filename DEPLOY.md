@@ -71,6 +71,15 @@ datos existentes.
 Variables nuevas opcionales en `.env.prod`: `API_RATE_LIMIT_MAX` (límite
 general por minuto; si no está, la API usa su valor por defecto).
 
+Las migraciones 26-29 (cortesías, mesas y estaciones, snacks de reventa,
+presentación de compra) tampoco borran ni cambian datos existentes: agregan
+columnas con valores por defecto seguros (los baristas actuales quedan viendo
+barra y parrilla; los snacks existentes van a la parrilla hasta que el admin
+marque cuáles "se entregan en caja"). Ninguna cierra sesiones. La 26 agrega
+un valor al enum `metodo_pago`, por eso su primer `ALTER TYPE` va fuera de
+transacción (igual que la 16). `db/migrar.sh` ahora reconoce por su huella
+cualquier migración que la base ya tenga aunque no esté registrada.
+
 ---
 
 ## Parte 1 — Subir el proyecto a GitHub (la cuenta nueva)

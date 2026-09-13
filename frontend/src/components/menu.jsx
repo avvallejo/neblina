@@ -1,6 +1,7 @@
 // Piezas del menú/POS compartidas por Caja y Cliente.
 import React, { useState } from 'react';
-import { Coffee, ShoppingCart, Snowflake, Trash2, ClipboardList, AlertTriangle, Banknote, CreditCard, ArrowLeftRight, Wallet } from 'lucide-react';
+import { Coffee, ShoppingCart, Snowflake, Trash2, ClipboardList, AlertTriangle, Banknote, CreditCard, ArrowLeftRight, Wallet, Gift } from 'lucide-react';
+import * as api from '../api/client.js';
 import { CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, getProduct, defaultSize, calcUnitPrice, customizationSummary, precioDesde } from '../lib/catalog.js';
 import { money } from '../lib/helpers.js';
 import { Sheet, Stepper, EmptyState, FormError } from './ui.jsx';
@@ -20,7 +21,9 @@ export function CategoryTabs({ active, onSelect }) {
   );
 }
 
-export function ProductGrid({ activeCat, onTap }) {
+// bloquearAgotados: en la app del cliente un snack sin existencias no se puede
+// pedir; en Caja sigue vendiéndose (el inventario puede no estar al día).
+export function ProductGrid({ activeCat, onTap, bloquearAgotados = false }) {
   const list = PRODUCTS.filter(p => p.cat === activeCat && p.activo !== false);
   return (
     <div className="product-grid">
@@ -28,7 +31,8 @@ export function ProductGrid({ activeCat, onTap }) {
         <EmptyState icon={Coffee} title="Sin productos disponibles en esta categoría" />
       ) : (
         list.map(p => (
-          <button key={p.id} className="product-card" onClick={() => onTap(p)}>
+          <button key={p.id} className={`product-card ${p.agotado ? 'agotado' : ''}`} disabled={bloquearAgotados && p.agotado} onClick={() => onTap(p)}>
+            {p.agotado && <span className="agotado-tag">Agotado</span>}
             {p.frio && <span className="frio-tag"><Snowflake size={12} /></span>}
             <span className="product-icon">{p.imagen?<img src={p.imagen} alt="" style={{width:64,height:64,objectFit:'contain',borderRadius:8}}/>:p.icon}</span>
             <span className="product-name">{p.name}</span>
@@ -161,7 +165,31 @@ function DiscountSheet({ onClose, onApply, current }) {
   );
 }
 
-export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheckout, allowDiscount = true, ctaLabel, footerExtra, compact }) {
+// Destino del pedido (solo Caja): Mesa 1..N, Barra o Para llevar. Es
+// obligatorio antes de cobrar para que la comanda siempre sepa a dónde va.
+export function DestinoPicker({ mesas = 4, value, onChange }) {
+  const opciones = [
+    ...Array.from({ length: Math.max(0, Number(mesas) || 0) }, (_, i) => ({ id: `mesa-${i + 1}`, destino: 'mesa', mesa: i + 1, label: `Mesa ${i + 1}` })),
+    { id: 'barra', destino: 'barra', mesa: null, label: 'Barra' },
+    { id: 'llevar', destino: 'llevar', mesa: null, label: 'Para llevar' },
+  ];
+  const activo = value ? (value.destino === 'mesa' ? `mesa-${value.mesa}` : value.destino) : null;
+  return (
+    <div className="destino-picker">
+      <div className="option-label">¿A dónde va el pedido?</div>
+      <div className="option-row">
+        {opciones.map(o => (
+          <button key={o.id} type="button" className={`option-chip destino-chip ${activo === o.id ? 'selected' : ''}`} onClick={() => onChange({ destino: o.destino, mesa: o.mesa })}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+      {!value && <div className="field-hint">Elige mesa, barra o para llevar para poder cobrar.</div>}
+    </div>
+  );
+}
+
+export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheckout, allowDiscount = true, ctaLabel, footerExtra, compact, destino, onDestino, mesas }) {
   const [discountOpen, setDiscountOpen] = useState(false);
   const updateQty = (uid, qty) => {
     if (qty <= 0) { setCart(c => c.filter(i => i.uid !== uid)); return; }
@@ -200,6 +228,7 @@ export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheck
       </div>
 
       <div className="cart-summary">
+        {onDestino && <DestinoPicker mesas={mesas} value={destino} onChange={onDestino} />}
         {allowDiscount && (
           <button className="discount-link" onClick={() => setDiscountOpen(true)}>
             {discount ? `Descuento aplicado: ${discountPct}% — editar` : '+ Aplicar descuento (requiere autorización)'}
@@ -209,7 +238,7 @@ export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheck
         <div className="summary-row"><span>Subtotal</span><span>{money(subtotal)}</span></div>
         {discount && <div className="summary-row discount-row"><span>Descuento ({discountPct}%)</span><span>-{money(discountAmt)}</span></div>}
         <div className="summary-row total"><span>Total</span><span>{money(total)}</span></div>
-        <button className="btn-primary full" style={{ marginTop: 10 }} onClick={() => onCheckout({ subtotal, discountAmt, total })}>{ctaLabel || `Cobrar ${money(total)}`}</button>
+        <button className="btn-primary full" style={{ marginTop: 10 }} disabled={!!onDestino && !destino} onClick={() => onCheckout({ subtotal, discountAmt, total })}>{ctaLabel || `Cobrar ${money(total)}`}</button>
       </div>
 
       {allowDiscount && discountOpen && <DiscountSheet current={discount} onClose={() => setDiscountOpen(false)} onApply={onAuthorizeDiscount} />}
@@ -217,12 +246,68 @@ export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheck
   );
 }
 
-export function CheckoutView({ amounts, onConfirm, onBack }) {
+// Cortesía: el pedido completo sale en $0. Antes de confirmar, la Caja ve
+// cómo va el cupo mensual de la sucursal; si ya se agotó, la venta se procesa
+// igual pero queda pendiente de que un administrador la autorice.
+export function CortesiaSheet({ total, onClose, onConfirm }) {
+  const [plan, setPlan] = useState(null);
+  const [planError, setPlanError] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  React.useEffect(() => {
+    let alive = true;
+    api.getPlanCortesias().then(p => { if (alive) setPlan(p); }).catch(e => { if (alive) setPlanError(e.message); });
+    return () => { alive = false; };
+  }, []);
+  const agotado = plan && plan.restantes <= 0;
+  const confirmar = async () => {
+    setBusy(true); setError('');
+    try { await onConfirm(motivo.trim()); }
+    catch (e) { setError(e.message); setBusy(false); }
+  };
+  return (
+    <Sheet title="Registrar cortesía" onClose={onClose}>
+      <div className="cortesia-total">
+        <span className="footer-label">Este pedido saldrá en</span>
+        <span className="price-total big">$0.00</span>
+        <span className="field-hint">Valor a precio de menú: {money(total)}. Cuenta como una cortesía completa.</span>
+      </div>
+      {!plan && !planError && <p role="status" className="field-hint">Consultando el plan de cortesías del mes…</p>}
+      {planError && <FormError>No se pudo consultar el cupo del mes ({planError}). Puedes registrar la cortesía de todos modos: el sistema decidirá si entra en el plan.</FormError>}
+      {plan && !agotado && (
+        <div className="cortesia-plan ok">
+          <strong>Cortesías de {plan.mesNombre}: {plan.usadas} de {plan.limite} usadas.</strong>
+          <span>Esta cortesía entra en el plan mensual. {plan.restantes === 1 ? 'Es la última disponible.' : `Después de esta quedarán ${plan.restantes - 1}.`}</span>
+        </div>
+      )}
+      {plan && agotado && (
+        <div className="cortesia-plan warn" role="alert">
+          <strong><AlertTriangle size={14} /> Ya se agotaron las {plan.limite} cortesías permitidas de {plan.mesNombre}.</strong>
+          <span>Esta cortesía ya no entra en tu plan mensual: un administrador debe autorizarla. La venta se procesará de todos modos y quedará pendiente en Autorizaciones.</span>
+          {plan.pendientes > 0 && <span>Ya hay {plan.pendientes} cortesía(s) de este mes esperando autorización.</span>}
+        </div>
+      )}
+      <div className="option-group">
+        <label className="option-label" htmlFor="cortesia-motivo">Motivo (opcional)</label>
+        <input id="cortesia-motivo" className="text-input" maxLength={200} placeholder="Ej. cliente frecuente / bebida mal preparada / invitación" value={motivo} onChange={e => setMotivo(e.target.value)} />
+        <FormError>{error}</FormError>
+      </div>
+      <div className="sheet-footer">
+        <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancelar</button>
+        <button className="btn-primary" disabled={busy} onClick={confirmar}>{busy ? 'Registrando…' : agotado ? 'Registrar y pedir autorización' : 'Registrar cortesía'}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+export function CheckoutView({ amounts, onConfirm, onBack, allowCortesia = false, destinoTexto = '' }) {
   const { total } = amounts;
   const [method, setMethod] = useState('efectivo');
   const [cash, setCash] = useState('');
   const [mixCash, setMixCash] = useState('');
   const [mixCard, setMixCard] = useState('');
+  const [cortesiaOpen, setCortesiaOpen] = useState(false);
 
   const cashGiven = parseFloat(cash) || 0;
   const change = cashGiven - total;
@@ -247,6 +332,7 @@ export function CheckoutView({ amounts, onConfirm, onBack }) {
       <div className="checkout-total-card">
         <span className="footer-label" style={{ color: '#C9BCA8' }}>Total a cobrar</span>
         <span className="price-total big">{money(total)}</span>
+        {destinoTexto && <span className="checkout-destino">{destinoTexto}</span>}
       </div>
 
       <div className="option-label">Forma de pago</div>
@@ -265,6 +351,11 @@ export function CheckoutView({ amounts, onConfirm, onBack }) {
             {[total, Math.ceil(total / 50) * 50, 200, 500].filter((v, i, a) => a.indexOf(v) === i).map(v => (
               <button key={v} className="option-chip" onClick={() => setCash(String(v))}>{money(v)}</button>
             ))}
+            {allowCortesia && (
+              <button type="button" className="option-chip cortesia-chip" onClick={() => setCortesiaOpen(true)} aria-label="Registrar como cortesía">
+                <Gift size={14} /> Cortesía
+              </button>
+            )}
           </div>
           <input className="text-input" type="number" placeholder="Otro monto..." style={{ marginTop: 8 }} value={cash} onChange={e => setCash(e.target.value)} />
           <div className={`change-display ${change < 0 ? 'warn' : ''}`}>
@@ -297,6 +388,13 @@ export function CheckoutView({ amounts, onConfirm, onBack }) {
           Confirmar pago
         </button>
       </div>
+      {cortesiaOpen && (
+        <CortesiaSheet
+          total={total}
+          onClose={() => setCortesiaOpen(false)}
+          onConfirm={motivo => onConfirm({ method: 'cortesia', motivoCortesia: motivo || undefined, cashGiven: null, change: null, importeEfectivo: undefined })}
+        />
+      )}
     </div>
   );
 }

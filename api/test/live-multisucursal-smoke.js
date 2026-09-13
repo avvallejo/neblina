@@ -173,7 +173,7 @@ async function main() {
   // ---------- 2 y 6. Pedidos: folio por sede y catálogo ajeno inexistente ----------
   const pedidoA = await request('/pedidos', {
     token: tCajeroA,
-    body: { items: [{ productoId: productoA.id, cantidad: 1 }], pago: { metodoPago: 'efectivo', montoRecibido: 100 } },
+    body: { items: [{ productoId: productoA.id, cantidad: 1 }], destino: 'llevar', pago: { metodoPago: 'efectivo', montoRecibido: 100 } },
   });
   assert(pedidoA.status === 201, `pedido en A esperado 201, recibido ${pedidoA.status}: ${JSON.stringify(pedidoA.data)}`);
   state.pedidos.push(pedidoA.data.pedido.id);
@@ -181,7 +181,7 @@ async function main() {
 
   const pedidoB = await request('/pedidos', {
     token: tCajeroB,
-    body: { items: [{ productoId: state.productoB, cantidad: 1 }], pago: { metodoPago: 'efectivo', montoRecibido: 100 } },
+    body: { items: [{ productoId: state.productoB, cantidad: 1 }], destino: 'llevar', pago: { metodoPago: 'efectivo', montoRecibido: 100 } },
   });
   assert(pedidoB.status === 201, `pedido en B esperado 201, recibido ${pedidoB.status}: ${JSON.stringify(pedidoB.data)}`);
   state.pedidos.push(pedidoB.data.pedido.id);
@@ -189,7 +189,7 @@ async function main() {
 
   const pedidoCruzado = await request('/pedidos', {
     token: tCajeroA,
-    body: { items: [{ productoId: state.productoB, cantidad: 1 }] },
+    body: { items: [{ productoId: state.productoB, cantidad: 1 }], destino: 'llevar' },
   });
   assert(pedidoCruzado.status === 404, `producto de B en pedido de A esperado 404, recibido ${pedidoCruzado.status}`);
 

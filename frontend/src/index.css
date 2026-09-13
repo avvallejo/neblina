@@ -162,6 +162,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .btn-primary:active:not(:disabled) { transform: scale(.97); }
 .btn-primary:disabled { opacity: .45; cursor: default; }
 .btn-primary.small { padding: 8px 14px; min-height: 36px; font-size: 12.5px; }
+.btn-ghost.small { padding: 8px 14px; min-height: 36px; font-size: 12.5px; }
 .btn-primary.full { width: 100%; }
 .btn-secondary { background: var(--surface); border: 1.5px solid var(--brand); color: var(--brand); font-weight: 800; padding: 10px 18px; min-height: 42px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 13px; }
 .btn-secondary:hover { background: var(--brand-soft); }
@@ -677,3 +678,76 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .topbar-logout { display: none; align-items: center; gap: 6px; padding: 7px 12px; min-height: 36px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink-soft); font-size: 12.5px; font-weight: 800; flex-shrink: 0; }
 .topbar-logout:active { background: var(--bg-deep); }
 @media (max-width: 759px) { .topbar-logout { display: flex; } }
+
+/* Cortesías (Caja: chip junto a los billetes, modal y avisos; Admin: autorizaciones) */
+.option-chip.cortesia-chip { display: inline-flex; align-items: center; gap: 6px; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.option-chip.cortesia-chip:hover { background: var(--accent); color: #fff; }
+.cortesia-total { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; background: var(--ink); color: #fff; border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.cortesia-total .footer-label { color: #C9BCA8; }
+.cortesia-total .field-hint { color: #C9BCA8; margin-top: 2px; }
+.cortesia-plan { display: flex; flex-direction: column; gap: 6px; border-radius: var(--radius); padding: 13px 15px; margin: 0 0 14px; font-size: 13px; line-height: 1.45; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-soft); text-align: left; }
+.cortesia-plan strong { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+.cortesia-plan.ok { background: var(--ok-soft); border-color: rgba(62, 124, 79, 0.35); }
+.cortesia-plan.ok strong { color: var(--ok); }
+.cortesia-plan.warn { background: var(--warn-soft); border-color: rgba(166, 109, 11, 0.45); }
+.cortesia-plan.warn strong { color: var(--warn); }
+.cortesia-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; background: var(--accent-soft); color: var(--accent); }
+.cortesia-tag.pendiente { background: var(--warn-soft); color: var(--warn); }
+.cortesia-tag.rechazada { background: var(--danger-soft); color: var(--danger); }
+.cortesia-tag.autorizada { background: var(--ok-soft); color: var(--ok); }
+.autorizacion-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; align-items: start; }
+.autorizacion-card.pendiente { border-color: rgba(166, 109, 11, 0.45); box-shadow: inset 4px 0 0 var(--warn); }
+.autorizacion-card .folio { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+.autorizacion-card .meta { font-size: 12.5px; color: var(--ink-faint); margin-top: 3px; line-height: 1.45; }
+.autorizacion-card .detalle { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+.autorizacion-card .valor { font-family: var(--font-mono); font-weight: 700; font-size: 18px; text-align: right; }
+.autorizacion-card .acciones { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.autorizacion-card .acciones .text-input { flex: 1 1 220px; }
+@media (max-width: 760px) { .autorizacion-card { grid-template-columns: 1fr; } .autorizacion-card .valor { text-align: left; } }
+
+/* Mesas y estaciones: destino del pedido en Caja y comanda por estación */
+.destino-picker { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--line); }
+.destino-picker .option-row { margin-top: 6px; }
+.option-chip.destino-chip.selected { background: var(--brand); border-color: var(--brand); color: #FFF6EC; }
+.checkout-destino { display: block; width: max-content; margin: 8px auto 0; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.12); color: #FFF6EC; font-size: 12.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.ticket-destino { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 10px; font-size: 13px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; background: var(--ink); color: #FFF6EC; margin: 4px 0 10px; }
+.ticket-destino.llevar { background: var(--warn); color: #fff; }
+.ticket-destino.barra { background: var(--accent); color: #fff; }
+.ticket-destino.mesa { background: var(--brand); color: #FFF6EC; }
+.ticket-destino.app { background: var(--accent-soft); color: var(--accent); }
+.tag-estacion { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); }
+.tag-estacion.parrilla { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.estacion-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-faint); white-space: nowrap; }
+.estacion-tag.parrilla { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.estacion-tag.caja { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+
+/* Snacks de reventa: existencias */
+.existencias-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); white-space: nowrap; }
+.existencias-tag.bajo { background: var(--warn-soft); color: var(--warn); }
+.existencias-tag.agotado { background: var(--danger-soft); color: var(--danger); }
+.product-card.agotado { opacity: .72; }
+.product-card.agotado:disabled { cursor: not-allowed; }
+.agotado-tag { position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--danger); color: #fff; }
+.reventa-block { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.reventa-stock { min-height: 44px; display: flex; align-items: center; font-weight: 700; font-size: 13.5px; color: var(--ink-soft); }
+.stock-pedir { color: var(--brand); }
+
+/* Alta de insumo: presentación y primera compra */
+.presentacion-row { display: grid; grid-template-columns: minmax(110px, 1fr) auto minmax(90px, 1fr) minmax(80px, .8fr); gap: 8px; align-items: center; margin-top: 8px; }
+.presentacion-row.compact { grid-template-columns: 1fr minmax(80px, .6fr); margin-top: 0; }
+.presentacion-de { font-size: 13px; color: var(--ink-faint); font-weight: 700; text-align: center; }
+.compra-block { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.compra-resultado { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; background: var(--bg-deep); color: var(--ink-soft); }
+.compra-resultado.ok { background: var(--ok-soft); color: var(--ink); }
+@media (max-width: 480px) { .presentacion-row { grid-template-columns: 1fr 1fr; } .presentacion-de { display: none; } }
+
+/* Categorías editables */
+.option-chip.chip-nueva { border-style: dashed; color: var(--brand); }
+.categoria-nueva { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.categoria-nueva .text-input { flex: 1 1 200px; }
+.categorias-editor { display: grid; gap: 18px; margin-top: 8px; }
+.categoria-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-bottom: 6px; }
+.categoria-fila .text-input { flex: 1 1 160px; min-height: 36px; }
+.categoria-nombre { flex: 1 1 160px; font-weight: 700; font-size: 13.5px; }
+.categoria-uso { color: var(--ink-faint); font-weight: 600; font-size: 12px; white-space: nowrap; }
+.categoria-acciones { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-left: auto; }

@@ -21,7 +21,9 @@ WITH dia AS (
 SELECT l.fecha::text,
   COUNT(p.id) FILTER (WHERE NOT p.cancelado) AS pedidos,
   COALESCE(SUM(p.total) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show), 0) AS ventas,
-  COALESCE(AVG(p.total) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show), 0) AS ticket_promedio,
+  COALESCE(AVG(p.total) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show AND p.metodo_pago IS DISTINCT FROM 'cortesia'), 0) AS ticket_promedio,
+  COUNT(p.id) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show AND p.metodo_pago = 'cortesia') AS cortesias,
+  COALESCE(SUM(p.subtotal) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show AND p.metodo_pago = 'cortesia'), 0) AS valor_cortesias,
   (SELECT COUNT(*) FROM mermas m WHERE m.sucursal_id = $1
     AND m.creado_en >= l.inicio AND m.creado_en < l.fin) AS mermas
 FROM limites l

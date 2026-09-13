@@ -4,6 +4,7 @@ const { query } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal, UUID_RE } = require('../middleware/auth');
 const { assertStaffPin } = require('../security/policies');
+const { normalizarEstacionesUsuario } = require('../services/stations');
 
 const router = express.Router();
 
@@ -23,11 +24,11 @@ router.get('/', asyncHandler(async (req, res) => {
   // el admin de sede solo ve el personal de su sede.
   const { rows } = esGeneral(req)
     ? await query(
-      'SELECT id, nombre, rol, activo, sucursal_id, creado_en FROM usuarios WHERE sucursal_id = $1 OR sucursal_id IS NULL ORDER BY creado_en',
+      'SELECT id, nombre, rol, activo, sucursal_id, creado_en, estaciones FROM usuarios WHERE sucursal_id = $1 OR sucursal_id IS NULL ORDER BY creado_en',
       [req.sucursalId]
     )
     : await query(
-      'SELECT id, nombre, rol, activo, sucursal_id, creado_en FROM usuarios WHERE sucursal_id = $1 ORDER BY creado_en',
+      'SELECT id, nombre, rol, activo, sucursal_id, creado_en, estaciones FROM usuarios WHERE sucursal_id = $1 ORDER BY creado_en',
       [req.sucursalId]
     );
   res.json(rows);
@@ -38,6 +39,9 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!nombre?.trim()) throw new ApiError(400, 'Ingresa un nombre.');
   if (!['admin', 'cajero', 'barista', 'mostrador'].includes(rol)) throw new ApiError(400, 'Rol inválido.');
   assertStaffPin(pin);
+  // Estaciones de la comanda (barista/mostrador): {barra} = barista,
+  // {parrilla} = parrillero, ambas = ve todos los pedidos. Sin dato: ambas.
+  const estaciones = normalizarEstacionesUsuario(req.body.estaciones) || ['barra', 'parrilla'];
 
   let sucursalDestino = req.sucursalId;
   if (esAdminGeneral === true) {
@@ -48,8 +52,8 @@ router.post('/', asyncHandler(async (req, res) => {
 
   const hash = await bcrypt.hash(pin, 10);
   const { rows } = await query(
-    'INSERT INTO usuarios (nombre, rol, pin_hash, sucursal_id) VALUES ($1,$2,$3,$4) RETURNING id, nombre, rol, activo, sucursal_id, creado_en',
-    [nombre.trim(), rol, hash, sucursalDestino]
+    'INSERT INTO usuarios (nombre, rol, pin_hash, sucursal_id, estaciones) VALUES ($1,$2,$3,$4,$5) RETURNING id, nombre, rol, activo, sucursal_id, creado_en, estaciones',
+    [nombre.trim(), rol, hash, sucursalDestino, estaciones]
   );
   res.status(201).json(rows[0]);
 }));
@@ -97,6 +101,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     }
   }
   if (activo !== undefined) { sets.push(`activo = $${i++}`); values.push(!!activo); }
+  const estaciones = normalizarEstacionesUsuario(req.body.estaciones);
+  if (estaciones !== undefined) { sets.push(`estaciones = $${i++}`); values.push(estaciones); }
   if (pin !== undefined) {
     assertStaffPin(pin);
     sets.push(`pin_hash = $${i++}`); values.push(await bcrypt.hash(pin, 10));
@@ -108,7 +114,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
   values.push(req.params.id);
   const { rows } = await query(
-    `UPDATE usuarios SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, nombre, rol, activo, sucursal_id`,
+    `UPDATE usuarios SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, nombre, rol, activo, sucursal_id, estaciones`,
     values
   );
   if (rows.length === 0) throw new ApiError(404, 'Usuario no encontrado.');

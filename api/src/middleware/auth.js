@@ -33,7 +33,7 @@ function createRequireAuth({ verifyToken = jwt.verify, queryFn = query } = {}) {
     }
     if (decoded.tipo !== 'staff' || !decoded.id) return next(new ApiError(401, 'Tipo de sesión inválido.'));
 
-    return queryFn('SELECT id, nombre, rol, activo, token_version, sucursal_id FROM usuarios WHERE id = $1', [decoded.id])
+    return queryFn('SELECT id, nombre, rol, activo, token_version, sucursal_id, estaciones FROM usuarios WHERE id = $1', [decoded.id])
       .then(result => {
         const current = result.rows[0];
         if (!current?.activo || Number(decoded.ver) !== Number(current.token_version)) {
@@ -49,6 +49,8 @@ function createRequireAuth({ verifyToken = jwt.verify, queryFn = query } = {}) {
           rol: current.rol,
           ver: current.token_version,
           sucursalId: current.sucursal_id || null,
+          // Comanda que ve (barista/mostrador): barra, parrilla o ambas.
+          estaciones: Array.isArray(current.estaciones) && current.estaciones.length ? current.estaciones : ['barra', 'parrilla'],
         };
         next();
       })

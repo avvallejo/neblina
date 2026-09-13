@@ -7,8 +7,11 @@ const { assertPaymentAllowed, normalizeDiscount, assertDiscountRole } = require(
 const { createDiscountApproval, consumeDiscountApproval } = require('../services/discountApprovals');
 const { validateDate } = require('../services/dailySales');
 const { prepareOrderLines } = require('../services/orderValidation');
+const { resolverCortesia, respuestaCortesia } = require('../services/courtesies');
+const { resolverDestino, entregarItemsDeCaja } = require('../services/stations');
 
 const {cashPart}=require('../services/cashDrawer');
+const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'mixto', 'cortesia'];
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // personal y cliente operan pedidos, siempre dentro de SU sede
 
@@ -34,15 +37,20 @@ router.post('/aprobaciones-descuento', requireRole('cajero', 'admin'), discountA
 // body: { items: [{ productoId, tamanoId?, lecheId?, cafeId?, extraIds?, cantidad?, notas?, esRegalo? }],
 //         horaRecogida?, descuentoPorcentaje?, autorizacionDescuento?, pago?: { metodoPago, montoRecibido } }
 router.post('/', asyncHandler(async (req, res) => {
-  const { items, horaRecogida, descuentoPorcentaje, autorizacionDescuento, pinAutorizacion, pago, clienteTelefono } = req.body;
+  const { items, horaRecogida, descuentoPorcentaje, autorizacionDescuento, pinAutorizacion, pago, clienteTelefono, destino, mesa } = req.body;
   if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, 'El pedido necesita al menos un producto.');
   if (pinAutorizacion !== undefined) throw new ApiError(400, 'Usa una autorización de descuento de un solo uso.');
 
   const esStaff = req.auth.tipo === 'staff';
   const origen = esStaff ? 'mostrador' : 'app';
   assertPaymentAllowed(req.auth, pago);
+  if (pago && !METODOS_PAGO.includes(pago.metodoPago)) throw new ApiError(400, 'Método de pago inválido.');
+  // Cortesía: el pedido completo sale en $0. No combina con descuento (ya no
+  // hay nada que descontar) ni con una recompensa de fidelidad (ya es gratis).
+  const esCortesia = !!pago && pago.metodoPago === 'cortesia';
   const descuentoFinal = normalizeDiscount(descuentoPorcentaje);
   if (descuentoFinal) assertDiscountRole(req.auth);
+  if (esCortesia && descuentoFinal) throw new ApiError(400, 'Una cortesía deja el pedido en $0: no lleva descuento.');
 
   const resultado = await withTransaction(async client => {
     let clienteId = req.auth.tipo === 'cliente' ? req.auth.id : null;
@@ -51,8 +59,12 @@ router.post('/', asyncHandler(async (req, res) => {
       if (c.rows.length > 0) clienteId = c.rows[0].id;
     }
 
+    // Destino (mesa / barra / para llevar): obligatorio en ventas de mostrador;
+    // el pedido en línea no lo lleva (el cliente pasa a recoger).
+    const dest = await resolverDestino(client.query.bind(client), req.sucursalId, { destino, mesa }, { obligatorio: esStaff });
     const { lines: lineas, isRewardOrder: esRegaloPedido } = await prepareOrderLines(client, items, clienteId, req.sucursalId);
     if (esRegaloPedido && descuentoFinal) throw new ApiError(400, 'No se puede aplicar descuento a una recompensa.');
+    if (esRegaloPedido && esCortesia) throw new ApiError(400, 'Una recompensa de fidelidad ya es gratis; no se registra como cortesía.');
 
     let autorizadoPor = null;
     if (descuentoFinal) {
@@ -66,19 +78,23 @@ router.post('/', asyncHandler(async (req, res) => {
     }
 
     const subtotal = lineas.reduce((sum, line) => sum + line.precioUnitario * line.cantidad, 0);
-    const total = Math.round((subtotal * (1 - descuentoFinal / 100)) * 100) / 100;
+    const cortesia = esCortesia ? await resolverCortesia(client, { auth: req.auth, sucursalId: req.sucursalId, motivo: pago.motivoCortesia }) : null;
+    const total = esCortesia ? 0 : Math.round((subtotal * (1 - descuentoFinal / 100)) * 100) / 100;
     const cobradoInicial = !!pago;
     const pedidoRes = await client.query(
       `INSERT INTO pedidos (turno_id, origen, cliente_id, cajero_id, hora_recogida, subtotal,
           descuento_porcentaje, descuento_autorizado_por, total, metodo_pago, monto_recibido, cambio,
-          cobrado, es_regalo_fidelidad, sucursal_id, importe_efectivo)
-       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          cobrado, es_regalo_fidelidad, sucursal_id, importe_efectivo,
+          cortesia_estado, cortesia_motivo, cortesia_resuelta_por, cortesia_resuelta_en, destino, mesa_numero)
+       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        RETURNING *`,
       [origen, clienteId, esStaff && ['cajero', 'mostrador', 'admin'].includes(req.auth.rol) ? req.auth.id : null, horaRecogida || null, subtotal,
         descuentoFinal, autorizadoPor, total,
-        cobradoInicial ? pago.metodoPago : null, cobradoInicial ? pago.montoRecibido : null,
-        cobradoInicial && pago.montoRecibido ? Math.round((pago.montoRecibido - total) * 100) / 100 : null,
-        cobradoInicial, esRegaloPedido, req.sucursalId, cobradoInicial?cashPart(pago.metodoPago,total,pago.importeEfectivo):null]
+        cobradoInicial ? pago.metodoPago : null, cobradoInicial && !esCortesia ? pago.montoRecibido : null,
+        cobradoInicial && !esCortesia && pago.montoRecibido ? Math.round((pago.montoRecibido - total) * 100) / 100 : null,
+        cobradoInicial, esRegaloPedido, req.sucursalId, cobradoInicial?cashPart(pago.metodoPago,total,pago.importeEfectivo):null,
+        cortesia ? cortesia.estado : null, cortesia ? cortesia.motivo : null, cortesia ? cortesia.resueltaPor : null, cortesia ? cortesia.resueltaEn : null,
+        dest.destino, dest.mesaNumero]
     );
     const pedido = pedidoRes.rows[0];
 
@@ -97,7 +113,9 @@ router.post('/', asyncHandler(async (req, res) => {
       }
       itemsCreados.push(itemCreado);
     }
-    return { pedido, items: itemsCreados };
+    // Lo que se entrega en caja (snacks empacados) no pasa por la comanda.
+    await entregarItemsDeCaja(client, pedido.id);
+    return { pedido, items: itemsCreados, cortesia: cortesia ? respuestaCortesia(cortesia) : undefined };
   });
 
   res.status(201).json(resultado);
@@ -138,19 +156,32 @@ router.get('/:id', asyncHandler(async (req, res) => {
 // Aquí — y solo aquí — el trigger de la base de datos acredita el punto de
 // fidelidad, nunca al crear el pedido.
 router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
-  const { metodoPago, montoRecibido, importeEfectivo } = req.body;
-  const actual = await query('SELECT total, cobrado FROM pedidos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.sucursalId]);
-  if (actual.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
-  if (actual.rows[0].cobrado) throw new ApiError(409, 'Este pedido ya estaba cobrado.');
+  const { metodoPago, montoRecibido, importeEfectivo, motivoCortesia } = req.body;
+  const metodo = metodoPago || 'efectivo';
+  if (!METODOS_PAGO.includes(metodo)) throw new ApiError(400, 'Método de pago inválido.');
+  const resultado = await withTransaction(async client => {
+    const actual = await client.query('SELECT total, cobrado, es_regalo_fidelidad FROM pedidos WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
+    if (actual.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
+    if (actual.rows[0].cobrado) throw new ApiError(409, 'Este pedido ya estaba cobrado.');
 
-  const total = Number(actual.rows[0].total);
-  const cambio = total > 0 && montoRecibido !== undefined ? Math.round((montoRecibido - total) * 100) / 100 : null;
-  const { rows } = await query(
-    `UPDATE pedidos SET cobrado = true, metodo_pago = $1, monto_recibido = $2, cambio = $3, importe_efectivo=$6 WHERE id = $4 AND sucursal_id = $5 AND NOT cobrado RETURNING *`,
-    [metodoPago || 'efectivo', montoRecibido || null, cambio, req.params.id, req.sucursalId,cashPart(metodoPago||'efectivo',total,importeEfectivo)]
-  );
-  if(!rows.length) throw new ApiError(409,'Este pedido ya estaba cobrado.');
-  res.json(rows[0]);
+    // Cortesía sobre un pedido en línea: el total pasa a $0 (el subtotal
+    // conserva el valor de lo entregado) y aplica el mismo cupo mensual.
+    const esCortesia = metodo === 'cortesia';
+    if (esCortesia && actual.rows[0].es_regalo_fidelidad) throw new ApiError(400, 'Una recompensa de fidelidad ya es gratis; no se registra como cortesía.');
+    const cortesia = esCortesia ? await resolverCortesia(client, { auth: req.auth, sucursalId: req.sucursalId, motivo: motivoCortesia }) : null;
+    const total = esCortesia ? 0 : Number(actual.rows[0].total);
+    const cambio = total > 0 && montoRecibido !== undefined ? Math.round((montoRecibido - total) * 100) / 100 : null;
+    const { rows } = await client.query(
+      `UPDATE pedidos SET cobrado = true, metodo_pago = $1, monto_recibido = $2, cambio = $3, importe_efectivo = $6,
+          total = $7, cortesia_estado = $8, cortesia_motivo = $9, cortesia_resuelta_por = $10, cortesia_resuelta_en = $11
+       WHERE id = $4 AND sucursal_id = $5 AND NOT cobrado RETURNING *`,
+      [metodo, esCortesia ? null : (montoRecibido || null), cambio, req.params.id, req.sucursalId, cashPart(metodo, total, importeEfectivo),
+        total, cortesia ? cortesia.estado : null, cortesia ? cortesia.motivo : null, cortesia ? cortesia.resueltaPor : null, cortesia ? cortesia.resueltaEn : null]
+    );
+    if (!rows.length) throw new ApiError(409, 'Este pedido ya estaba cobrado.');
+    return { ...rows[0], cortesia: cortesia ? respuestaCortesia(cortesia) : undefined };
+  });
+  res.json(resultado);
 }));
 
 // Cancelar un pedido. Lo permite el CLIENTE (solo el suyo), el BARISTA, la CAJA

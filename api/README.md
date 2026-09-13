@@ -100,6 +100,9 @@ configuración — pertenece a UNA sucursal. Reglas:
 | `GET /api/turnos/estado?sucursal=<id>` | público | El cliente ve si SU sede está abierta |
 | `POST /api/pedidos` | staff o cliente | Levantar un pedido (precio se calcula en el servidor) |
 | `PATCH /api/pedidos/:id/cobrar` | cajero/admin | Confirma el cobro — **aquí** se acredita fidelidad |
+| `GET /api/cortesias/plan` | cajero/admin | Cupo de cortesías del mes de la sede: límite, usadas, restantes, pendientes |
+| `GET /api/pedido-items/cola[?estacion=]` | barista/admin | Comanda filtrada por las estaciones del usuario (barra / parrilla); trae destino y mesa |
+| `GET /api/cortesias?estado=pendiente` · `PATCH /api/cortesias/:id/{autorizar,rechazar}` | admin | Autorizaciones de cortesías fuera del plan (nota opcional) |
 | `PATCH /api/pedidos/:id/no-show` | cajero/admin | Penaliza fidelidad por no recogido |
 | `GET /api/pedido-items/cola` | barista/admin | Cola de preparación, ordenada por urgencia |
 | `PATCH /api/pedido-items/:id/terminar` | barista/admin | Descuenta inventario automáticamente (trigger) |
@@ -108,6 +111,8 @@ configuración — pertenece a UNA sucursal. Reglas:
 | `POST /api/sync/batch` | staff o cliente | Sincroniza una cola de acciones hechas sin internet |
 | `PUT /api/recetas/:productoId` | admin | Editar pasos/molienda/tiempo/temperatura |
 | `GET /api/productos/:id/precio-sugerido` | admin | Costo directo + indirecto, margen aplicable y redondeo |
+| `POST/PATCH/DELETE /api/productos/categorias[/:id]` · `PUT /api/productos/categorias/orden` | admin | Categorías del menú por sede (borrar solo sin productos) |
+| `POST/PATCH/DELETE /api/materias-primas/categorias[/:id]` | admin | Categorías de insumos por sede (borrar solo sin insumos) |
 | `GET /api/productos/precios-por-revisar` | admin | Productos cuyo precio de menú ya no cuadra con su costo + margen |
 | `GET /api/promociones/punto-equilibrio` | admin | Unidades/mes y /día para no perder dinero |
 | `GET /api/reportes/*` | admin | Reportes de su sede |
@@ -229,6 +234,61 @@ POST /api/pedidos/aprobaciones-descuento
 El `token` devuelto dura cinco minutos y el pedido lo manda como
 `autorizacionDescuento`. Está ligado al cajero, porcentaje y primer uso. Cinco
 PIN fallidos bloquean nuevas pruebas durante una hora.
+
+### Cortesías
+
+Una cortesía es un pedido completo entregado sin cobrar. Se registra en el
+mismo cobro: `POST /api/pedidos` con `pago: { metodoPago: 'cortesia',
+motivoCortesia? }` o `PATCH /api/pedidos/:id/cobrar` con `metodoPago:
+'cortesia'`. El servidor deja `total = 0` (el `subtotal` conserva el valor a
+precio de menú), no admite descuento ni recompensa de fidelidad combinados, y
+decide el estado con el cupo mensual de la sede (`PUT /api/config
+{ cortesiasMesCajero }`, compartido por todos los cajeros, reinicia cada mes
+en hora de Ciudad de México):
+
+* queda cupo → `dentro_plan`;
+* cupo agotado → **la venta se procesa igual** pero queda `pendiente`; la
+  respuesta trae `cortesia.leyenda` para la Caja y el pedido aparece en
+  `GET /api/cortesias?estado=pendiente` hasta que un admin lo autorice o
+  rechace (rechazar solo lo marca: no revierte la venta);
+* un admin cobrando en Caja → `autorizada` por él mismo, sin consumir cupo.
+
+Un bloqueo de aviso por sucursal (`pg_advisory_xact_lock`) evita que dos
+cajas consuman el último lugar del cupo al mismo tiempo. `test/live-courtesies.js`
+(`npm run test:cortesias:live`, con `NODE_ENV=development`, se ejecuta desde
+la raíz de la API como los demás `live-*`) cubre el flujo completo con rollback.
+
+### Mesas y estaciones
+
+`POST /api/pedidos` desde Caja exige `destino` (`mesa` + `mesa: N`, `barra` o
+`llevar`); N se valida contra `PUT /api/config { mesas }`. Los pedidos de
+clientes no lo llevan. Cada producto tiene `estacion` (`barra` | `parrilla` |
+`caja`; `POST/PATCH /api/productos`): los ítems de `caja` se marcan
+terminados al crear el pedido (`services/stations.js`), también en
+`/api/sync/batch`. `usuarios.estaciones` (`POST/PATCH /api/usuarios`, viaja
+en `/auth/login` y `/auth/yo`) decide qué ve cada quien en `/pedido-items/cola`.
+`test/live-stations.js` (`npm run test:estaciones:live`) cubre el módulo.
+
+### Snacks de reventa
+
+`POST/PATCH /api/productos` acepta `reventa: { insumoId, cantidad }` (o
+`null` para quitar el control) solo en snacks: se guarda como insumo fijo del
+producto (`receta_insumos_fijos`), así que la venta lo descuenta con el mismo
+trigger de inventario y `fn_costo_teorico_producto` devuelve el costo de
+compra. `GET /api/productos` trae `reventa` (insumo, cantidad, stock, mínimo,
+máximo, costo y `aPedir` cuando está bajo el mínimo). `POST /api/materias-primas`
+acepta `stockMaximo` ("reabastecer hasta") y `vw_stock_bajo` expone `a_pedir`.
+`test/live-resale.js` (`npm run test:reventa:live`).
+
+### Compras de insumos y presentación
+
+`POST /api/materias-primas` acepta `presentacion: { nombre, cantidad, unidad }`
+(convertible a la unidad de control) y `primeraCompra: { paquetes | cantidadComprada + unidad, costoTotal }`;
+con `primeraCompra` el stock inicial y el costo unitario los deriva el
+servidor (`services/purchases.js`, la misma lógica de `POST /:id/lotes`, que
+ahora también acepta `paquetes`). `stockActual` + `costoUnitario` siguen
+valiendo para capturar existencias a mano. `PATCH` acepta `presentacion`
+(`null` la quita). `test/live-purchases.js` (`npm run test:compras:live`).
 
 ## Decisiones de seguridad que ya están tomadas
 

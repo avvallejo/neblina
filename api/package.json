@@ -10,7 +10,11 @@
     "test": "node --test test/*.test.js",
     "test:security:live": "node test/live-security-smoke.js",
     "bootstrap:admin": "node scripts/bootstrap-admin.js",
-    "test:multisucursal:live": "node test/live-multisucursal-smoke.js"
+    "test:multisucursal:live": "node test/live-multisucursal-smoke.js",
+    "test:cortesias:live": "node test/live-courtesies.js",
+    "test:estaciones:live": "node test/live-stations.js",
+    "test:reventa:live": "node test/live-resale.js",
+    "test:compras:live": "node test/live-purchases.js"
   },
   "dependencies": {
     "@aws-sdk/client-sns": "^3.1073.0",

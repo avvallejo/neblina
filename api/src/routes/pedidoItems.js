@@ -2,15 +2,24 @@ const express = require('express');
 const { query } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
+const { estacionesDe, ESTACIONES_USUARIO } = require('../services/stations');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('barista', 'admin'), resolveSucursal);
 
 // Cola del barista, ordenada por urgencia real: lo inmediato primero, lo
 // programado después según su hora de recogida (misma lógica que el prototipo).
+// Cada quien ve SOLO su estación (barista → barra, parrillero → parrilla; con
+// ambas ve todo). ?estacion=barra|parrilla acota aún más (p. ej. un admin).
 router.get('/cola', asyncHandler(async (req, res) => {
+  let estaciones = await estacionesDe(query, req.auth);
+  if (req.query.estacion) {
+    if (!ESTACIONES_USUARIO.includes(req.query.estacion)) throw new ApiError(400, 'Estación inválida.');
+    estaciones = estaciones.filter(e => e === req.query.estacion);
+  }
   const { rows } = await query(
-    `SELECT pi.*, pr.nombre AS producto_nombre, pr.icono, pr.tipo AS producto_tipo, pr.es_frio,
+    `SELECT pi.*, pr.nombre AS producto_nombre, pr.icono, pr.tipo AS producto_tipo, pr.es_frio, pr.estacion,
+            p.destino, p.mesa_numero,
             ot.codigo AS tamano_codigo, ot.etiqueta AS tamano_etiqueta,
             ol.codigo AS leche_codigo, ol.etiqueta AS leche_etiqueta,
             oc.codigo AS cafe_codigo, oc.etiqueta AS cafe_etiqueta,
@@ -26,12 +35,12 @@ router.get('/cola', asyncHandler(async (req, res) => {
      LEFT JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN pedido_item_extras pie ON pie.pedido_item_id = pi.id
      LEFT JOIN opciones_extra oe ON oe.id = pie.extra_id
-     WHERE pi.estado IN ('pendiente', 'en_preparacion') AND p.sucursal_id = $1
-     GROUP BY pi.id, pr.nombre, pr.icono, pr.tipo, pr.es_frio, ot.codigo, ot.etiqueta,
+     WHERE pi.estado IN ('pendiente', 'en_preparacion') AND p.sucursal_id = $1 AND pr.estacion = ANY($2)
+     GROUP BY pi.id, pr.nombre, pr.icono, pr.tipo, pr.es_frio, pr.estacion, p.destino, p.mesa_numero, ot.codigo, ot.etiqueta,
               ol.codigo, ol.etiqueta, oc.codigo, oc.etiqueta, p.origen, p.hora_recogida, p.creado_en, p.folio,
               c.nombre, c.apellido
-     ORDER BY COALESCE(p.hora_recogida, pi.creado_en)`,
-    [req.sucursalId]
+     ORDER BY COALESCE(p.hora_recogida, pi.creado_en), pi.pedido_id, pi.creado_en`,
+    [req.sucursalId, estaciones]
   );
   res.json(rows);
 }));

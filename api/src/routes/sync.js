@@ -3,6 +3,7 @@ const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, resolveSucursal } = require('../middleware/auth');
 const { prepareOrderLines } = require('../services/orderValidation');
+const { entregarItemsDeCaja } = require('../services/stations');
 
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // cada lote se procesa en la sede del dispositivo
@@ -126,6 +127,7 @@ async function procesarCrearPedido(op, auth, idMap, sucursalId) {
       }
       if (l.clientUuid) idMap[l.clientUuid] = itemId; // para que "actualizar_item" del mismo lote lo encuentre
     }
+    await entregarItemsDeCaja(client, pedidoId); // snacks empacados: sin comanda
     return { id: pedidoId, yaExistia: false };
   });
 }

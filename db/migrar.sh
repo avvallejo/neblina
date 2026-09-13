@@ -21,7 +21,7 @@ cd "$(dirname "$0")"
 export PGOPTIONS="-c client_min_messages=warning"  # sin NOTICE ruidosos
 
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
-PSQL=${PSQL:-"docker exec -i ${DB_CONTAINER:-cafeteria-db} psql -U postgres -d cafeteria"}
+PSQL=${PSQL:-"docker exec -i -e PGOPTIONS ${DB_CONTAINER:-cafeteria-db} psql -U postgres -d cafeteria"}
 q()   { $PSQL -X -At -v ON_ERROR_STOP=1 -c "$1"; }
 runf() { $PSQL -X -q -v ON_ERROR_STOP=1 < "$1"; }
 
@@ -36,7 +36,10 @@ if [ "$DRY" = 0 ]; then
 fi
 registrada() { [ -n "$existia" ] || [ "$DRY" = 0 ] || return 1; [ -n "$(q "SELECT 1 FROM schema_migraciones WHERE archivo = '$1'")" ]; }
 
-# ¿La base ya contiene lo que deja cada migración? (solo se consulta en la línea base)
+# ¿La base ya contiene lo que deja cada migración? Se consulta para toda
+# migración NO registrada (no solo en la línea base): una base que recibió
+# alguna migración a mano, o que nació por docker-entrypoint-initdb.d después
+# de que ya existía schema_migraciones, se registra en vez de re-aplicarse.
 ya_tiene() {
   local n=$1
   case "$n" in
@@ -49,6 +52,18 @@ ya_tiene() {
     15) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'recetas' AND column_name = 'leche_ml_por_tamano'" ;;
     16) q "SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'rol_usuario' AND e.enumlabel = 'mostrador'" ;;
     17) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'productos' AND column_name = 'descripcion'" ;;
+    # 18 y 22 solo corrigen datos (re-ejecutarlas no hace daño); se detectan por la
+    # huella de la migración que les sigue.
+    18|19) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'productos' AND column_name = 'revision_precio_aceptada'" ;;
+    20) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'opciones_cafe' AND column_name = 'precio_automatico'" ;;
+    21) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'registro_manual'" ;;
+    22|23) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'opciones_tamano' AND column_name = 'retirado'" ;;
+    24) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'turnos' AND column_name = 'fondo_inicial'" ;;
+    25) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'productos' AND column_name = 'imagen'" ;;
+    26) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'cortesia_estado'" ;;
+    27) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'usuarios' AND column_name = 'estaciones'" ;;
+    28) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'vw_stock_bajo' AND column_name = 'a_pedir'" ;;
+    29) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'materias_primas' AND column_name = 'presentacion_cantidad'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }
@@ -59,7 +74,7 @@ for f in [0-9][0-9]_*.sql; do
   if registrada "$f"; then
     continue
   fi
-  if [ "$linea_base" = 1 ] && [ -n "$(ya_tiene "$n")" ]; then
+  if [ -n "$(ya_tiene "$n")" ]; then
     [ "$DRY" = 1 ] && echo "= $f (ya estaba en la base; se registra)" || q "INSERT INTO schema_migraciones (archivo) VALUES ('$f')" >/dev/null
     registradas=$((registradas + 1))
     continue

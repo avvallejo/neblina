@@ -9,6 +9,7 @@ const {
   toBoolean,
 } = require('../utils/catalogValidation');
 
+const { normalizarPresentacion, registrarCompra } = require('../services/purchases');
 const { eliminarMateria } = require('../services/deleteMateria');
 const { ajustarStock } = require('../services/adjustStock');
 
@@ -51,6 +52,27 @@ router.get('/categorias', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
+// Categorías de insumos: las define cada sucursal (crear, renombrar, borrar
+// si ninguna materia prima la usa). El nombre es único por sede.
+router.post('/categorias', asyncHandler(async (req, res) => {
+  const nombre = cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 });
+  const { rows } = await query('INSERT INTO categorias_materia_prima (nombre, sucursal_id) VALUES ($1, $2) RETURNING *', [nombre, req.sucursalId]);
+  res.status(201).json(rows[0]);
+}));
+router.patch('/categorias/:id', asyncHandler(async (req, res) => {
+  const nombre = cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 });
+  const { rows } = await query('UPDATE categorias_materia_prima SET nombre = $1 WHERE id = $2 AND sucursal_id = $3 RETURNING *', [nombre, req.params.id, req.sucursalId]);
+  if (!rows.length) throw new ApiError(404, 'Categoría no encontrada.');
+  res.json(rows[0]);
+}));
+router.delete('/categorias/:id', asyncHandler(async (req, res) => {
+  const { rows: [uso] } = await query('SELECT COUNT(*)::int AS n FROM materias_primas WHERE categoria_id = $1', [req.params.id]);
+  if (uso.n > 0) throw new ApiError(409, `No se puede borrar: ${uso.n} insumo(s) usan esta categoría. Cámbialos de categoría primero.`);
+  const { rows } = await query('DELETE FROM categorias_materia_prima WHERE id = $1 AND sucursal_id = $2 RETURNING id', [req.params.id, req.sucursalId]);
+  if (!rows.length) throw new ApiError(404, 'Categoría no encontrada.');
+  res.json({ ok: true });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
   const {
     nombre,
@@ -75,23 +97,42 @@ router.post('/', asyncHandler(async (req, res) => {
     if (proveedorPropio.rows.length === 0) throw new ApiError(400, 'El proveedor no pertenece a esta sucursal.');
   }
 
-  const { rows } = await query(
-    `INSERT INTO materias_primas (nombre, categoria_id, unidad, stock_actual, stock_minimo, costo_unitario, proveedor_id, requiere_lote, requiere_caducidad, sucursal_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [
-      nombreLimpio,
-      categoriaId,
-      unidadNormalizada,
-      parseNumber(stockActual, 'stock actual', { min: 0 }) ?? 0,
-      parseNumber(stockMinimo, 'stock mínimo', { min: 0 }) ?? 0,
-      parseNumber(costoUnitario, 'costo unitario', { min: 0 }) ?? 0,
-      proveedorId || null,
-      toBoolean(requiereLote) ?? false,
-      toBoolean(requiereCaducidad) ?? false,
-      req.sucursalId,
-    ]
-  );
-  res.status(201).json(rows[0]);
+  // Dos formas de arrancar: `primeraCompra` { cantidad|paquetes, unidad, costoTotal }
+  // (lo normal: el costo unitario se deriva de lo que pagaste) o, si ya tienes
+  // existencias sin ticket, `stockActual` + `costoUnitario` a mano.
+  const primeraCompra = req.body.primeraCompra && typeof req.body.primeraCompra === 'object' ? req.body.primeraCompra : null;
+  const creado = await withTransaction(async client => {
+    const presentacion = await normalizarPresentacion(client, req.body.presentacion, unidadNormalizada);
+    const { rows } = await client.query(
+      `INSERT INTO materias_primas (nombre, categoria_id, unidad, stock_actual, stock_minimo, costo_unitario, proveedor_id, requiere_lote, requiere_caducidad, sucursal_id, stock_maximo,
+                                    presentacion_cantidad, presentacion_unidad, presentacion_nombre)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [
+        nombreLimpio,
+        categoriaId,
+        unidadNormalizada,
+        primeraCompra ? 0 : (parseNumber(stockActual, 'stock actual', { min: 0 }) ?? 0),
+        parseNumber(stockMinimo, 'stock mínimo', { min: 0 }) ?? 0,
+        primeraCompra ? 0 : (parseNumber(costoUnitario, 'costo unitario', { min: 0 }) ?? 0),
+        proveedorId || null,
+        toBoolean(requiereLote) ?? false,
+        toBoolean(requiereCaducidad) ?? false,
+        req.sucursalId,
+        // "Reabastecer hasta": nivel al que conviene reponer (opcional).
+        req.body.stockMaximo === undefined || req.body.stockMaximo === null || req.body.stockMaximo === '' ? null : parseNumber(req.body.stockMaximo, 'stock máximo', { min: 0 }),
+        presentacion ? presentacion.cantidad : null,
+        presentacion ? presentacion.unidad : null,
+        presentacion ? presentacion.nombre : null,
+      ]
+    );
+    if (primeraCompra) {
+      await registrarCompra(client, { materiaId: rows[0].id, sucursalId: req.sucursalId, usuarioId: req.auth.id, body: { ...primeraCompra, proveedorId: primeraCompra.proveedorId ?? proveedorId ?? null } });
+      const { rows: [actual] } = await client.query('SELECT * FROM materias_primas WHERE id = $1', [rows[0].id]);
+      return actual;
+    }
+    return rows[0];
+  });
+  res.status(201).json(creado);
 }));
 
 router.patch('/:id', asyncHandler(async (req, res) => {
@@ -139,6 +180,13 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       addValue('proveedor_id', req.body.proveedorId || null);
     }
     if (req.body.requiereLote !== undefined) addValue('requiere_lote', toBoolean(req.body.requiereLote));
+    if (req.body.presentacion !== undefined) {
+      const unidadFinal = req.body.unidad !== undefined ? normalizeUnidadMedida(req.body.unidad, 'unidad') : current.unidad;
+      const pres = await normalizarPresentacion(client, req.body.presentacion, unidadFinal);
+      addValue('presentacion_cantidad', pres ? pres.cantidad : null);
+      addValue('presentacion_unidad', pres ? pres.unidad : null);
+      addValue('presentacion_nombre', pres ? pres.nombre : null);
+    }
     if (req.body.requiereCaducidad !== undefined) addValue('requiere_caducidad', toBoolean(req.body.requiereCaducidad));
 
     if (req.body.unidad !== undefined) {
@@ -231,77 +279,10 @@ router.post('/:id/ajustar-stock', asyncHandler(async (req, res) => {
 // Registrar una compra (lote nuevo). Si el lote viene en otra unidad compatible
 // (ej. compra en kg, inventario visible en g), se conserva la unidad del lote y
 // el stock visible se recalcula convertido a la unidad de la materia prima.
+// Registrar compra: cantidad + unidad (en la que venga) o N paquetes de la
+// presentación del insumo; el costo unitario se deriva del total pagado.
 router.post('/:id/lotes', asyncHandler(async (req, res) => {
-  const { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad } = req.body;
-  const cantidad = parseNumber(cantidadComprada, 'cantidad comprada', { required: true, min: 0 });
-  if (cantidad <= 0) throw new ApiError(400, 'Indica una cantidad comprada mayor a 0.');
-  const costo = parseNumber(costoTotal, 'costo total', { required: true, min: 0 });
-
-  const result = await withTransaction(async client => {
-    const materia = await client.query('SELECT requiere_lote, unidad FROM materias_primas WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
-    if (materia.rows.length === 0) throw new ApiError(404, 'Materia prima no encontrada.');
-    const unidadLote = normalizeUnidadMedida(unidad, 'unidad del lote') || materia.rows[0].unidad;
-    await assertConvertible(client, unidadLote, materia.rows[0].unidad);
-    if (proveedorId) {
-      const proveedorPropio = await client.query('SELECT id FROM proveedores WHERE id = $1 AND sucursal_id = $2', [proveedorId, req.sucursalId]);
-      if (proveedorPropio.rows.length === 0) throw new ApiError(400, 'El proveedor no pertenece a esta sucursal.');
-    }
-
-    const { rows } = await client.query(
-      `INSERT INTO lotes (materia_prima_id, numero_lote, fecha_caducidad, cantidad_comprada, cantidad_disponible, unidad, costo_total, proveedor_id, usuario_id)
-       VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8) RETURNING *`,
-      [
-        req.params.id,
-        cleanText(numeroLote, { field: 'número de lote', max: 120 }),
-        fechaCaducidad || null,
-        cantidad,
-        unidadLote,
-        costo,
-        proveedorId || null,
-        req.auth.id,
-      ]
-    );
-
-    // El costo de ESTA compra pasa a ser el costo de referencia del insumo
-    // (convertido a su unidad). Es lo que hace que, si el proveedor subió el
-    // precio, el costo de las recetas cambie y "precios por revisar" avise.
-    const unitarioLote = costo / cantidad; // $ por unidad del lote
-    const unoConvertido = await client.query(
-      'SELECT fn_convertir_unidad(1, $1::unidad_medida, $2::unidad_medida) AS factor',
-      [materia.rows[0].unidad, unidadLote]
-    );
-    const factor = Number(unoConvertido.rows[0].factor); // unidades de lote por 1 unidad de stock
-    if (Number.isFinite(factor) && factor > 0 && cantidad > 0 && costo > 0) {
-      await client.query('UPDATE materias_primas SET costo_unitario = $1 WHERE id = $2',
-        [Math.round(unitarioLote * factor * 10000) / 10000, req.params.id]);
-    }
-
-    if (materia.rows[0].requiere_lote) {
-      await client.query(
-        `UPDATE materias_primas m
-         SET stock_actual = (
-           SELECT COALESCE(SUM(fn_convertir_unidad(l.cantidad_disponible, l.unidad, m.unidad)), 0)
-           FROM lotes l
-           WHERE l.materia_prima_id = m.id
-         )
-         WHERE m.id = $1`,
-        [req.params.id]
-      );
-    } else {
-      const convertido = await client.query(
-        'SELECT fn_convertir_unidad($1, $2::unidad_medida, $3::unidad_medida) AS cantidad',
-        [cantidad, unidadLote, materia.rows[0].unidad]
-      );
-      const cantidadStock = Number(convertido.rows[0].cantidad);
-      await client.query('UPDATE materias_primas SET stock_actual = stock_actual + $1 WHERE id = $2', [cantidadStock, req.params.id]);
-      await client.query(
-        `INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, lote_id, usuario_id) VALUES ($1,'compra',$2,$3,$4)`,
-        [req.params.id, cantidadStock, rows[0].id, req.auth.id]
-      );
-    }
-    return rows[0];
-  });
-
+  const result = await withTransaction(client => registrarCompra(client, { materiaId: req.params.id, sucursalId: req.sucursalId, usuarioId: req.auth.id, body: req.body }));
   res.status(201).json(result);
 }));
 

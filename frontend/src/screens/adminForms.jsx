@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Coffee, Plus, Trash2 } from 'lucide-react';
 import * as api from '../api/client.js';
 import {
-  CATEGORIES, PRODUCTS, ROLE_LABELS, MATERIA_CATEGORIAS, PROVEEDOR_CATEGORIAS, SIZE_OPTIONS,
+  CATEGORIES, PRODUCTS, ROLE_LABELS, MATERIA_CATEGORIAS, PROVEEDOR_CATEGORIAS, SIZE_OPTIONS, ESTACION_LABELS, ESTACION_USUARIO_LABELS,
 } from '../lib/catalog.js';
 import {
   normalizeUnidad, unidadDisplay, unidadFamilia, convertirCantidad, convertirCostoUnitario,
-  formatNumeroInput, unidadHint, unidadStep, UNIDADES, redimensionarImagen,
+  formatNumeroInput, unidadStep, UNIDADES, redimensionarImagen, money,
 } from '../lib/helpers.js';
 import { buildRecipe } from '../lib/recipes.js';
 import { Sheet, Stepper, FormError } from '../components/ui.jsx';
@@ -56,14 +56,20 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
   const [pin, setPin] = useState('');
   const [general, setGeneral] = useState(user ? user.sucursal_id === null && user.rol === 'admin' && !isNew : false);
   const [sucursalId, setSucursalId] = useState(user && user.sucursal_id ? user.sucursal_id : (sedeActivaId || ''));
+  // Comanda que ve (barista / mostrador): barra, parrilla o ambas.
+  const [estaciones, setEstaciones] = useState(user && Array.isArray(user.estaciones) && user.estaciones.length ? user.estaciones : ['barra', 'parrilla']);
   const [error, setError] = useState('');
+  const prepara = rol === 'barista' || rol === 'mostrador';
+  const toggleEstacion = e => setEstaciones(prev => (prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]));
 
   const submit = () => {
     if (!nombre.trim()) { setError('Ingresa un nombre.'); return; }
     if (isNew && !/^\d{4}$/.test(pin)) { setError('El PIN debe tener exactamente 4 dígitos.'); return; }
     if (!isNew && pin && !/^\d{4}$/.test(pin)) { setError('Si cambias el PIN, debe tener 4 dígitos.'); return; }
+    if (prepara && estaciones.length === 0) { setError('Elige al menos una estación: barra, parrilla o ambas.'); return; }
     setError('');
     const payload = { id: isNew ? undefined : user.id, nombre: nombre.trim(), rol, pin: pin || undefined };
+    if (prepara) payload.estaciones = ['barra', 'parrilla'].filter(e => estaciones.includes(e));
     if (esGeneral) {
       if (general && rol === 'admin') payload.esAdminGeneral = true;
       else if (isNew) payload.esAdminGeneral = false;
@@ -90,6 +96,20 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
         </div>
         {rol === 'mostrador' && <div className="field-hint">Para sedes donde la misma persona levanta el pedido, cobra y prepara: entra con Caja y Barra en la misma sesión y puede cambiar entre ambas con un toque.</div>}
       </div>
+      {prepara && (
+        <div className="option-group">
+          <div className="option-label">Estaciones que atiende (su comanda)</div>
+          <div className="option-row">
+            {['barra', 'parrilla'].map(e => (
+              <button key={e} type="button" className={`option-chip ${estaciones.includes(e) ? 'selected' : ''}`} onClick={() => toggleEstacion(e)}>{ESTACION_USUARIO_LABELS[e]}</button>
+            ))}
+          </div>
+          <div className="field-hint">
+            Solo Barra = barista (bebidas y frappés). Solo Parrilla = parrillero (alimentos a la plancha). Ambas = ve todos los pedidos.
+            Lo que se marca como "se entrega en caja" no pasa por ninguna comanda.
+          </div>
+        </div>
+      )}
       {esGeneral && rol === 'admin' && (
         <div className="option-group">
           <div className="option-label">Alcance del administrador</div>
@@ -129,6 +149,15 @@ export function ProveedorFormSheet({ proveedor, onClose, onSave }) {
     return proveedor.categoria ? [proveedor.categoria] : [PROVEEDOR_CATEGORIAS[0]];
   });
   const toggleCategoria = c => setCategorias(cs => (cs.includes(c) ? cs.filter(x => x !== c) : [...cs, c]));
+  // Categoría libre (fuera de la lista sugerida): se guarda tal cual en el proveedor.
+  const [otraAbierta, setOtraAbierta] = useState(false);
+  const [otra, setOtra] = useState('');
+  const agregarOtra = () => {
+    const n = otra.trim();
+    if (n.length < 2) return;
+    setCategorias(prev => (prev.includes(n) ? prev : [...prev, n]));
+    setOtra(''); setOtraAbierta(false);
+  };
   const [contacto, setContacto] = useState(proveedor ? proveedor.contacto || '' : '');
   const [telefono, setTelefono] = useState(proveedor ? proveedor.telefono || '' : '');
   const [error, setError] = useState('');
@@ -157,10 +186,18 @@ export function ProveedorFormSheet({ proveedor, onClose, onSave }) {
       <div className="option-group">
         <div className="option-label">Categorías de insumos que surte (elige una o varias)</div>
         <div className="option-row">
-          {PROVEEDOR_CATEGORIAS.map(c => (
+          {[...PROVEEDOR_CATEGORIAS, ...categorias.filter(c => !PROVEEDOR_CATEGORIAS.includes(c))].map(c => (
             <button key={c} className={`option-chip ${categorias.includes(c) ? 'selected' : ''}`} onClick={() => toggleCategoria(c)}>{c}</button>
           ))}
+          <button type="button" className={`option-chip chip-nueva ${otraAbierta ? 'selected' : ''}`} onClick={() => setOtraAbierta(v => !v)}>+ Otra</button>
         </div>
+        {otraAbierta && (
+          <div className="categoria-nueva">
+            <input className="text-input" value={otra} maxLength={40} placeholder="Ej. Panadería" autoFocus onChange={e => setOtra(e.target.value)}
+                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarOtra(); } }} />
+            <button type="button" className="btn-secondary" onClick={agregarOtra}>Agregar</button>
+          </div>
+        )}
       </div>
       <div className="option-group two-col">
         <div>
@@ -181,64 +218,191 @@ export function ProveedorFormSheet({ proveedor, onClose, onSave }) {
   );
 }
 
+// Presentación de compra ("bolsa de 900 g", "caja de 12 l", "paquete de 50 piezas").
+function PresentacionEditor({ unidadControl, value, onChange }) {
+  const activa = !!value;
+  const unidades = unidadesCompatibles(unidadControl);
+  return (
+    <div className="option-group">
+      <div className="option-label">¿Cómo lo compras? (presentación, opcional)</div>
+      <div className="option-row">
+        <button type="button" className={`option-chip ${!activa ? 'selected' : ''}`} onClick={() => onChange(null)}>Suelto, por cantidad</button>
+        <button type="button" className={`option-chip ${activa ? 'selected' : ''}`} onClick={() => !activa && onChange({ nombre: 'paquete', cantidad: '', unidad: unidades.includes(unidadControl) ? unidadControl : unidades[0] })}>En paquetes</button>
+      </div>
+      {activa && (
+        <div className="presentacion-row">
+          <select className="text-input" value={value.nombre} onChange={e => onChange({ ...value, nombre: e.target.value })}>
+            {['paquete', 'bolsa', 'caja', 'garrafón', 'lata', 'botella', 'costal', 'rollo'].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <span className="presentacion-de">de</span>
+          <input className="text-input" type="number" min="0" step={unidadStep(value.unidad)} value={value.cantidad} onChange={e => onChange({ ...value, cantidad: e.target.value })} placeholder="Ej. 900" />
+          <select className="text-input" value={value.unidad} onChange={e => onChange({ ...value, unidad: e.target.value })}>
+            {unidades.map(u => <option key={u} value={u}>{unidadDisplay(u)}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="field-hint">Con presentación, las compras se capturan como "N paquetes por $X" y el sistema convierte a {unidadDisplay(unidadControl)}.</div>
+    </div>
+  );
+}
+
+function presentacionValida(p) {
+  if (!p) return null;
+  const n = parseFloat(p.cantidad);
+  if (!Number.isFinite(n) || n <= 0) return 'Indica cuánto contiene cada paquete de la presentación.';
+  return null;
+}
+
+// Chips de categoría con alta inline: "+ Nueva" abre un campo, `onCrear`
+// la guarda en la API y devuelve el nombre ya creado, que queda seleccionado.
+export function CategoriaChips({ opciones, value, onChange, onCrear, placeholder = 'Nombre de la categoría' }) {
+  const [creando, setCreando] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const crear = async () => {
+    const n = nombre.trim();
+    if (n.length < 2) { setError('Escribe un nombre de al menos 2 letras.'); return; }
+    setBusy(true); setError('');
+    try { const creado = await onCrear(n); onChange(creado); setCreando(false); setNombre(''); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="option-row">
+        {opciones.map(c => (
+          <button key={c} type="button" className={`option-chip ${value === c ? 'selected' : ''}`} onClick={() => onChange(c)}>{c}</button>
+        ))}
+        <button type="button" className={`option-chip chip-nueva ${creando ? 'selected' : ''}`} onClick={() => setCreando(v => !v)}>+ Nueva</button>
+      </div>
+      {creando && (
+        <div className="categoria-nueva">
+          <input className="text-input" value={nombre} maxLength={40} placeholder={placeholder} autoFocus onChange={e => setNombre(e.target.value)}
+                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); crear(); } }} />
+          <button type="button" className="btn-secondary" disabled={busy} onClick={crear}>{busy ? 'Creando…' : 'Crear'}</button>
+          {error && <FormError>{error}</FormError>}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
   const isNew = !item || !item.id;
   const [nombre, setNombre] = useState(item ? item.nombre || '' : '');
   const [categoria, setCategoria] = useState(item ? item.categoria || MATERIA_CATEGORIAS[0] : MATERIA_CATEGORIAS[0]);
+  const [catsInsumo, setCatsInsumo] = useState([...MATERIA_CATEGORIAS]);
+  const crearCategoriaInsumo = async n => {
+    const c = await api.crearCategoriaMateria(n);
+    const rows = await api.getMateriasCategorias(); // refresca el mapa nombre → id
+    setCatsInsumo(rows.map(r => r.nombre));
+    return c.nombre;
+  };
   const [unidad, setUnidad] = useState(item ? normalizeUnidad(item.unidad || 'kg') : 'kg');
   const [stockActual, setStockActual] = useState(item ? String(item.stockActual ?? '') : '');
   const [stockMinimo, setStockMinimo] = useState(item ? String(item.stockMinimo ?? '') : '');
+  const [stockMaximo, setStockMaximo] = useState(item && item.stockMaximo !== null && item.stockMaximo !== undefined ? String(item.stockMaximo) : '');
   const [costoUnitario, setCostoUnitario] = useState(item ? String(item.costoUnitario ?? '') : '');
   const [proveedorId, setProveedorId] = useState(item ? item.proveedorId || '' : (proveedores[0] ? proveedores[0].id : ''));
+  const [presentacion, setPresentacion] = useState(item && item.presentacion ? { nombre: item.presentacion.nombre, cantidad: String(item.presentacion.cantidad), unidad: normalizeUnidad(item.presentacion.unidad) } : null);
+  // Alta: lo normal es registrar la primera compra (el costo se deriva); "a mano"
+  // solo para existencias que ya tienes sin ticket.
+  const [modoInicial, setModoInicial] = useState('compra'); // 'compra' | 'manual'
+  const [paquetes, setPaquetes] = useState('');
+  const [cantidadCompra, setCantidadCompra] = useState('');
+  const [unidadCompra, setUnidadCompra] = useState(item ? normalizeUnidad(item.unidad || 'kg') : 'kg');
+  const [totalPagado, setTotalPagado] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const presOk = presentacion && !presentacionValida(presentacion) ? presentacion : null;
+  const usaPaquetes = isNew && modoInicial === 'compra' && !!presOk;
+  // Cantidad comprada expresada en la unidad de control (para mostrar el resultado).
+  const cantidadCompraControl = (() => {
+    if (usaPaquetes) {
+      const n = parseFloat(paquetes); if (!Number.isFinite(n) || n <= 0) return null;
+      return convertirCantidad(n * parseFloat(presOk.cantidad), presOk.unidad, unidad);
+    }
+    const n = parseFloat(cantidadCompra); if (!Number.isFinite(n) || n <= 0) return null;
+    return convertirCantidad(n, unidadCompra, unidad);
+  })();
+  const totalNum = parseFloat(totalPagado);
+  const costoDerivado = cantidadCompraControl && Number.isFinite(totalNum) && totalNum > 0 ? totalNum / cantidadCompraControl : null;
 
   const cambiarUnidad = nextUnidad => {
     const next = normalizeUnidad(nextUnidad);
     const current = normalizeUnidad(unidad);
     if (next === current) return;
     if (unidadFamilia(next) !== unidadFamilia(current)) {
-      const tieneValores = stockActual !== '' || stockMinimo !== '' || costoUnitario !== '';
+      const tieneValores = !isNew && (stockActual !== '' || stockMinimo !== '' || costoUnitario !== '');
       if (tieneValores) {
         setError('Para cambiar entre peso, volumen y piezas, primero deja stock/costo en cero o crea un insumo nuevo.');
         return;
       }
-      setUnidad(next);
+      setUnidad(next); setUnidadCompra(next); setStockMinimo(''); setStockMaximo(''); setPresentacion(null);
       return;
     }
     const nuevoStock = convertirCantidad(stockActual, current, next);
     const nuevoMinimo = convertirCantidad(stockMinimo, current, next);
+    const nuevoMaximo = convertirCantidad(stockMaximo, current, next);
     const nuevoCosto = convertirCostoUnitario(costoUnitario, current, next);
-    if (nuevoStock === null || nuevoMinimo === null || nuevoCosto === null) {
+    if (nuevoStock === null || nuevoMinimo === null || nuevoCosto === null || nuevoMaximo === null) {
       setError('No se puede convertir automáticamente entre esas unidades.');
       return;
     }
-    setStockActual(formatNumeroInput(nuevoStock, next === 'g' || next === 'ml' || next === 'pieza' ? 0 : 3));
-    setStockMinimo(formatNumeroInput(nuevoMinimo, next === 'g' || next === 'ml' || next === 'pieza' ? 0 : 3));
+    const dec = next === 'g' || next === 'ml' || next === 'pieza' ? 0 : 3;
+    setStockActual(formatNumeroInput(nuevoStock, dec));
+    setStockMinimo(formatNumeroInput(nuevoMinimo, dec));
+    setStockMaximo(formatNumeroInput(nuevoMaximo, dec));
     setCostoUnitario(formatNumeroInput(nuevoCosto, 4));
     setUnidad(next);
+    if (!unidadesCompatibles(next).includes(unidadCompra)) setUnidadCompra(next);
     setError('');
   };
 
   const submit = async () => {
     if (!nombre.trim()) { setError('Ingresa un nombre.'); return; }
-    if (stockActual === '' || stockMinimo === '' || costoUnitario === '') { setError('Completa stock actual, mínimo y costo.'); return; }
-    const stockNum = parseFloat(stockActual);
+    if (stockMinimo === '') { setError('Indica el stock mínimo (avísame cuando quede menos de…).'); return; }
     const minimoNum = parseFloat(stockMinimo);
-    const costoNum = parseFloat(costoUnitario);
-    if ([stockNum, minimoNum, costoNum].some(n => !Number.isFinite(n) || n < 0)) { setError('Stock y costo deben ser números positivos o cero.'); return; }
-    setError('');
-    setSaving(true);
-    const ok = await onSave({
+    if (!Number.isFinite(minimoNum) || minimoNum < 0) { setError('El stock mínimo debe ser un número positivo o cero.'); return; }
+    const maximoNum = stockMaximo === '' ? null : parseFloat(stockMaximo);
+    if (maximoNum !== null && (!Number.isFinite(maximoNum) || maximoNum < minimoNum)) { setError('"Reabastecer hasta" debe ser un número mayor o igual al stock mínimo (o déjalo vacío).'); return; }
+    const errPres = presentacionValida(presentacion);
+    if (errPres) { setError(errPres); return; }
+    const presPayload = presentacion ? { nombre: presentacion.nombre, cantidad: parseFloat(presentacion.cantidad), unidad: presentacion.unidad } : null;
+
+    const payload = {
       id: isNew ? undefined : item.id, nombre: nombre.trim(), categoria, unidad,
+      stockMinimo: minimoNum, stockMaximo: maximoNum, proveedorId: proveedorId || null,
+      presentacion: presPayload,
+      activo: isNew ? true : item.activo,
+    };
+    if (isNew && modoInicial === 'compra') {
+      // Primera compra: el costo unitario lo calcula el servidor (total ÷ cantidad convertida).
+      if (usaPaquetes) {
+        const n = parseFloat(paquetes);
+        if (!Number.isFinite(n) || n <= 0) { setError(`Indica cuántos ${presOk.nombre}s compraste.`); return; }
+        payload.primeraCompra = { paquetes: n, costoTotal: totalNum };
+      } else {
+        const n = parseFloat(cantidadCompra);
+        if (!Number.isFinite(n) || n <= 0) { setError('Indica cuánto compraste.'); return; }
+        payload.primeraCompra = { cantidadComprada: n, unidad: unidadCompra, costoTotal: totalNum };
+      }
+      if (!Number.isFinite(totalNum) || totalNum < 0) { setError('Indica cuánto pagaste en total (puede ser 0 si fue regalo).'); return; }
+    } else {
+      if (stockActual === '' || costoUnitario === '') { setError(isNew ? 'Indica las existencias que tienes y su costo estimado.' : 'Completa stock actual y costo.'); return; }
+      const stockNum = parseFloat(stockActual);
+      const costoNum = parseFloat(costoUnitario);
+      if ([stockNum, costoNum].some(n => !Number.isFinite(n) || n < 0)) { setError('Stock y costo deben ser números positivos o cero.'); return; }
       // No reenviar existencias al editar datos: los lotes rechazan el stock
       // manual y un valor sin cambios podría sobrescribir movimientos recientes.
-      ...(isNew || (!item.requiereLote && (stockNum !== Number(item.stockActual) || unidad !== normalizeUnidad(item.unidad)))
-        ? { stockActual: stockNum } : {}),
-      stockMinimo: minimoNum,
-      costoUnitario: costoNum, proveedorId: proveedorId || null,
-      activo: isNew ? true : item.activo,
-    });
+      if (isNew || (!item.requiereLote && (stockNum !== Number(item.stockActual) || unidad !== normalizeUnidad(item.unidad)))) payload.stockActual = stockNum;
+      payload.costoUnitario = costoNum;
+    }
+    setError('');
+    setSaving(true);
+    const ok = await onSave(payload);
     setSaving(false);
     if (ok !== false) onClose();
   };
@@ -251,39 +415,95 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
       </div>
       <div className="option-group">
         <div className="option-label">Categoría</div>
-        <div className="option-row">
-          {MATERIA_CATEGORIAS.map(c => (
-            <button key={c} className={`option-chip ${categoria === c ? 'selected' : ''}`} onClick={() => setCategoria(c)}>{c}</button>
-          ))}
-        </div>
+        <CategoriaChips opciones={catsInsumo} value={categoria} onChange={setCategoria} onCrear={crearCategoriaInsumo} placeholder="Ej. Panadería, Limpieza…" />
       </div>
       <div className="option-group">
-        <div className="option-label">Unidad de medida</div>
+        <div className="option-label">¿En qué unidad lo cuentas?</div>
         <div className="option-row">
           {UNIDADES.map(u => (
             <button key={u} className={`option-chip ${unidad === u ? 'selected' : ''}`} onClick={() => cambiarUnidad(u)}>{unidadDisplay(u)}</button>
           ))}
         </div>
-        <div className="field-hint">{unidadHint(unidad)}</div>
+        <div className="field-hint">Es la unidad del stock, del mínimo y de las recetas. Las compras las capturas en la unidad en que vengan (g, kg, ml, l…) y se convierten solas.</div>
       </div>
+      <PresentacionEditor unidadControl={unidad} value={presentacion} onChange={setPresentacion} />
       <div className="option-group two-col">
         <div>
-          <div className="option-label">Stock actual ({unidadDisplay(unidad)})</div>
-          <input className="text-input" type="number" step={unidadStep(unidad)} value={stockActual}
-                 disabled={!isNew && item?.requiereLote}
-                 onChange={e => setStockActual(e.target.value)} placeholder={unidad === 'kg' || unidad === 'l' ? '0.000' : '0'} />
-          {!isNew && item?.requiereLote && <div className="field-hint">Puedes cambiar el nombre y guardar sin modificar las existencias. Para corregir las existencias usa "Ajustar stock" en el inventario. Las compras se registran con "Registrar compra".</div>}
-        </div>
-        <div>
-          <div className="option-label">Stock mínimo ({unidadDisplay(unidad)})</div>
+          <div className="option-label">Avísame cuando quede menos de ({unidadDisplay(unidad)})</div>
           <input className="text-input" type="number" step={unidadStep(unidad)} value={stockMinimo} onChange={e => setStockMinimo(e.target.value)} placeholder={unidad === 'kg' || unidad === 'l' ? '0.000' : '0'} />
         </div>
+        <div>
+          <div className="option-label">Reabastecer hasta ({unidadDisplay(unidad)}, opcional)</div>
+          <input className="text-input" type="number" step={unidadStep(unidad)} value={stockMaximo} onChange={e => setStockMaximo(e.target.value)} placeholder="Vacío = solo avisar" />
+        </div>
       </div>
-      <div className="option-group">
-        <div className="option-label">Costo unitario ($ por {unidadDisplay(unidad)})</div>
-        <input className="text-input" type="number" step="0.01" value={costoUnitario} onChange={e => setCostoUnitario(e.target.value)} placeholder="0.00" />
-        {(unidad === 'g' || unidad === 'ml') && <div className="field-hint">Al usar {unidadDisplay(unidad)}, el costo también es por {unidadDisplay(unidad)}. Ej. café de $180/kg = $0.18 por g.</div>}
-      </div>
+      {isNew ? (
+        <div className="option-group compra-block">
+          <div className="option-label">Existencias iniciales</div>
+          <div className="option-row">
+            <button type="button" className={`option-chip ${modoInicial === 'compra' ? 'selected' : ''}`} onClick={() => setModoInicial('compra')}>Registrar la primera compra</button>
+            <button type="button" className={`option-chip ${modoInicial === 'manual' ? 'selected' : ''}`} onClick={() => setModoInicial('manual')}>Ya tengo existencias (capturar a mano)</button>
+          </div>
+          {modoInicial === 'compra' ? (
+            <>
+              <div className="option-group two-col" style={{ marginTop: 10 }}>
+                {usaPaquetes ? (
+                  <div>
+                    <div className="option-label">¿Cuántos {presOk.nombre}s compraste?</div>
+                    <input className="text-input" type="number" min="0" step="1" value={paquetes} onChange={e => setPaquetes(e.target.value)} placeholder="Ej. 3" />
+                    <div className="field-hint">Cada {presOk.nombre} = {formatNumeroInput(presOk.cantidad)} {unidadDisplay(presOk.unidad)}.</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="option-label">¿Cuánto compraste?</div>
+                    <div className="presentacion-row compact">
+                      <input className="text-input" type="number" min="0" step={unidadStep(unidadCompra)} value={cantidadCompra} onChange={e => setCantidadCompra(e.target.value)} placeholder="Ej. 900" />
+                      <select className="text-input" value={unidadCompra} onChange={e => setUnidadCompra(e.target.value)}>
+                        {unidadesCompatibles(unidad).map(u => <option key={u} value={u}>{unidadDisplay(u)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className="option-label">¿Cuánto pagaste en total? ($)</div>
+                  <input className="text-input" type="number" min="0" step="0.01" value={totalPagado} onChange={e => setTotalPagado(e.target.value)} placeholder="0.00" />
+                </div>
+              </div>
+              <div className={`compra-resultado ${costoDerivado !== null ? 'ok' : ''}`}>
+                {cantidadCompraControl !== null && costoDerivado !== null
+                  ? <>Existencia inicial: <strong>{formatNumeroInput(cantidadCompraControl)} {unidadDisplay(unidad)}</strong> · costo de referencia: <strong>${costoDerivado.toFixed(4)} por {unidadDisplay(unidad)}</strong></>
+                  : 'El costo por unidad se calcula solo con lo que compraste y lo que pagaste.'}
+              </div>
+            </>
+          ) : (
+            <div className="option-group two-col" style={{ marginTop: 10 }}>
+              <div>
+                <div className="option-label">Existencias que tienes ({unidadDisplay(unidad)})</div>
+                <input className="text-input" type="number" min="0" step={unidadStep(unidad)} value={stockActual} onChange={e => setStockActual(e.target.value)} placeholder="0" />
+              </div>
+              <div>
+                <div className="option-label">Costo estimado ($ por {unidadDisplay(unidad)})</div>
+                <input className="text-input" type="number" min="0" step="0.01" value={costoUnitario} onChange={e => setCostoUnitario(e.target.value)} placeholder="0.00" />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="option-group two-col">
+          <div>
+            <div className="option-label">Stock actual ({unidadDisplay(unidad)})</div>
+            <input className="text-input" type="number" step={unidadStep(unidad)} value={stockActual}
+                   disabled={item?.requiereLote}
+                   onChange={e => setStockActual(e.target.value)} placeholder={unidad === 'kg' || unidad === 'l' ? '0.000' : '0'} />
+            {item?.requiereLote && <div className="field-hint">Este insumo se controla por lote: corrige existencias con "Ajustar stock" y registra entradas con "Registrar compra".</div>}
+          </div>
+          <div>
+            <div className="option-label">Costo de referencia ($ por {unidadDisplay(unidad)})</div>
+            <input className="text-input" type="number" step="0.01" value={costoUnitario} onChange={e => setCostoUnitario(e.target.value)} placeholder="0.00" />
+            <div className="field-hint">Se actualiza solo con cada compra registrada; edítalo únicamente para corregir.</div>
+          </div>
+        </div>
+      )}
       {proveedores.length > 0 && (
         <div className="option-group">
           <div className="option-label">Proveedor</div>
@@ -304,10 +524,17 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
   );
 }
 
-export function ProductoFormSheet({ producto, onClose, onSave }) {
+export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) {
   const isNew = !producto || !producto.id;
   const [name, setName] = useState(producto ? producto.name || '' : '');
   const [cat, setCat] = useState(producto ? producto.cat || (CATEGORIES[0] && CATEGORIES[0].id) : (CATEGORIES[0] && CATEGORIES[0].id));
+  const [catsMenu, setCatsMenu] = useState(CATEGORIES.map(c => c.id));
+  const crearCategoriaMenu = async n => {
+    const c = await api.crearCategoriaProducto(n);
+    const rows = await api.getCategoriasProducto(); // refresca el mapa nombre → id
+    setCatsMenu(rows.map(r => r.nombre));
+    return c.nombre;
+  };
   const [icon, setIcon] = useState(producto ? producto.icon || '☕' : '☕');
   const [tipo, setTipo] = useState(producto ? producto.tipo || 'bebida' : 'bebida');
   const [price, setPrice] = useState(producto ? String(producto.precioBase ?? producto.price ?? '') : '');
@@ -318,6 +545,26 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
   const [coffeeType, setCoffeeType] = useState(producto ? !!producto.coffeeType : true);
   const [extras, setExtras] = useState(producto ? producto.extras !== false : true);
   const [frio, setFrio] = useState(producto ? !!producto.frio : false);
+  // Quién lo prepara: barra (barista), parrilla (parrillero) o nadie (se entrega en caja).
+  const [estacion, setEstacion] = useState(producto ? producto.estacion || (producto.tipo === 'snack' ? 'parrilla' : 'barra') : 'barra');
+  // Snack de reventa (comprado hecho): insumo del inventario que se descuenta
+  // por venta. 'nuevo' = crear el insumo con el nombre del producto al guardar.
+  const reventaActual = producto && producto.reventa ? producto.reventa : null;
+  const [controlar, setControlar] = useState(!!reventaActual);
+  const [insumoSel, setInsumoSel] = useState(reventaActual ? reventaActual.insumoId : 'nuevo');
+  const [piezasVenta, setPiezasVenta] = useState(reventaActual ? String(reventaActual.cantidad) : '1');
+  const [nvExistencia, setNvExistencia] = useState('');
+  const [nvCosto, setNvCosto] = useState('');
+  const [nvMinimo, setNvMinimo] = useState(reventaActual ? String(reventaActual.stockMinimo ?? '') : '');
+  const [nvMaximo, setNvMaximo] = useState(reventaActual && reventaActual.stockMaximo !== null ? String(reventaActual.stockMaximo) : '');
+  const insumosPieza = materias.filter(m => m.activo !== false && normalizeUnidad(m.unidad) === 'pieza');
+  const insumoElegido = insumoSel !== 'nuevo' ? insumosPieza.find(m => m.id === insumoSel) || (reventaActual && reventaActual.insumoId === insumoSel ? { id: insumoSel, nombre: reventaActual.nombre, stockActual: reventaActual.stock, stockMinimo: reventaActual.stockMinimo, stockMaximo: reventaActual.stockMaximo, costoUnitario: reventaActual.costoUnitario } : null) : null;
+  const elegirInsumo = id => {
+    setInsumoSel(id);
+    const m = insumosPieza.find(x => x.id === id);
+    if (m) { setNvMinimo(String(m.stockMinimo ?? '')); setNvMaximo(m.stockMaximo !== null && m.stockMaximo !== undefined ? String(m.stockMaximo) : ''); }
+    else if (id === 'nuevo') { setNvMinimo(''); setNvMaximo(''); }
+  };
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [imagen,setImagen]=useState(producto?.imagen||'');
@@ -341,12 +588,56 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
     const promoNum = promo === '' ? null : parseFloat(promo);
     if (promoNum !== null && (isNaN(promoNum) || promoNum < 0)) { setError('El precio promocional debe ser un número (o déjalo vacío).'); return; }
     if (promoNum !== null && promoNum >= precioNum) { setError('El precio promocional debe ser menor al precio normal.'); return; }
+    // Existencias del snack de reventa: validar antes de tocar nada.
+    let reventa;
+    if (tipo === 'snack') {
+      if (!controlar) reventa = reventaActual ? null : undefined;
+      else {
+        const piezas = parseFloat(piezasVenta);
+        if (!Number.isFinite(piezas) || piezas <= 0) { setError('Indica cuántas piezas se descuentan por venta (normalmente 1).'); return; }
+        const minimo = nvMinimo === '' ? null : parseFloat(nvMinimo);
+        const maximo = nvMaximo === '' ? null : parseFloat(nvMaximo);
+        if (minimo !== null && (!Number.isFinite(minimo) || minimo < 0)) { setError('El mínimo debe ser un número positivo o cero.'); return; }
+        if (maximo !== null && (!Number.isFinite(maximo) || maximo < 0)) { setError('"Reabastecer hasta" debe ser un número positivo.'); return; }
+        if (maximo !== null && minimo !== null && maximo < minimo) { setError('"Reabastecer hasta" debe ser mayor o igual al mínimo.'); return; }
+        if (insumoSel === 'nuevo') {
+          const existencia = nvExistencia === '' ? 0 : parseFloat(nvExistencia);
+          const costo = nvCosto === '' ? 0 : parseFloat(nvCosto);
+          if (!Number.isFinite(existencia) || existencia < 0 || !Number.isFinite(costo) || costo < 0) { setError('Existencia inicial y costo por pieza deben ser números positivos o cero.'); return; }
+          reventa = { nuevo: { nombre: name.trim(), stockActual: existencia, costoUnitario: costo, stockMinimo: minimo ?? 0, stockMaximo: maximo }, cantidad: piezas };
+        } else {
+          reventa = { insumoId: insumoSel, cantidad: piezas, niveles: { stockMinimo: minimo, stockMaximo: maximo } };
+        }
+      }
+    }
     setError('');
-    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim() };
+    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim(), estacion: tipo === 'snack' ? estacion : 'barra' };
     setSaving(true);
+    // El insumo nuevo se crea primero (con el nombre del producto, en piezas);
+    // los niveles de un insumo existente se actualizan antes de guardar.
+    if (reventa && reventa.nuevo) {
+      try {
+        const cats = await api.getMateriasCategorias();
+        const catNombre = (cats.find(c => /otros|snacks|reventa/i.test(c.nombre)) || cats[0] || {}).nombre;
+        if (!catNombre) throw new Error('No hay categorías de insumos en esta sucursal.');
+        const m = await api.crearMateria({ ...reventa.nuevo, categoria: catNombre, unidad: 'pieza', proveedorId: null });
+        reventa = { insumoId: m.id, cantidad: reventa.cantidad };
+      } catch (e) { setError(`No se pudo crear el insumo: ${e.message}`); setSaving(false); return; }
+    } else if (reventa && reventa.niveles) {
+      const { niveles, ...resto } = reventa;
+      const patch = {};
+      if (niveles.stockMinimo !== null && niveles.stockMinimo !== Number(insumoElegido && insumoElegido.stockMinimo)) patch.stockMinimo = niveles.stockMinimo;
+      const maxActual = insumoElegido && insumoElegido.stockMaximo !== undefined ? insumoElegido.stockMaximo : null;
+      if ((niveles.stockMaximo ?? null) !== (maxActual ?? null)) patch.stockMaximo = niveles.stockMaximo;
+      if (Object.keys(patch).length) {
+        try { await api.actualizarMateria(resto.insumoId, patch); }
+        catch (e) { setError(`No se pudieron guardar los niveles del insumo: ${e.message}`); setSaving(false); return; }
+      }
+      reventa = resto;
+    }
     const ok = await onSave(
       tipo === 'snack'
-        ? { id: isNew ? undefined : producto.id, ...base, sizes: false, leche: false, coffeeType: false, extras: false, frio: false, activo: isNew ? true : producto.activo !== false }
+        ? { id: isNew ? undefined : producto.id, ...base, reventa, sizes: false, leche: false, coffeeType: false, extras: false, frio: false, activo: isNew ? true : producto.activo !== false }
         : { id: isNew ? undefined : producto.id, ...base, sizes, leche, coffeeType: tipo === 'bebida' ? coffeeType : false, extras, frio, activo: isNew ? true : producto.activo !== false }
     );
     setSaving(false);
@@ -393,21 +684,96 @@ export function ProductoFormSheet({ producto, onClose, onSave }) {
       </div>
       {promo !== '' && <div className="field-hint" style={{ marginTop: -6, marginBottom: 12 }}>Mientras tenga precio promocional, se cobra ese precio y la pantalla del negocio muestra el normal tachado. Bórralo para volver al precio normal.</div>}
       <div className="option-group">
-        <div className="option-label">Categoría</div>
-        <div className="option-row">
-          {CATEGORIES.map(c => (
-            <button key={c.id} className={`option-chip ${cat === c.id ? 'selected' : ''}`} onClick={() => setCat(c.id)}>{c.id}</button>
-          ))}
-        </div>
+        <div className="option-label">Categoría del menú</div>
+        <CategoriaChips opciones={catsMenu} value={cat} onChange={setCat} onCrear={crearCategoriaMenu} placeholder="Ej. Tés, Postres, Desayunos…" />
+        <div className="field-hint">Las categorías nuevas aparecen en Caja, en la app del cliente y en la pantalla del negocio; el orden se ajusta en Configuración → Categorías.</div>
       </div>
       <div className="option-group">
         <div className="option-label">Tipo de preparación</div>
         <div className="option-row">
           <button className={`option-chip ${tipo === 'bebida' ? 'selected' : ''}`} onClick={() => setTipo('bebida')}>Bebida (espresso)</button>
           <button className={`option-chip ${tipo === 'frappe' ? 'selected' : ''}`} onClick={() => setTipo('frappe')}>Frappé</button>
-          <button className={`option-chip ${tipo === 'snack' ? 'selected' : ''}`} onClick={() => setTipo('snack')}>Snack</button>
+          <button className={`option-chip ${tipo === 'snack' ? 'selected' : ''}`} onClick={() => { setTipo('snack'); if (estacion === 'barra') setEstacion('parrilla'); }}>Snack</button>
         </div>
       </div>
+      <div className="option-group">
+        <div className="option-label">¿Quién lo prepara? (comanda)</div>
+        {tipo === 'snack' ? (
+          <div className="option-row">
+            {['parrilla', 'barra', 'caja'].map(e => (
+              <button key={e} type="button" className={`option-chip ${estacion === e ? 'selected' : ''}`} onClick={() => setEstacion(e)}>{ESTACION_LABELS[e]}</button>
+            ))}
+          </div>
+        ) : (
+          <div className="option-row"><button type="button" className="option-chip selected" disabled>Barra</button></div>
+        )}
+        <div className="field-hint">
+          {tipo !== 'snack'
+            ? 'Las bebidas y frappés siempre van a la comanda de la barra (barista).'
+            : estacion === 'caja'
+              ? 'No pasa por ninguna comanda: es un producto empacado que la Caja entrega al momento (galletas, botellas…).'
+              : estacion === 'parrilla'
+                ? 'Aparece en la comanda del parrillero.'
+                : 'Aparece en la comanda del barista.'}
+        </div>
+      </div>
+      {tipo === 'snack' && (
+        <div className="option-group reventa-block">
+          <div className="option-label">Existencias (lo compramos hecho)</div>
+          <div className="option-row">
+            <button type="button" className={`option-chip ${!controlar ? 'selected' : ''}`} onClick={() => setControlar(false)}>Sin control</button>
+            <button type="button" className={`option-chip ${controlar ? 'selected' : ''}`} onClick={() => setControlar(true)}>Controlar existencias</button>
+          </div>
+          {!controlar && <div className="field-hint">Sin control no sabrás cuántos quedan ni cuándo pedir; el costo se estima como 40 % del precio.</div>}
+          {controlar && (
+            <>
+              <label className="option-label" htmlFor="reventa-insumo" style={{ marginTop: 12 }}>Insumo del inventario que se descuenta</label>
+              <select id="reventa-insumo" className="text-input" value={insumoSel} onChange={e => elegirInsumo(e.target.value)}>
+                <option value="nuevo">➕ Crear insumo nuevo: «{name.trim() || 'nombre del producto'}» (piezas)</option>
+                {insumosPieza.map(m => <option key={m.id} value={m.id}>{m.nombre} — quedan {formatNumeroInput(m.stockActual)} pzas</option>)}
+                {reventaActual && !insumosPieza.some(m => m.id === reventaActual.insumoId) && <option value={reventaActual.insumoId}>{reventaActual.nombre}</option>}
+              </select>
+              <div className="option-group two-col" style={{ marginTop: 10 }}>
+                <div>
+                  <div className="option-label">Piezas por venta</div>
+                  <input className="text-input" type="number" min="0.001" step="1" value={piezasVenta} onChange={e => setPiezasVenta(e.target.value)} />
+                </div>
+                {insumoSel === 'nuevo' ? (
+                  <div>
+                    <div className="option-label">Existencia inicial (pzas)</div>
+                    <input className="text-input" type="number" min="0" step="1" value={nvExistencia} onChange={e => setNvExistencia(e.target.value)} placeholder="0" />
+                  </div>
+                ) : (
+                  <div>
+                    <div className="option-label">Quedan</div>
+                    <div className="reventa-stock">{insumoElegido ? `${formatNumeroInput(insumoElegido.stockActual)} pzas · costo ${money(insumoElegido.costoUnitario)} c/u` : '—'}</div>
+                  </div>
+                )}
+              </div>
+              <div className="option-group two-col">
+                {insumoSel === 'nuevo' && (
+                  <div>
+                    <div className="option-label">Costo por pieza ($)</div>
+                    <input className="text-input" type="number" min="0" step="0.01" value={nvCosto} onChange={e => setNvCosto(e.target.value)} placeholder="0.00" />
+                  </div>
+                )}
+                <div>
+                  <div className="option-label">Avísame cuando queden menos de</div>
+                  <input className="text-input" type="number" min="0" step="1" value={nvMinimo} onChange={e => setNvMinimo(e.target.value)} placeholder="Ej. 5" />
+                </div>
+                <div>
+                  <div className="option-label">Reabastecer hasta (opcional)</div>
+                  <input className="text-input" type="number" min="0" step="1" value={nvMaximo} onChange={e => setNvMaximo(e.target.value)} placeholder="Ej. 30" />
+                </div>
+              </div>
+              <div className="field-hint">
+                Cada venta descuenta las piezas del inventario y el costo del snack será lo que pagaste por pieza. Las compras siguientes se registran en
+                <strong> Inventario → Registrar compra</strong>. Al bajar del mínimo aparece en "Stock bajo" con la cantidad a pedir; en 0 el menú lo marca "Agotado".
+              </div>
+            </>
+          )}
+        </div>
+      )}
       {tipo !== 'snack' && (
         <div className="option-group">
           <div className="option-label">Personalización que permite</div>
@@ -868,6 +1234,9 @@ export function PrecioCostoSheet({ producto, onClose, onAplicar }) {
 // ----------------------------------------------------------------------------
 export function CompraSheet({ materia, proveedores, onClose, onSave }) {
   const unidadMateria = normalizeUnidad(materia.unidad);
+  const pres = materia.presentacion || null;
+  const [porPaquetes, setPorPaquetes] = useState(!!pres);
+  const [paquetes, setPaquetes] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [unidad, setUnidad] = useState(unidadMateria);
   const [costoTotal, setCostoTotal] = useState('');
@@ -877,19 +1246,24 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const paquetesNum = Number(paquetes);
   const cantidadNum = Number(cantidad);
   const costoNum = Number(costoTotal);
-  const unitario = Number.isFinite(cantidadNum) && cantidadNum > 0 && Number.isFinite(costoNum) && costoNum > 0
-    ? costoNum / cantidadNum : null;
+  // Cantidad comprada en la unidad de control, para mostrar existencias y costo resultantes.
+  const cantidadControl = porPaquetes && pres
+    ? (Number.isFinite(paquetesNum) && paquetesNum > 0 ? convertirCantidad(paquetesNum * Number(pres.cantidad), pres.unidad, unidadMateria) : null)
+    : (Number.isFinite(cantidadNum) && cantidadNum > 0 ? convertirCantidad(cantidadNum, unidad, unidadMateria) : null);
+  const unitario = cantidadControl && Number.isFinite(costoNum) && costoNum > 0 ? costoNum / cantidadControl : null;
 
   const submit = async () => {
-    if (!Number.isFinite(cantidadNum) || cantidadNum <= 0) { setError('Indica la cantidad comprada.'); return; }
+    if (porPaquetes && pres) {
+      if (!Number.isFinite(paquetesNum) || paquetesNum <= 0) { setError(`Indica cuántos ${pres.nombre}s compraste.`); return; }
+    } else if (!Number.isFinite(cantidadNum) || cantidadNum <= 0) { setError('Indica la cantidad comprada.'); return; }
     if (!Number.isFinite(costoNum) || costoNum <= 0) { setError('Indica cuánto pagaste en total por esta compra.'); return; }
     setError('');
     setSaving(true);
     const ok = await onSave(materia, {
-      cantidadComprada: cantidadNum,
-      unidad,
+      ...(porPaquetes && pres ? { paquetes: paquetesNum, cantidadComprada: cantidadControl, unidad: unidadMateria } : { cantidadComprada: cantidadNum, unidad }),
       costoTotal: costoNum,
       proveedorId: proveedorId || null,
       numeroLote: numeroLote.trim() || undefined,
@@ -904,23 +1278,39 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
       <div className="field-hint" style={{ marginBottom: 14 }}>
         Stock actual: <strong>{materia.stockActual} {unidadDisplay(unidadMateria)}</strong>. La compra se suma como un lote de este mismo insumo (no se crea un insumo nuevo) y queda registrada en el historial de inventario.
       </div>
-      <div className="option-group two-col">
-        <div>
-          <div className="option-label">Cantidad comprada</div>
-          <input className="text-input" type="number" min="0" step={unidadStep(unidad)} value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="0" />
+      {pres && (
+        <div className="option-group">
+          <div className="option-row">
+            <button type="button" className={`option-chip ${porPaquetes ? 'selected' : ''}`} onClick={() => setPorPaquetes(true)}>Por {pres.nombre}s ({formatNumeroInput(pres.cantidad)} {unidadDisplay(pres.unidad)} c/u)</button>
+            <button type="button" className={`option-chip ${!porPaquetes ? 'selected' : ''}`} onClick={() => setPorPaquetes(false)}>Por cantidad suelta</button>
+          </div>
         </div>
-        <div>
-          <div className="option-label">Unidad</div>
-          <select className="text-input" value={unidad} onChange={e => setUnidad(e.target.value)}>
-            {unidadesCompatibles(unidadMateria).map(u => <option key={u} value={u}>{unidadDisplay(u)}</option>)}
-          </select>
+      )}
+      {porPaquetes && pres ? (
+        <div className="option-group">
+          <div className="option-label">¿Cuántos {pres.nombre}s compraste?</div>
+          <input className="text-input" type="number" min="0" step="1" value={paquetes} onChange={e => setPaquetes(e.target.value)} placeholder="Ej. 3" />
+          {cantidadControl !== null && <div className="field-hint">= {formatNumeroInput(cantidadControl)} {unidadDisplay(unidadMateria)} que se suman al inventario.</div>}
         </div>
-      </div>
+      ) : (
+        <div className="option-group two-col">
+          <div>
+            <div className="option-label">Cantidad comprada</div>
+            <input className="text-input" type="number" min="0" step={unidadStep(unidad)} value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="0" />
+          </div>
+          <div>
+            <div className="option-label">Unidad</div>
+            <select className="text-input" value={unidad} onChange={e => setUnidad(e.target.value)}>
+              {unidadesCompatibles(unidadMateria).map(u => <option key={u} value={u}>{unidadDisplay(u)}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
       <div className="option-group">
         <div className="option-label">Costo total de la compra ($)</div>
         <input className="text-input" type="number" min="0" step="0.01" value={costoTotal} onChange={e => setCostoTotal(e.target.value)} placeholder="0.00" />
         {unitario !== null && (
-          <div className="field-hint">Sale a <strong>${unitario.toFixed(4)}</strong> por {unidadDisplay(unidad)} — este pasa a ser el costo de referencia del insumo (si cambió, el panel de Productos te avisará qué precios revisar).</div>
+          <div className="field-hint">Sale a <strong>${unitario.toFixed(4)}</strong> por {unidadDisplay(unidadMateria)} — este pasa a ser el costo de referencia del insumo (si cambió, el panel de Productos te avisará qué precios revisar).</div>
         )}
       </div>
       {proveedores.length > 0 && (
@@ -1280,6 +1670,149 @@ export function PantallaConfigEditor({ cfg, onSave }) {
               onClick={async () => { setGuardando(true); await onSave({ pantallaEstilo: estilo, piePantalla: pie.trim() }); setGuardando(false); }}>
         {guardando ? 'Guardando…' : 'Guardar pantalla'}
       </button>
+    </div>
+  );
+}
+
+// Cortesías: cupo mensual de la sucursal para el rol cajero (todos los cajeros
+// lo comparten). Con 0, cada cortesía pasa directo a Autorizaciones.
+export function CortesiasConfigEditor({ cupo, onSave }) {
+  const [valor, setValor] = useState(String(cupo ?? 0));
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { setValor(String(cupo ?? 0)); }, [cupo]);
+  const n = Number(valor);
+  const valido = valor.trim() !== '' && Number.isInteger(n) && n >= 0 && n <= 999;
+  const cambiado = valido && n !== Number(cupo ?? 0);
+  return (
+    <div className="branding-editor" style={{ marginTop: 12 }}>
+      <label className="option-label" htmlFor="cortesias-mes">Cortesías permitidas por mes (rol cajero)</label>
+      <input id="cortesias-mes" className="text-input" type="number" inputMode="numeric" min="0" max="999" step="1" value={valor} onChange={e => setValor(e.target.value)} />
+      <div className="branding-hint">
+        Es un cupo compartido por todos los cajeros de esta sucursal; se reinicia cada mes (hora de Ciudad de México). Cada cortesía deja el ticket completo en $0.
+        Al agotarse, la Caja puede seguir dando cortesías, pero cada una queda pendiente en <strong>Autorizaciones</strong> hasta que un administrador la apruebe o rechace.
+      </div>
+      {!valido && <FormError>Escribe un número entero entre 0 y 999.</FormError>}
+      <button className="btn-primary full" style={{ marginTop: 12 }} disabled={!cambiado || guardando}
+              onClick={async () => { setGuardando(true); await onSave({ cortesiasMesCajero: n }); setGuardando(false); }}>
+        {guardando ? 'Guardando…' : 'Guardar cupo de cortesías'}
+      </button>
+    </div>
+  );
+}
+
+// Mesas de la sucursal: la Caja elige "Mesa 1..N", "Barra" o "Para llevar"
+// antes de cobrar y la comanda lo muestra en grande.
+export function MesasConfigEditor({ mesas, onSave }) {
+  const [valor, setValor] = useState(String(mesas ?? 4));
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { setValor(String(mesas ?? 4)); }, [mesas]);
+  const n = Number(valor);
+  const valido = valor.trim() !== '' && Number.isInteger(n) && n >= 0 && n <= 200;
+  const cambiado = valido && n !== Number(mesas ?? 4);
+  return (
+    <div className="branding-editor" style={{ marginTop: 12 }}>
+      <label className="option-label" htmlFor="mesas-sede">Cantidad de mesas</label>
+      <input id="mesas-sede" className="text-input" type="number" inputMode="numeric" min="0" max="200" step="1" value={valor} onChange={e => setValor(e.target.value)} />
+      <div className="branding-hint">Se numeran solas (Mesa 1, Mesa 2…). "Barra" y "Para llevar" siempre están disponibles. Con 0, la Caja solo elige entre Barra y Para llevar.</div>
+      {!valido && <FormError>Escribe un número entero entre 0 y 200.</FormError>}
+      <button className="btn-primary full" style={{ marginTop: 12 }} disabled={!cambiado || guardando}
+              onClick={async () => { setGuardando(true); await onSave({ mesas: n }); setGuardando(false); }}>
+        {guardando ? 'Guardando…' : 'Guardar mesas'}
+      </button>
+    </div>
+  );
+}
+
+// Configuración → Categorías: renombrar, reordenar (menú) y borrar categorías
+// del menú y de insumos. Borrar solo se permite si nada las usa (la API avisa).
+function CategoriaFila({ c, onRename, onDelete, onUp, onDown, primera, ultima }) {
+  const [editando, setEditando] = useState(false);
+  const [nombre, setNombre] = useState(c.nombre);
+  const [busy, setBusy] = useState(false);
+  const guardar = async () => {
+    const n = nombre.trim();
+    if (n.length < 2 || n === c.nombre) { setEditando(false); setNombre(c.nombre); return; }
+    setBusy(true);
+    try { await onRename(c, n); setEditando(false); } finally { setBusy(false); }
+  };
+  return (
+    <div className="categoria-fila">
+      {editando ? (
+        <input className="text-input" value={nombre} maxLength={40} autoFocus onChange={e => setNombre(e.target.value)}
+               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); guardar(); } if (e.key === 'Escape') { setEditando(false); setNombre(c.nombre); } }} />
+      ) : (
+        <span className="categoria-nombre">{c.nombre}{c.uso !== undefined && <span className="categoria-uso"> · {c.uso} {c.usoLabel}</span>}</span>
+      )}
+      <div className="categoria-acciones">
+        {onUp && <button type="button" className="icon-btn small" disabled={primera} aria-label="Subir" onClick={() => onUp(c)}>↑</button>}
+        {onDown && <button type="button" className="icon-btn small" disabled={ultima} aria-label="Bajar" onClick={() => onDown(c)}>↓</button>}
+        {editando
+          ? <button type="button" className="link-toggle" disabled={busy} onClick={guardar}>{busy ? 'Guardando…' : 'Guardar'}</button>
+          : <button type="button" className="link-toggle" onClick={() => setEditando(true)}>Renombrar</button>}
+        <button type="button" className="link-danger" onClick={() => onDelete(c)}>Borrar</button>
+      </div>
+    </div>
+  );
+}
+
+export function CategoriasEditor({ productos = [], materias = [], addToast, onChanged }) {
+  const [menu, setMenu] = useState(null);
+  const [insumos, setInsumos] = useState(null);
+  const [nuevoMenu, setNuevoMenu] = useState('');
+  const [nuevoInsumo, setNuevoInsumo] = useState('');
+  const cargar = React.useCallback(async () => {
+    const [m, i] = await Promise.all([api.getCategoriasProducto(), api.getMateriasCategorias()]);
+    setMenu(m); setInsumos(i);
+  }, []);
+  useEffect(() => { cargar().catch(e => addToast(e.message, 'warn')); }, [cargar, addToast]);
+  const usoMenu = c => productos.filter(p => p.cat === c.nombre).length;
+  const usoInsumo = c => materias.filter(m => m.categoria === c.nombre).length;
+  const run = async (fn, okMsg) => {
+    try { await fn(); await cargar(); await onChanged(); if (okMsg) addToast(okMsg, 'success'); }
+    catch (e) { addToast(e.message, 'warn'); }
+  };
+  const mover = async (c, dir) => {
+    const ids = menu.map(x => x.id);
+    const i = ids.indexOf(c.id); const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    await run(() => api.ordenarCategoriasProducto(ids));
+  };
+  const confirmarBorrado = (c, uso, que) => {
+    if (uso > 0) { addToast(`No se puede borrar "${c.nombre}": ${uso} ${que} la usan. Cámbialos de categoría primero.`, 'warn'); return false; }
+    return window.confirm(`¿Borrar la categoría "${c.nombre}"?`);
+  };
+  return (
+    <div className="categorias-editor">
+      <div>
+        <div className="section-title">Categorías del menú</div>
+        <div className="field-hint" style={{ marginBottom: 8 }}>Son las pestañas de Caja, la app del cliente y la pantalla del negocio, en este orden.</div>
+        {menu === null ? <p className="field-hint">Cargando…</p> : menu.map((c, idx) => (
+          <CategoriaFila key={c.id} c={{ ...c, uso: usoMenu(c), usoLabel: 'producto(s)' }} primera={idx === 0} ultima={idx === menu.length - 1}
+            onUp={x => mover(x, -1)} onDown={x => mover(x, 1)}
+            onRename={(x, n) => run(() => api.actualizarCategoriaProducto(x.id, n), 'Categoría renombrada')}
+            onDelete={x => confirmarBorrado(x, usoMenu(x), 'producto(s)') && run(() => api.eliminarCategoriaProducto(x.id), 'Categoría borrada')} />
+        ))}
+        <div className="categoria-nueva">
+          <input className="text-input" value={nuevoMenu} maxLength={40} placeholder="Nueva categoría del menú (Ej. Tés)" onChange={e => setNuevoMenu(e.target.value)}
+                 onKeyDown={e => { if (e.key === 'Enter' && nuevoMenu.trim().length >= 2) { e.preventDefault(); run(() => api.crearCategoriaProducto(nuevoMenu.trim()), 'Categoría creada').then(() => setNuevoMenu('')); } }} />
+          <button type="button" className="btn-secondary" disabled={nuevoMenu.trim().length < 2} onClick={() => run(() => api.crearCategoriaProducto(nuevoMenu.trim()), 'Categoría creada').then(() => setNuevoMenu(''))}>Agregar</button>
+        </div>
+      </div>
+      <div>
+        <div className="section-title">Categorías de insumos</div>
+        <div className="field-hint" style={{ marginBottom: 8 }}>Agrupan el inventario (pestañas de Inventario y alta de materia prima).</div>
+        {insumos === null ? <p className="field-hint">Cargando…</p> : insumos.map(c => (
+          <CategoriaFila key={c.id} c={{ ...c, uso: usoInsumo(c), usoLabel: 'insumo(s)' }}
+            onRename={(x, n) => run(() => api.actualizarCategoriaMateria(x.id, n), 'Categoría renombrada')}
+            onDelete={x => confirmarBorrado(x, usoInsumo(x), 'insumo(s)') && run(() => api.eliminarCategoriaMateria(x.id), 'Categoría borrada')} />
+        ))}
+        <div className="categoria-nueva">
+          <input className="text-input" value={nuevoInsumo} maxLength={40} placeholder="Nueva categoría de insumos (Ej. Panadería)" onChange={e => setNuevoInsumo(e.target.value)}
+                 onKeyDown={e => { if (e.key === 'Enter' && nuevoInsumo.trim().length >= 2) { e.preventDefault(); run(() => api.crearCategoriaMateria(nuevoInsumo.trim()), 'Categoría creada').then(() => setNuevoInsumo('')); } }} />
+          <button type="button" className="btn-secondary" disabled={nuevoInsumo.trim().length < 2} onClick={() => run(() => api.crearCategoriaMateria(nuevoInsumo.trim()), 'Categoría creada').then(() => setNuevoInsumo(''))}>Agregar</button>
+        </div>
+      </div>
     </div>
   );
 }

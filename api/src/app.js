@@ -45,6 +45,7 @@ app.use('/api/pedido-items', require('./routes/pedidoItems'));
 app.use('/api/mermas', require('./routes/mermas'));
 app.use('/api/reportes', require('./routes/reportes'));
 app.use('/api/config', require('./routes/config'));
+app.use('/api/cortesias', require('./routes/cortesias'));
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 app.use(errorHandler);

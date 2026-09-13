@@ -22,7 +22,10 @@ const drawerSql=`SELECT t.id,t.abierto_en,t.fondo_inicial,
  COALESCE(SUM(p.total),0) ventas_turno,
  COALESCE(SUM(p.importe_efectivo),0) ventas_efectivo,
  COALESCE(SUM(p.total-p.importe_efectivo) FILTER(WHERE p.importe_efectivo IS NOT NULL),0) ventas_no_efectivo,
- COUNT(p.id) FILTER(WHERE p.importe_efectivo IS NULL) pagos_sin_desglose
+ COUNT(p.id) FILTER(WHERE p.importe_efectivo IS NULL) pagos_sin_desglose,
+ COUNT(p.id) FILTER(WHERE p.metodo_pago='cortesia') cortesias_turno,
+ COALESCE(SUM(p.subtotal) FILTER(WHERE p.metodo_pago='cortesia'),0) cortesias_valor_turno,
+ COUNT(p.id) FILTER(WHERE p.metodo_pago='cortesia' AND p.cortesia_estado='pendiente') cortesias_pendientes_turno
  FROM turnos t LEFT JOIN pedidos p ON p.turno_cobro_id=t.id AND p.cobrado AND NOT p.cancelado AND NOT p.no_show
  WHERE t.sucursal_id=$1 AND t.cerrado_en IS NULL GROUP BY t.id`;
 module.exports={moneyAmount,cashPart,setOpeningFund,drawerSql};

@@ -49,10 +49,34 @@ export function customizationSummary(item) {
 
 /* ---- Constantes de negocio ---- */
 export const MERMA_MOTIVOS = ['Espresso tirado', 'Bebida mal preparada', 'Leche quemada', 'Vaso roto', 'Producto derramado', 'Ingrediente contaminado', 'Otro'];
-export const MATERIA_CATEGORIAS = ['Café', 'Leches', 'Vasos', 'Tapas', 'Jarabes', 'Hielo', 'Empaques', 'Otros'];
+// Categorías de insumos de la sede: se llenan desde la API (replaceArray) al
+// cargar el panel; el admin puede crear más desde el formulario o Configuración.
+export const MATERIA_CATEGORIAS = [];
 export const PROVEEDOR_CATEGORIAS = ['Café', 'Leche', 'Empaques', 'Jarabes', 'Insumos de limpieza', 'Otro'];
 export const ROLE_LABELS = { admin: 'Administrador', cajero: 'Cajero', barista: 'Barista', mostrador: 'Caja + barra' };
-export const PAY_METHOD_LABELS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', mixto: 'Pago mixto', regalo: 'Regalo' };
+export const PAY_METHOD_LABELS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', mixto: 'Pago mixto', regalo: 'Regalo', cortesia: 'Cortesía' };
+// Estado de una cortesía frente al cupo mensual de la sucursal.
+// Estaciones de preparación y destino del pedido (mesas).
+export const ESTACION_LABELS = { barra: 'Barra', parrilla: 'Parrilla', caja: 'Se entrega en caja' };
+export const ESTACION_USUARIO_LABELS = { barra: 'Barra (barista)', parrilla: 'Parrilla (parrillero)' };
+// Etiqueta del rol considerando las estaciones: Barista, Parrillero o ambos.
+export function rolEtiqueta(u) {
+  if (!u) return '';
+  const est = Array.isArray(u.estaciones) ? u.estaciones : ['barra', 'parrilla'];
+  const soloParrilla = est.length === 1 && est[0] === 'parrilla';
+  const ambas = est.includes('barra') && est.includes('parrilla');
+  if (u.rol === 'barista') return soloParrilla ? 'Parrillero' : ambas ? 'Barista + parrillero' : 'Barista';
+  if (u.rol === 'mostrador') return soloParrilla ? 'Caja + parrilla' : ambas ? 'Caja + barra y parrilla' : 'Caja + barra';
+  return ROLE_LABELS[u.rol] || u.rol;
+}
+// "Mesa 3" / "Barra" / "Para llevar" / pedido en línea (recoger).
+export function destinoLabel({ destino, mesaNumero, origen } = {}) {
+  if (destino === 'mesa') return `Mesa ${mesaNumero}`;
+  if (destino === 'barra') return 'Barra';
+  if (destino === 'llevar') return 'Para llevar';
+  return origen === 'app' ? 'En línea · recoger' : '';
+}
+export const CORTESIA_ESTADO_LABELS = { dentro_plan: 'Cortesía del plan', pendiente: 'Pendiente de autorización', autorizada: 'Cortesía autorizada', rechazada: 'Cortesía rechazada' };
 
 // Ventana para avisar al cajero que un pedido en línea lleva mucho tiempo
 // listo sin cobrarse (política corta para poder probarla en demo).

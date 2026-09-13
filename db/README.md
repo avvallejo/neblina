@@ -65,6 +65,36 @@ reales.
     sedes donde la misma persona levanta el pedido, cobra y prepara.
 17. **`17_descripcion_producto.sql`** — `productos.descripcion` (frase corta
     opcional) para la pantalla del negocio estilo pizarra.
+18–25. Migraciones incrementales posteriores (café seleccionable en frappés,
+    mantener precio, recargo por café, ventas directas/atrasadas, revisión de
+    precio estable, retirar opciones, fondo de caja e imagen de producto).
+26. **`26_cortesias.sql`** — **Cortesías**: valor `cortesia` en `metodo_pago`
+    (el pedido completo sale en $0; `subtotal` conserva lo regalado),
+    columnas `pedidos.cortesia_*` (estado `dentro_plan | pendiente |
+    autorizada | rechazada`, motivo de la Caja, quién y cuándo resolvió, nota
+    del admin) con CHECK de coherencia, índice parcial para contar el cupo del
+    mes por sucursal, `vw_pedidos_con_estado` recreada (expone las columnas
+    nuevas) y `vw_ventas_por_metodo_pago` con `valor_cortesias` y sin pedidos
+    cancelados. El cupo mensual vive en `configuracion`
+    (`cortesias_mes_cajero`, compartido por sucursal; sin fila = 0). El
+    `ALTER TYPE` va fuera de transacción, igual que en la 16.
+27. **`27_mesas_y_estaciones.sql`** — Mesas y estaciones: `pedidos.destino`
+    (`mesa | barra | llevar`, NULL = pedido en línea) + `mesa_numero` con
+    CHECK de coherencia; `productos.estacion` (`barra | parrilla | caja`,
+    snacks existentes → parrilla); `usuarios.estaciones TEXT[]` (existentes →
+    ambas, para que nadie deje de ver pedidos); `vw_pedidos_con_estado`
+    recreada (expone destino y no cuenta los ítems de caja como "en
+    preparación"). Cantidad de mesas en `configuracion` (`mesas`, 4 si no hay).
+28. **`28_reventa_snacks.sql`** — Snacks de reventa: `fn_descontar_inventario`
+    consume los insumos fijos de un snack (su insumo en piezas) en vez de
+    ignorarlo; `fn_costo_teorico_producto` usa el costo de compra cuando hay
+    insumo (si no, sigue el 40 %); `vw_stock_bajo` con `stock_maximo` y
+    `a_pedir`; `vw_precios_por_revisar` incluye snacks con insumo. Solo
+    funciones y vistas (re-ejecutable).
+29. **`29_presentacion_insumos.sql`** — Presentación de compra de los
+    insumos (`materias_primas.presentacion_cantidad/_unidad/_nombre`, con
+    CHECK de coherencia) y `lotes.paquetes`. La API deriva el costo unitario
+    de cada compra (incluida la primera, al dar de alta).
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -86,6 +116,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
+# … y así hasta 29_presentacion_insumos.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

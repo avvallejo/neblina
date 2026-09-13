@@ -1,14 +1,23 @@
 // BARRA DE PREPARACIÓN (Barista). Los tickets se muestran en una cuadrícula
 // que aprovecha pantallas grandes (varias columnas) y una columna en móvil.
 import React, { useState } from 'react';
-import { Coffee, Clock, Droplets, ClipboardList, AlertCircle, Sparkles, AlertTriangle, ShoppingCart } from 'lucide-react';
-import { getProduct, customizationSummary } from '../lib/catalog.js';
+import { Coffee, Clock, Droplets, ClipboardList, AlertCircle, Sparkles, AlertTriangle, ShoppingCart, Flame, MapPin, ShoppingBag } from 'lucide-react';
+import { getProduct, customizationSummary, destinoLabel, rolEtiqueta } from '../lib/catalog.js';
 import { fmtHora } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
 import { Gauge, ConfirmDialog, EmptyState } from '../components/ui.jsx';
 import { RecipeModal, MermaModal } from '../components/recipe.jsx';
 
-function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma, onCancelar }) {
+// A dónde va lo que se prepara: MESA n, BARRA, PARA LLEVAR o pedido en línea.
+function DestinoBadge({ ticket }) {
+  const texto = destinoLabel(ticket);
+  if (!texto) return null;
+  const clase = ticket.destino || (ticket.origen === 'app' ? 'app' : '');
+  const Icon = ticket.destino === 'llevar' ? ShoppingBag : ticket.destino === 'mesa' ? MapPin : ticket.destino === 'barra' ? Coffee : Sparkles;
+  return <div className={`ticket-destino ${clase}`}><Icon size={14} /> {texto}</div>;
+}
+
+function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma, onCancelar, mostrarEstacion }) {
   const product = getProduct(ticket.productId);
   const elapsedSec = (now - (ticket.status === 'pendiente' ? ticket.createdAt : ticket.startedAt || ticket.createdAt)) / 1000;
   return (
@@ -20,6 +29,10 @@ function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma, 
         </div>
         <Gauge seconds={elapsedSec} size={68} />
       </div>
+      <DestinoBadge ticket={ticket} />
+      {mostrarEstacion && (
+        <span className={`tag-estacion ${ticket.estacion}`}>{ticket.estacion === 'parrilla' ? <Flame size={11} /> : <Coffee size={11} />} {ticket.estacion === 'parrilla' ? 'Parrilla' : 'Barra'}</span>
+      )}
 
       <div className="ticket-product">
         <span className="ticket-product-icon">{product?.icon || '☕'}</span>
@@ -72,9 +85,15 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
     if (recipeTicket && recipeTicket.id === ticket.id) setRecipeTicket(null);
   };
 
+  // Estaciones que atiende esta persona: barra, parrilla o ambas (ve todo).
+  const estaciones = Array.isArray(currentUser?.estaciones) && currentUser.estaciones.length ? currentUser.estaciones : ['barra', 'parrilla'];
+  const soloParrilla = estaciones.length === 1 && estaciones[0] === 'parrilla';
+  const ambas = estaciones.includes('barra') && estaciones.includes('parrilla');
+  const titulo = ambas ? 'Barra y parrilla' : soloParrilla ? 'Parrilla' : 'Barra de preparación';
+
   const navItems = [
     { id: 'pendientes', label: 'Pendientes', Icon: Clock, badge: pendientes.length },
-    { id: 'preparacion', label: 'En preparación', Icon: Droplets, badge: enPrep.length },
+    { id: 'preparacion', label: 'En preparación', Icon: soloParrilla ? Flame : Droplets, badge: enPrep.length },
     ...(mostrador ? [{ id: 'caja', label: 'Caja', Icon: ShoppingCart, badge: mostrador.porCobrar }] : []),
   ];
 
@@ -85,15 +104,15 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
       active={tab}
       onSelect={id => (id === 'caja' && mostrador ? mostrador.irA() : setTab(id))}
       user={{ ...currentUser, rol: mostrador ? 'mostrador' : 'barista' }}
-      roleLabel={mostrador ? 'Caja + barra' : 'Barra'}
+      roleLabel={rolEtiqueta({ rol: mostrador ? 'mostrador' : 'barista', estaciones })}
       sedeNombre={sedeNombre}
       onLogout={onLogout}
-      title="Barra de preparación"
+      title={titulo}
       subtitle={`${pendientes.length} pendientes • ${enPrep.length} en preparación`}
       wide
     >
       {visible.length === 0 ? (
-        <EmptyState icon={Coffee} title={tab === 'pendientes' ? 'Sin pedidos pendientes' : 'Nada en preparación'} subtitle="¡Buen trabajo!" />
+        <EmptyState icon={soloParrilla ? Flame : Coffee} title={tab === 'pendientes' ? 'Sin pedidos pendientes' : 'Nada en preparación'} subtitle="¡Buen trabajo!" />
       ) : (
         <div className="tickets-grid">
           {visible.map(t => (
@@ -106,6 +125,7 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
               onTerminar={() => handleFinish(t)}
               onMerma={() => setMermaTicket(t)}
               onCancelar={() => setCancelTarget(t)}
+              mostrarEstacion={ambas}
             />
           ))}
         </div>

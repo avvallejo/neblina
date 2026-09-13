@@ -4,26 +4,41 @@ import React, { useState } from 'react';
 import VentaDirecta from './VentaDirecta';
 import CajaDinero from './CajaDinero';
 import { adaptPedido } from '../lib/adapters';
-import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets } from 'lucide-react';
+import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets, Gift } from 'lucide-react';
 import * as api from '../api/client.js';
-import { getProduct, NO_SHOW_WARNING_MS } from '../lib/catalog.js';
+import { getProduct, NO_SHOW_WARNING_MS, CORTESIA_ESTADO_LABELS, destinoLabel } from '../lib/catalog.js';
 import { money } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
-import { StatusChip, ConfirmDialog, EmptyState } from '../components/ui.jsx';
+import { StatusChip, ConfirmDialog, EmptyState, Sheet } from '../components/ui.jsx';
 import { CategoryTabs, ProductGrid, CustomizeSheet, CartView, CheckoutView } from '../components/menu.jsx';
 
+// Leyenda de una cortesía recién registrada. Cuando excedió el cupo del mes
+// NO se cierra sola: la Caja debe leer que un administrador la autorizará.
+function CortesiaAviso({ cortesia }) {
+  if (!cortesia) return null;
+  return (
+    <div className={`cortesia-plan ${cortesia.excedida ? 'warn' : 'ok'}`} role={cortesia.excedida ? 'alert' : 'status'} style={{ maxWidth: 520 }}>
+      <strong><Gift size={14} /> {cortesia.excedida ? 'Cortesía fuera del plan mensual' : 'Cortesía registrada'}</strong>
+      <span>{cortesia.leyenda}</span>
+    </div>
+  );
+}
+
 function ConfirmedView({ order, onNewSale }) {
+  const esperar = !!(order.cortesia && order.cortesia.excedida);
   React.useEffect(() => {
+    if (esperar) return undefined;
     const t = setTimeout(onNewSale, 5000);
     return () => clearTimeout(t);
-  }, [onNewSale]);
+  }, [onNewSale, esperar]);
   return (
     <div className="confirm-screen">
       <div className="confirm-check"><span style={{ fontSize: 34 }}>✓</span></div>
       <div className="confirm-order-id">{order.folio || order.id}</div>
-      <p style={{ fontWeight: 600, color: 'var(--ink-soft)' }}>Pedido enviado a la barra de preparación</p>
-      <div className="confirm-total">{money(order.total)}</div>
-      <button className="btn-primary" onClick={onNewSale}>Nueva venta</button>
+      <p style={{ fontWeight: 600, color: 'var(--ink-soft)' }}>Pedido enviado a preparación{destinoLabel(order) ? ` · ${destinoLabel(order)}` : ''}</p>
+      <div className="confirm-total">{order.esCortesia ? 'Cortesía · $0.00' : money(order.total)}</div>
+      <CortesiaAviso cortesia={order.cortesia} />
+      <button className="btn-primary" onClick={onNewSale}>{esperar ? 'Entendido, nueva venta' : 'Nueva venta'}</button>
     </div>
   );
 }
@@ -33,6 +48,7 @@ function DetalleVenta({id}) {
   return <details style={{marginTop:8}} onToggle={e=>{if(e.currentTarget.open&&!data)api.getPedido(id).then(setData).catch(e=>setError(e.message));}}><summary style={{cursor:'pointer'}}>Ver detalle</summary>
     {error&&<p>{error}</p>}{data&&<div style={{paddingTop:8,fontSize:13}}>
       {data.registro_manual&&<p>Captura directa · {data.motivo_registro}<br/>Ingresada al sistema: {new Date(data.registrado_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}</p>}
+      {data.metodo_pago==='cortesia'&&<p>Cortesía · {CORTESIA_ESTADO_LABELS[data.cortesia_estado]||data.cortesia_estado} · valor {money(data.subtotal)}{data.cortesia_motivo&&<><br/>Motivo: {data.cortesia_motivo}</>}{data.cortesia_nota&&<><br/>Nota del administrador: {data.cortesia_nota}</>}</p>}
       {data.items.map(i=><p key={i.id}>{i.cantidad} × {i.producto_nombre} · {money(i.precio_unitario)} c/u{i.motivo_precio&&<><br/>Motivo: {i.motivo_precio} {i.precio_catalogo!==null&&`(catálogo: ${money(i.precio_catalogo)})`}</>}</p>)}
     </div>}
   </details>;
@@ -69,14 +85,16 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
               <div className="turno-id">{o.folio}</div>
               <div className="turno-sub">
                 {new Date(o.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} • {o.numItems} producto(s) • {o.payMethod}
+                {o.destino && ` • ${destinoLabel(o)}`}
                 {o.origen === 'app' && o.cliente && ` • 🌐 En línea — ${o.cliente.nombre} ${o.cliente.apellido}`}
               </div>
               <DetalleVenta id={o.id}/>
               {vencido && <div className="vencido-warning"><AlertTriangle size={11} /> Pasada la hora de recogida sin cobrarse</div>}
             </div>
             <div className="turno-right">
-              <div className="turno-amount">{money(o.total)}</div>
+              <div className="turno-amount">{o.esCortesia ? 'Cortesía' : money(o.total)}</div>
               <StatusChip status={status} />
+              {o.esCortesia && o.cortesiaEstado && <span className={`cortesia-tag ${o.cortesiaEstado}`}><Gift size={11} /> {CORTESIA_ESTADO_LABELS[o.cortesiaEstado] || o.cortesiaEstado}</span>}
               {status === 'pendiente' && (
                 <button className="link-danger" onClick={() => onCancel(o.id)}>Cancelar</button>
               )}
@@ -98,8 +116,9 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
 
 // mostrador: { irA, pendientes } cuando la misma persona también es barista
 // (rol "mostrador"): agrega el acceso "Barra" a la navegación.
-export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null }) {
+export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null, mesas = 4 }) {
   const [screen, setScreen] = useState('menu');
+  const [destino, setDestino] = useState(null); // { destino: 'mesa'|'barra'|'llevar', mesa }
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [activeCat, setActiveCat] = useState('Calientes');
   const [customizing, setCustomizing] = useState(null);
@@ -119,7 +138,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
 
   const quickAdd = product => {
     setCart(c => [...c, { uid: `${product.id}-${Date.now()}`, productId: product.id, qty: 1, unitPrice: product.price, extras: [] }]);
-    addToast(`Agregado: ${product.name}`, 'success');
+    if (product.agotado) addToast(`${product.name}: sin existencias registradas. Se agrega de todos modos; registra la compra en Inventario.`, 'warn');
+    else addToast(`Agregado: ${product.name}`, 'success');
   };
 
   const backFromCheckout = () => {
@@ -127,26 +147,37 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
     else { setScreen('menu'); }
   };
 
+  const [cortesiaAviso, setCortesiaAviso] = useState(null);
   const handleConfirmPay = async payInfo => {
     if (chargingOrder) {
-      await confirmarEntrega(chargingOrder.id, { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo });
+      const r = await confirmarEntrega(chargingOrder.id, { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia });
       setChargingOrder(null);
       setAmounts(null);
       setScreen('turno');
+      // Pedido en línea entregado como cortesía: si excedió el cupo, la
+      // leyenda se muestra en un aviso que la Caja debe cerrar.
+      if (r && r.cortesia) { if (r.cortesia.excedida) setCortesiaAviso(r.cortesia); else addToast(r.cortesia.leyenda, 'success'); }
       return;
     }
+    // El modal de cortesía espera el error para mostrarlo; el resto de los
+    // métodos siguen avisando con un toast.
+    const esCortesia = payInfo.method === 'cortesia';
     try {
       const order = await createOrder({
         cart,
         descuentoPorcentaje: discount?.porcentaje,
         autorizacionDescuento: discount?.autorizacion,
-        pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo },
+        pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia },
+        destino: destino?.destino,
+        mesa: destino?.mesa ?? undefined,
       });
       setLastOrder(order);
       setCart([]);
       setDiscount(null);
+      setDestino(null);
       setScreen('confirmed');
     } catch (e) {
+      if (esCortesia) throw e;
       addToast('No se pudo crear el pedido: ' + e.message, 'warn');
     }
   };
@@ -183,9 +214,11 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
     <CartView
       cart={cart} setCart={setCart} discount={discount}
       onAuthorizeDiscount={authorizeDiscount}
+      destino={destino} onDestino={setDestino} mesas={mesas}
       onCheckout={amts => { setAmounts(amts); setScreen('checkout'); }}
     />
   );
+  const destinoTexto = chargingOrder ? destinoLabel(chargingOrder) : destinoLabel(destino ? { destino: destino.destino, mesaNumero: destino.mesa } : {});
 
   return (
     <AppShell
@@ -220,7 +253,13 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
       )}
       {screen === 'directa' && <VentaDirecta onBack={()=>setScreen('menu')} addToast={addToast}/>}
       {screen === 'cart' && <div style={{ maxWidth: 640 }}>{cartPanel}</div>}
-      {screen === 'checkout' && <CheckoutView amounts={amounts} onBack={backFromCheckout} onConfirm={handleConfirmPay} />}
+      {screen === 'checkout' && <CheckoutView amounts={amounts} onBack={backFromCheckout} onConfirm={handleConfirmPay} allowCortesia destinoTexto={destinoTexto} />}
+      {cortesiaAviso && (
+        <Sheet title="Cortesía fuera del plan" onClose={() => setCortesiaAviso(null)}>
+          <CortesiaAviso cortesia={cortesiaAviso} />
+          <div className="sheet-footer"><span /><button className="btn-primary" onClick={() => setCortesiaAviso(null)}>Entendido</button></div>
+        </Sheet>
+      )}
       {screen === 'confirmed' && lastOrder && <ConfirmedView order={lastOrder} onNewSale={() => setScreen('menu')} />}
       {screen === 'turno' && (
         <TurnoView

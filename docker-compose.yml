@@ -50,6 +50,11 @@ services:
       - ./db/22_revision_precio_estable.sql:/docker-entrypoint-initdb.d/22_revision_precio_estable.sql:ro
       - ./db/23_retirar_opciones.sql:/docker-entrypoint-initdb.d/23_retirar_opciones.sql:ro
       - ./db/24_fondo_caja.sql:/docker-entrypoint-initdb.d/24_fondo_caja.sql:ro
+      - ./db/25_imagen_producto.sql:/docker-entrypoint-initdb.d/25_imagen_producto.sql:ro
+      - ./db/26_cortesias.sql:/docker-entrypoint-initdb.d/26_cortesias.sql:ro
+      - ./db/27_mesas_y_estaciones.sql:/docker-entrypoint-initdb.d/27_mesas_y_estaciones.sql:ro
+      - ./db/28_reventa_snacks.sql:/docker-entrypoint-initdb.d/28_reventa_snacks.sql:ro
+      - ./db/29_presentacion_insumos.sql:/docker-entrypoint-initdb.d/29_presentacion_insumos.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

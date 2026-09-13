@@ -2,12 +2,14 @@ const express = require('express');
 const { query } = require('../db');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = require('../middleware/auth');
+const { CLAVE_CUPO, normalizarCupo, MAX_CUPO } = require('../services/courtesies');
+const { CLAVE_MESAS, normalizarMesas, MESAS_DEFAULT, MAX_MESAS } = require('../services/stations');
 
 const router = express.Router();
 
 // Claves de configuración del negocio (en BD) que expone la app. Cada sede
 // tiene las suyas: nombre, logo y verificación por SMS son POR SUCURSAL.
-const CLAVES = ['sms_verificacion', 'nombre_negocio', 'logo', 'lema', 'pie_pantalla', 'pantalla_estilo'];
+const CLAVES = ['sms_verificacion', 'nombre_negocio', 'logo', 'lema', 'pie_pantalla', 'pantalla_estilo', CLAVE_CUPO, CLAVE_MESAS];
 
 // Lee la config de UNA sede y la entrega con nombres amigables para el front.
 async function leerConfig(sucursalId) {
@@ -26,6 +28,11 @@ async function leerConfig(sucursalId) {
     lema: typeof map.lema === 'string' ? map.lema : '',
     piePantalla: typeof map.pie_pantalla === 'string' ? map.pie_pantalla : '',
     pantallaEstilo: ['clasico','ilustrado'].includes(map.pantalla_estilo) ? map.pantalla_estilo : 'pizarra',
+    // Cortesías: cupo mensual COMPARTIDO por sucursal para el rol cajero.
+    // Sin fila = 0 (toda cortesía requiere autorización del administrador).
+    cortesiasMesCajero: Number.isInteger(Number(map[CLAVE_CUPO])) && Number(map[CLAVE_CUPO]) >= 0 ? Math.min(Number(map[CLAVE_CUPO]), MAX_CUPO) : 0,
+    // Mesas de la sede (destino del pedido en Caja): Mesa 1..N; sin fila = 4.
+    mesas: map[CLAVE_MESAS] !== undefined && Number.isInteger(Number(map[CLAVE_MESAS])) && Number(map[CLAVE_MESAS]) >= 0 ? Math.min(Number(map[CLAVE_MESAS]), MAX_MESAS) : MESAS_DEFAULT,
   };
 }
 
@@ -53,6 +60,8 @@ router.put('/', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler
   if ('lema' in req.body) await guardar(req.sucursalId, 'lema', String(req.body.lema || '').slice(0, 80));
   if ('piePantalla' in req.body) await guardar(req.sucursalId, 'pie_pantalla', String(req.body.piePantalla || '').slice(0, 120));
   if ('pantallaEstilo' in req.body) await guardar(req.sucursalId, 'pantalla_estilo', ['clasico','ilustrado'].includes(req.body.pantallaEstilo) ? req.body.pantallaEstilo : 'pizarra');
+  if ('cortesiasMesCajero' in req.body) await guardar(req.sucursalId, CLAVE_CUPO, normalizarCupo(req.body.cortesiasMesCajero));
+  if ('mesas' in req.body) await guardar(req.sucursalId, CLAVE_MESAS, normalizarMesas(req.body.mesas));
   res.json(await leerConfig(req.sucursalId));
 }));
 

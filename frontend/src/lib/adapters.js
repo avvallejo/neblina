@@ -11,6 +11,10 @@ export function adaptPedido(p) {
     total: Number(p.total || 0),
     subtotal: Number(p.subtotal || 0),
     payMethod: p.metodo_pago ? (PAY_METHOD_LABELS[p.metodo_pago] || p.metodo_pago) : 'Por cobrar',
+    esCortesia: p.metodo_pago === 'cortesia',
+    cortesiaEstado: p.cortesia_estado || null,
+    destino: p.destino || null,
+    mesaNumero: p.mesa_numero != null ? Number(p.mesa_numero) : null,
     cashGiven: p.monto_recibido != null ? Number(p.monto_recibido) : null,
     change: p.cambio != null ? Number(p.cambio) : null,
     origen: p.origen,
@@ -47,6 +51,9 @@ export function adaptTicket(pi) {
     cliente: pi.cliente_nombre ? { nombre: pi.cliente_nombre, apellido: pi.cliente_apellido || '' } : null,
     horaRecogida: pi.hora_recogida ? new Date(pi.hora_recogida).getTime() : null,
     isReward: !!pi.es_regalo,
+    estacion: pi.estacion || 'barra',
+    destino: pi.destino || null,
+    mesaNumero: pi.mesa_numero != null ? Number(pi.mesa_numero) : null,
   };
 }
 
@@ -80,6 +87,9 @@ export function adaptMateria(m) {
     unidad: normalizeUnidad(m.unidad),
     stockActual: Number(m.stock_actual),
     stockMinimo: Number(m.stock_minimo),
+    stockMaximo: m.stock_maximo === null || m.stock_maximo === undefined ? null : Number(m.stock_maximo),
+    // Presentación de compra: { nombre: 'bolsa', cantidad: 900, unidad: 'g' } | null
+    presentacion: m.presentacion_cantidad ? { nombre: m.presentacion_nombre || 'paquete', cantidad: Number(m.presentacion_cantidad), unidad: normalizeUnidad(m.presentacion_unidad) } : null,
     costoUnitario: Number(m.costo_unitario),
     proveedorId: m.proveedor_id || null,
     requiereLote: !!m.requiere_lote,

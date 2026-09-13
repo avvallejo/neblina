@@ -6,6 +6,8 @@ const { cleanText, parseNumber, toBoolean } = require('../utils/catalogValidatio
 const { preciosPorRevisar, mantenerPrecio } = require('../services/priceReview');
 
 const { productImage } = require('../utils/productImage');
+const { normalizarEstacionProducto } = require('../services/stations');
+const { normalizarReventa, guardarReventa, reventaSql } = require('../services/resale');
 const router = express.Router();
 
 function requireAdminForInactiveCatalog(req, res, next) {
@@ -30,7 +32,8 @@ router.get('/', requireAdminForInactiveCatalog, resolveSucursalPublico, asyncHan
   const { rows } = await query(
     `SELECT p.*, cp.nombre AS categoria, fn_precio_efectivo(p.id) AS precio_efectivo,
        (SELECT jsonb_object_agg(oc.codigo,fn_recargo_cafe(oc.id,COALESCE((SELECT gramaje_por_shot FROM recetas WHERE producto_id=p.id),18)))
-        FROM opciones_cafe oc WHERE oc.sucursal_id=p.sucursal_id AND oc.activo) AS recargos_cafe
+        FROM opciones_cafe oc WHERE oc.sucursal_id=p.sucursal_id AND oc.activo) AS recargos_cafe,
+       ${reventaSql} AS reventa
      FROM productos p JOIN categorias_producto cp ON cp.id = p.categoria_id
      ${where} ORDER BY cp.orden, p.nombre`,
     values
@@ -107,6 +110,43 @@ function parseMargen(valor) {
   return Math.round(n * 100) / 100;
 }
 
+// Categorías del menú (por sucursal): crear, renombrar, reordenar y borrar
+// si ningún producto la usa. Aparecen en Caja, la app del cliente y la TV.
+router.post('/categorias', asyncHandler(async (req, res) => {
+  const nombre = cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 });
+  const { rows } = await query(
+    `INSERT INTO categorias_producto (nombre, sucursal_id, orden)
+     VALUES ($1, $2, (SELECT COALESCE(MAX(orden), 0) + 1 FROM categorias_producto WHERE sucursal_id = $2)) RETURNING *`,
+    [nombre, req.sucursalId]
+  );
+  res.status(201).json(rows[0]);
+}));
+router.put('/categorias/orden', asyncHandler(async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number) : [];
+  if (!ids.length || ids.some(n => !Number.isInteger(n))) throw new ApiError(400, 'Envía la lista de categorías en el orden deseado.');
+  await withTransaction(async client => {
+    for (let i = 0; i < ids.length; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await client.query('UPDATE categorias_producto SET orden = $1 WHERE id = $2 AND sucursal_id = $3', [i + 1, ids[i], req.sucursalId]);
+    }
+  });
+  const { rows } = await query('SELECT * FROM categorias_producto WHERE sucursal_id = $1 ORDER BY orden', [req.sucursalId]);
+  res.json(rows);
+}));
+router.patch('/categorias/:id', asyncHandler(async (req, res) => {
+  const nombre = cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 });
+  const { rows } = await query('UPDATE categorias_producto SET nombre = $1 WHERE id = $2 AND sucursal_id = $3 RETURNING *', [nombre, req.params.id, req.sucursalId]);
+  if (!rows.length) throw new ApiError(404, 'Categoría no encontrada.');
+  res.json(rows[0]);
+}));
+router.delete('/categorias/:id', asyncHandler(async (req, res) => {
+  const { rows: [uso] } = await query('SELECT COUNT(*)::int AS n FROM productos WHERE categoria_id = $1', [req.params.id]);
+  if (uso.n > 0) throw new ApiError(409, `No se puede borrar: ${uso.n} producto(s) están en esta categoría. Cámbialos de categoría primero.`);
+  const { rows } = await query('DELETE FROM categorias_producto WHERE id = $1 AND sucursal_id = $2 RETURNING id', [req.params.id, req.sucursalId]);
+  if (!rows.length) throw new ApiError(404, 'Categoría no encontrada.');
+  res.json({ ok: true });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
   const { nombre, categoriaId, tipo, icono, precioBase, permiteTamanos, permiteLeche, permiteTipoCafe, permiteExtras, esFrio, margenPorcentaje } = req.body;
   const imagen = productImage(req.body.imagen);
@@ -118,14 +158,15 @@ router.post('/', asyncHandler(async (req, res) => {
   const categoriaPropia = await query('SELECT id FROM categorias_producto WHERE id = $1 AND sucursal_id = $2', [categoriaId, req.sucursalId]);
   if (categoriaPropia.rows.length === 0) throw new ApiError(400, 'La categoría no pertenece a esta sucursal.');
   const margen = parseMargen(margenPorcentaje);
+  const reventa = normalizarReventa(req.body.reventa);
 
   // El producto nace con su RECETA ya creada (con valores predeterminados
   // según su tipo), para que el flujo inventario → receta → costo → precio
   // funcione sin pasos manuales: solo falta ajustar ingredientes y margen.
   const producto = await withTransaction(async client => {
     const { rows } = await client.query(
-      `INSERT INTO productos (nombre, categoria_id, tipo, icono, precio_base, permite_tamanos, permite_leche, permite_tipo_cafe, permite_extras, es_frio, sucursal_id, margen_porcentaje, descripcion, precio_promocional)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      `INSERT INTO productos (nombre, categoria_id, tipo, icono, precio_base, permite_tamanos, permite_leche, permite_tipo_cafe, permite_extras, es_frio, sucursal_id, margen_porcentaje, descripcion, precio_promocional, estacion)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [
         nombreLimpio,
         categoriaId,
@@ -142,9 +183,11 @@ router.post('/', asyncHandler(async (req, res) => {
         cleanText(req.body.descripcion, { field: 'descripción', max: 140 }) || null,
         req.body.precioPromocional === undefined || req.body.precioPromocional === null || req.body.precioPromocional === ''
           ? null : parseNumber(req.body.precioPromocional, 'precio promocional', { min: 0 }),
+        normalizarEstacionProducto(req.body.estacion, { tipo }),
       ]
     );
     if(imagen) await client.query('UPDATE productos SET imagen=$2 WHERE id=$1',[rows[0].id,imagen]);
+    await guardarReventa(client, { productoId: rows[0].id, sucursalId: req.sucursalId, tipo, reventa });
     if (tipo !== 'snack') {
       await client.query('INSERT INTO recetas (producto_id) VALUES ($1)', [rows[0].id]);
       await client.query('SELECT fn_resetear_receta($1)', [rows[0].id]);
@@ -186,6 +229,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   if (req.body.permiteExtras !== undefined) add('permite_extras', toBoolean(req.body.permiteExtras));
   if (req.body.esFrio !== undefined) add('es_frio', toBoolean(req.body.esFrio));
   if (req.body.activo !== undefined) add('activo', toBoolean(req.body.activo));
+  if (req.body.estacion !== undefined) add('estacion', normalizarEstacionProducto(req.body.estacion, { tipo: req.body.tipo || 'bebida' }));
   if (req.body.margenPorcentaje !== undefined) add('margen_porcentaje', parseMargen(req.body.margenPorcentaje));
   if (req.body.tiempoEstimadoMin !== undefined) {
     add('tiempo_estimado_min', req.body.tiempoEstimadoMin === null || req.body.tiempoEstimadoMin === ''
@@ -193,11 +237,23 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       : parseNumber(req.body.tiempoEstimadoMin, 'tiempo estimado', { min: 0, integer: true }));
   }
 
-  if (sets.length === 0) throw new ApiError(400, 'No se envió ningún campo para actualizar.');
-  values.push(req.params.id, req.sucursalId);
-  const { rows } = await query(`UPDATE productos SET ${sets.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1} RETURNING *`, values);
-  if (rows.length === 0) throw new ApiError(404, 'Producto no encontrado.');
-  res.json(rows[0]);
+  const reventa = normalizarReventa(req.body.reventa);
+  if (sets.length === 0 && reventa === undefined) throw new ApiError(400, 'No se envió ningún campo para actualizar.');
+  const producto = await withTransaction(async client => {
+    let row;
+    if (sets.length) {
+      values.push(req.params.id, req.sucursalId);
+      const { rows } = await client.query(`UPDATE productos SET ${sets.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1} RETURNING *`, values);
+      row = rows[0];
+    } else {
+      const { rows } = await client.query('SELECT * FROM productos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.sucursalId]);
+      row = rows[0];
+    }
+    if (!row) throw new ApiError(404, 'Producto no encontrado.');
+    await guardarReventa(client, { productoId: row.id, sucursalId: req.sucursalId, tipo: row.tipo, reventa });
+    return row;
+  });
+  res.json(producto);
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {

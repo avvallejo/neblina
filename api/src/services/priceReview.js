@@ -16,7 +16,8 @@ async function mantenerPrecio(client, { id, sucursalId, revision }) {
   }
   const { rows } = await client.query(
     `UPDATE productos SET revision_precio_aceptada=$3
-     WHERE id=$1 AND sucursal_id=$2 AND activo AND tipo<>'snack'
+     WHERE id=$1 AND sucursal_id=$2 AND activo
+       AND (tipo<>'snack' OR EXISTS (SELECT 1 FROM receta_insumos_fijos f WHERE f.producto_id=productos.id))
        AND fn_revision_precio(id)=$3
      RETURNING id, precio_base`, [id,sucursalId,revision]);
   if (!rows.length) throw new ApiError(409, 'La receta o sus insumos cambiaron, o el producto ya no está disponible. Actualiza la lista y vuelve a revisar.');

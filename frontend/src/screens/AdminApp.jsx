@@ -6,17 +6,18 @@ import {
   LayoutDashboard, Lock, Droplets, Package, Coffee, ClipboardList, Receipt,
   Settings, Building2, BarChart3, Plus, Pencil, UserPlus, Sparkles, AlertTriangle,
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
+  Gift, BadgeCheck,
 } from 'lucide-react';
 import * as api from '../api/client.js';
-import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
-import { money, unidadDisplay, stockPct, convertirCantidad } from '../lib/helpers.js';
+import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, ESTACION_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
+import { money, unidadDisplay, stockPct, convertirCantidad, formatNumeroInput as formatNumero } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
 import { ConfirmDialog, EmptyState, FormError } from '../components/ui.jsx';
 import { RecipeModal } from '../components/recipe.jsx';
 import {
   PromoConfigSheet, UsuarioFormSheet, ProveedorFormSheet, MateriaFormSheet,
   ProductoFormSheet, RecetaFormSheet, BrandingEditor, PrecioCostoSheet, CompraSheet, AjusteStockSheet,
-  GastoFijoFormSheet, MargenConfigSheet, GASTO_CATEGORIAS, OpcionFormSheet, PantallaConfigEditor,
+  GastoFijoFormSheet, MargenConfigSheet, GASTO_CATEGORIAS, OpcionFormSheet, PantallaConfigEditor, CortesiasConfigEditor, MesasConfigEditor, CategoriasEditor,
 } from './adminForms.jsx';
 import { Sheet } from '../components/ui.jsx';
 
@@ -24,7 +25,7 @@ import { Sheet } from '../components/ui.jsx';
 
 function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste }) {
   const [filtro, setFiltro] = useState('Todas');
-  const categorias = ['Todas', ...MATERIA_CATEGORIAS];
+  const categorias = ['Todas', ...new Set([...MATERIA_CATEGORIAS, ...materias.map(m => m.categoria).filter(Boolean)])];
   const lista = filtro === 'Todas' ? materias : materias.filter(m => m.categoria === filtro);
   return (
     <>
@@ -42,7 +43,7 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
             <div key={m.id} className="list-row">
               <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
                 <div className="list-row-title">{m.nombre}{!m.activo ? ' • Inactivo' : ''}</div>
-                <div className="list-row-sub">{m.categoria} • {proveedor ? proveedor.nombre : 'Sin proveedor'} • {money(m.costoUnitario)}/{unidadDisplay(m.unidad)}</div>
+                <div className="list-row-sub">{m.categoria} • {proveedor ? proveedor.nombre : 'Sin proveedor'} • {money(m.costoUnitario)}/{unidadDisplay(m.unidad)}{m.presentacion ? ` • ${m.presentacion.nombre} de ${formatNumero(m.presentacion.cantidad)} ${unidadDisplay(m.presentacion.unidad)}` : ''}</div>
                 <div className="stock-bar"><div className={`stock-bar-fill ${bajo ? '' : 'ok'}`} style={{ width: `${pct}%` }} /></div>
                 <div className="materia-stock-label">
                   {m.stockActual} / {m.stockMinimo} {unidadDisplay(m.unidad)}
@@ -133,11 +134,17 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
           <div key={p.id} className="list-row">
             <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
               <div className="list-row-title">{p.icon} {p.name}{p.activo === false ? ' • Inactivo' : ''}</div>
-              <div className="list-row-sub">{p.cat} • {p.sizes ? `desde ${money(precioDesde(p))}` : money(p.price)}</div>
+              <div className="list-row-sub">{p.cat} • {p.sizes ? `desde ${money(precioDesde(p))}` : money(p.price)} <span className={`estacion-tag ${p.estacion || 'barra'}`}>{ESTACION_LABELS[p.estacion || 'barra']}</span>
+                {p.reventa && (
+                  <span className={`existencias-tag ${p.agotado ? 'agotado' : p.reventa.stock < p.reventa.stockMinimo ? 'bajo' : ''}`}>
+                    {p.agotado ? 'Agotado' : `Quedan ${formatNumero(p.reventa.stock)} pzas`}{p.reventa.aPedir > 0 ? ` · pedir ${formatNumero(p.reventa.aPedir)}` : ''}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="list-row-actions" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
               <button className="icon-btn small" onClick={() => onEdit(p)} aria-label="Editar"><Pencil size={14} /></button>
-              {p.tipo !== 'snack' && <button className="link-toggle" onClick={() => onCosto(p)}>Costo y precio</button>}
+              {(p.tipo !== 'snack' || p.reventa) && <button className="link-toggle" onClick={() => onCosto(p)}>Costo y precio</button>}
               <button className="link-toggle" onClick={() => onToggleActivo(p.id, p.activo !== false)}>{p.activo === false ? 'Activar' : 'Desactivar'}</button>
               <button className="link-danger" onClick={() => onDelete(p)}>Eliminar</button>
             </div>
@@ -181,10 +188,18 @@ function ReportesSection({ data, consolidado }) {
           <EmptyState icon={Wallet} title="Sin ventas cobradas todavía" />
         ) : (
           ventasPorMetodo.map((r, i) => (
-            <div key={i} className="reporte-row">
-              <span>{consolidado && <span className="sede-name">{r.sucursal} — </span>}{PAY_METHOD_LABELS[r.metodo_pago] || r.metodo_pago}</span>
-              <span className="turno-amount">{money(r.total)}</span>
-            </div>
+            r.metodo_pago === 'cortesia' ? (
+              // Cortesías: no entró dinero (total $0); se muestra lo regalado a precio de menú.
+              <div key={i} className="reporte-row">
+                <span>{consolidado && <span className="sede-name">{r.sucursal} — </span>}<Gift size={13} style={{ verticalAlign: -2 }} /> Cortesías <span className="sede-name">· {Number(r.num_pedidos || 0)} pedido(s), valor regalado</span></span>
+                <span className="turno-amount">{money(r.valor_cortesias || 0)}</span>
+              </div>
+            ) : (
+              <div key={i} className="reporte-row">
+                <span>{consolidado && <span className="sede-name">{r.sucursal} — </span>}{PAY_METHOD_LABELS[r.metodo_pago] || r.metodo_pago}</span>
+                <span className="turno-amount">{money(r.total)}</span>
+              </div>
+            )
           ))
         )}
 
@@ -223,6 +238,80 @@ function ReportesSection({ data, consolidado }) {
             </div>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Autorizaciones: cortesías que excedieron el cupo del mes ---------- */
+
+// Las pendientes llegan desde App (se refrescan cada 5 s con el resto de
+// admin); el historial se consulta aquí al entrar y tras cada decisión.
+function AutorizacionesSection({ pendientes, addToast, onResolved }) {
+  const [historial, setHistorial] = useState(null);
+  const [notas, setNotas] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  const cargarHistorial = React.useCallback(() => {
+    api.getCortesias().then(rows => setHistorial(rows.filter(r => r.cortesia_estado !== 'pendiente'))).catch(e => addToast(e.message, 'warn'));
+  }, [addToast]);
+  useEffect(() => { cargarHistorial(); }, [cargarHistorial]);
+
+  const resolver = async (row, decision) => {
+    setBusyId(row.id);
+    try {
+      const nota = (notas[row.id] || '').trim();
+      if (decision === 'autorizada') await api.autorizarCortesia(row.id, nota || undefined);
+      else await api.rechazarCortesia(row.id, nota || undefined);
+      addToast(decision === 'autorizada' ? `Cortesía ${row.folio} autorizada` : `Cortesía ${row.folio} rechazada`, decision === 'autorizada' ? 'success' : 'warn');
+      setNotas(n => ({ ...n, [row.id]: '' }));
+      await onResolved();
+      cargarHistorial();
+    } catch (e) { addToast(e.message, 'warn'); }
+    finally { setBusyId(null); }
+  };
+
+  const fecha = iso => new Date(iso).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'medium', timeStyle: 'short' });
+  // Función de render (no componente anidado): así el input de la nota no se
+  // remonta ni pierde el foco en cada tecla o refresco de pendientes.
+  const tarjeta = r => (
+    <div key={r.id} className={`autorizacion-card ${r.cortesia_estado}`}>
+      <div>
+        <div className="folio">{r.folio} <span className={`cortesia-tag ${r.cortesia_estado}`}>{CORTESIA_ESTADO_LABELS[r.cortesia_estado] || r.cortesia_estado}</span></div>
+        <div className="meta">
+          {fecha(r.creado_en)} · Caja: {r.cajero_nombre || '—'}{r.origen === 'app' && r.cliente_nombre ? ` · pedido en línea de ${r.cliente_nombre} ${r.cliente_apellido || ''}` : ''}{r.cancelado ? ' · pedido cancelado' : ''}
+          {r.cortesia_motivo && <><br />Motivo de la Caja: {r.cortesia_motivo}</>}
+          {r.cortesia_estado !== 'pendiente' && r.cortesia_estado !== 'dentro_plan' && <><br />{r.cortesia_estado === 'autorizada' ? 'Autorizada' : 'Rechazada'} por {r.resuelta_por_nombre || 'administración'}{r.cortesia_resuelta_en ? ` el ${fecha(r.cortesia_resuelta_en)}` : ''}{r.cortesia_nota ? ` — "${r.cortesia_nota}"` : ''}</>}
+        </div>
+        {r.detalle && <div className="detalle">{r.detalle}</div>}
+      </div>
+      <div className="valor">{money(r.subtotal)}</div>
+      {r.cortesia_estado === 'pendiente' && (
+        <div className="acciones">
+          <input className="text-input" maxLength={300} placeholder="Nota para la Caja (opcional)" value={notas[r.id] || ''} onChange={e => setNotas(n => ({ ...n, [r.id]: e.target.value }))} />
+          <button className="btn-primary small" disabled={busyId === r.id} onClick={() => resolver(r, 'autorizada')}><BadgeCheck size={14} /> Autorizar</button>
+          <button className="btn-ghost small" disabled={busyId === r.id} onClick={() => resolver(r, 'rechazada')}>Rechazar</button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="admin-columns">
+      <div>
+        <div className="section-title"><AlertTriangle size={15} /> Pendientes de autorizar</div>
+        <p className="field-hint" style={{ marginBottom: 12 }}>
+          Cortesías que la Caja dio después de agotar el cupo del mes. La venta ya se procesó en $0; aquí decides si la apruebas o la rechazas.
+          Una cortesía rechazada solo queda marcada (con tu nota) para resolverse fuera del sistema.
+        </p>
+        {(pendientes || []).length === 0
+          ? <EmptyState icon={BadgeCheck} title="Sin cortesías pendientes" subtitle="Cuando la Caja exceda el cupo del mes, aparecerán aquí" />
+          : pendientes.map(tarjeta)}
+      </div>
+      <div>
+        <div className="section-title"><Gift size={15} /> Historial de cortesías</div>
+        {historial === null ? <EmptyState icon={Gift} title="Cargando…" />
+          : historial.length === 0 ? <EmptyState icon={Gift} title="Aún no hay cortesías registradas" />
+          : historial.map(tarjeta)}
       </div>
     </div>
   );
@@ -670,6 +759,7 @@ export default function AdminApp(props) {
     proveedores, addProveedor, updateProveedor, deleteProveedor,
     productosAdmin, recetaOverrides, setRecetaOverride,
     recargarCatalogo, recargarAdmin, onSedesChanged, preciosPorRevisar,
+    cortesiasMes = 0, cortesiasPendientes = [], mesas = 4,
   } = props;
 
   const [screen, setScreen] = useState('dashboard');
@@ -718,7 +808,9 @@ export default function AdminApp(props) {
     try {
       await api.registrarCompra(materia.id, compra);
       await recargarAdmin(); await recargarCatalogo();
-      addToast(`Compra registrada: +${compra.cantidadComprada} ${compra.unidad} de ${materia.nombre}`, 'success');
+      addToast(compra.paquetes
+        ? `Compra registrada: ${compra.paquetes} ${materia.presentacion ? materia.presentacion.nombre : 'paquete'}(s) de ${materia.nombre} (+${formatNumero(compra.cantidadComprada)} ${unidadDisplay(compra.unidad)})`
+        : `Compra registrada: +${compra.cantidadComprada} ${compra.unidad} de ${materia.nombre}`, 'success');
       return true;
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };
@@ -767,6 +859,7 @@ export default function AdminApp(props) {
     { id: 'proveedores', label: 'Proveedores', Icon: Package },
     { id: 'usuarios', label: 'Personal', Icon: Lock },
     { id: 'reportes', label: 'Reportes', Icon: Receipt },
+    { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: (cortesiasPendientes || []).length },
     ...(esGeneral ? [
       { id: 'comparativo', label: 'Comparativo', Icon: BarChart3 },
       { id: 'sucursales', label: 'Sucursales', Icon: Building2 },
@@ -784,6 +877,7 @@ export default function AdminApp(props) {
     costos: ['Costos indirectos', 'Gastos fijos, margen y punto de equilibrio'],
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
     reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],
+    autorizaciones: ['Autorizaciones', `${(cortesiasPendientes || []).length} cortesía(s) fuera del plan por resolver`],
     comparativo: ['Comparativo de sucursales', 'Todas las sedes'],
     sucursales: ['Sucursales', 'Administración del negocio completo'],
     config: ['Configuración', sedeNombre ? `De ${sedeNombre}` : 'De la sucursal'],
@@ -805,7 +899,7 @@ export default function AdminApp(props) {
       onLogout={onLogout}
       title={title}
       subtitle={subtitle}
-      wide={['reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones'].includes(screen)}
+      wide={['reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones'].includes(screen)}
       topRight={esGeneral ? <span className="sede-pill"><Building2 size={13} /> {sedeNombre || 'Elige sucursal'}</span> : null}
     >
       {screen === 'dashboard' && (
@@ -827,6 +921,7 @@ export default function AdminApp(props) {
               <div className="kpi-card"><span className="kpi-label">Pedidos del día</span><span className="kpi-value">{kpis ? pedidosHoy : '—'}</span></div>
               <div className="kpi-card"><span className="kpi-label">Ticket promedio</span><span className="kpi-value">{kpis ? money(ticketProm) : '—'}</span></div>
               <div className="kpi-card"><span className="kpi-label">Mermas del día</span><span className="kpi-value">{kpis ? Number(kpis.mermas || 0) : '—'}</span></div>
+              <div className="kpi-card"><span className="kpi-label">Cortesías del día</span><span className="kpi-value">{kpis ? Number(kpis.cortesias || 0) : '—'}</span>{kpis && Number(kpis.valor_cortesias || 0) > 0 && <span className="kpi-label">valor {money(kpis.valor_cortesias)}</span>}</div>
             </div>
 
             {materiasBajas.length > 0 && (
@@ -837,7 +932,7 @@ export default function AdminApp(props) {
                   const pct = stockPct(m.stockActual, m.stockMinimo);
                   return (
                     <div key={m.id} className="stock-alert-card">
-                      <div className="stock-row"><strong>{m.nombre}</strong><span>{m.stockActual} / {m.stockMinimo} {unidadDisplay(m.unidad)}</span></div>
+                      <div className="stock-row"><strong>{m.nombre}</strong><span>{m.stockActual} / {m.stockMinimo} {unidadDisplay(m.unidad)}{(() => { const pedir = Math.max(0, (m.stockMaximo ?? m.stockMinimo) - m.stockActual); return pedir > 0 ? <strong className="stock-pedir"> · pedir {formatNumero(pedir)}</strong> : null; })()}</span></div>
                       <div className="stock-bar"><div className="stock-bar-fill" style={{ width: `${pct}%` }} /></div>
                       <div className="stock-meta">
                         <span>{m.categoria}</span>
@@ -888,7 +983,7 @@ export default function AdminApp(props) {
                       {u.rol === 'admin' && u.sucursal_id === null && <span className="general-tag">General</span>}
                     </div>
                     <div className="list-row-sub">
-                      {ROLE_LABELS[u.rol]}
+                      {rolEtiqueta(u)}
                       {u.sucursal_id && sedes ? ` • ${(sedes.find(s => s.id === u.sucursal_id) || {}).nombre || 'Sucursal'}` : ''}
                       {!u.activo && ' • Inactivo'}
                     </div>
@@ -941,6 +1036,7 @@ export default function AdminApp(props) {
       {screen === 'opciones' && <OpcionesSection addToast={addToast} onOpcionesChanged={recargarCatalogo} />}
       {screen === 'costos' && <CostosSection addToast={addToast} sedeNombre={sedeNombre} onCostosChanged={recargarAdmin} />}
       {screen === 'reportes' && <ReportesSection data={reportes} />}
+      {screen === 'autorizaciones' && <AutorizacionesSection pendientes={cortesiasPendientes} addToast={addToast} onResolved={recargarAdmin} />}
       {screen === 'comparativo' && esGeneral && <ComparativoSection addToast={addToast} />}
       {screen === 'sucursales' && esGeneral && <SucursalesSection addToast={addToast} onSedesChanged={onSedesChanged} />}
 
@@ -949,6 +1045,8 @@ export default function AdminApp(props) {
           <div>
             <div className="section-title">Identidad del negocio (por sucursal)</div>
             <BrandingEditor nombreNegocio={nombreNegocio} logo={logo} lema={pantallaCfg ? pantallaCfg.lema : ''} onSave={onSaveBranding} />
+            <div className="section-title" style={{ marginTop: 18 }}><SlidersHorizontal size={15} /> Categorías</div>
+            <CategoriasEditor productos={productosAdmin} materias={materias} addToast={addToast} onChanged={async () => { await recargarCatalogo(); await recargarAdmin(); }} />
           </div>
           <div>
             <div className="section-title"><Monitor size={15} /> Pantalla del negocio (menú para TV)</div>
@@ -975,6 +1073,18 @@ export default function AdminApp(props) {
                 {smsActivo ? '● Activada' : 'Desactivada'}
               </button>
             </div>
+            <div className="section-title"><MapPin size={15} /> Mesas y destino del pedido</div>
+            <div className="promo-summary-card">
+              {mesas > 0 ? `La Caja elige Mesa 1 a ${mesas}, Barra o Para llevar antes de cobrar; la comanda lo muestra en grande.` : 'Sin mesas: la Caja elige Barra o Para llevar antes de cobrar.'}
+            </div>
+            <MesasConfigEditor mesas={mesas} onSave={onSaveBranding} />
+            <div className="section-title"><Gift size={15} /> Cortesías</div>
+            <div className="promo-summary-card">
+              {cortesiasMes > 0
+                ? `La Caja puede dar ${cortesiasMes} cortesía(s) al mes sin autorización; las siguientes quedan pendientes en Autorizaciones.`
+                : 'Sin cupo: toda cortesía que dé la Caja queda pendiente de autorización.'}
+            </div>
+            <CortesiasConfigEditor cupo={cortesiasMes} onSave={onSaveBranding} />
             <div className="section-title">Fidelidad</div>
             <div className="promo-summary-card">
               {promoConfig.activo && premioActual
@@ -1019,6 +1129,7 @@ export default function AdminApp(props) {
       {editingProducto && (
         <ProductoFormSheet
           producto={editingProducto.id ? editingProducto : null}
+          materias={materias}
           onClose={() => setEditingProducto(null)}
           onSave={p => (p.id ? updateProducto(p.id, p) : addProducto(p))}
         />

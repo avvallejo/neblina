@@ -8,7 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { Coffee } from 'lucide-react';
 import * as api from './api/client.js';
 import {
-  CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS,
+  CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, MATERIA_CATEGORIAS,
   replaceArray, ICON_BY_CAT, getProduct,
 } from './lib/catalog.js';
 import { adaptPedido, adaptTicket, adaptMateria, adaptReceta } from './lib/adapters.js';
@@ -59,6 +59,9 @@ export default function App() {
   const [nombreNegocio, setNombreNegocio] = useState('');
   const [logo, setLogo] = useState('');
   const [pantallaCfg, setPantallaCfg] = useState({ lema: '', piePantalla: '', pantallaEstilo: 'pizarra' });
+  const [cortesiasMes, setCortesiasMes] = useState(0); // cupo mensual de cortesías de la sede (rol cajero)
+  const [mesas, setMesas] = useState(4); // mesas de la sede (destino del pedido en Caja)
+  const [cortesiasPendientes, setCortesiasPendientes] = useState([]); // admin: esperan autorización
   const [recetaOverrides, setRecetaOverrides] = useState({});
   // Rol "mostrador" (caja + barra en la misma persona): qué pantalla ve ahora.
   const [modoMostrador, setModoMostrador] = useState('caja');
@@ -124,6 +127,8 @@ export default function App() {
         setNombreNegocio(cfg.nombreNegocio || '');
         setLogo(cfg.logo || '');
         setPantallaCfg({ lema: cfg.lema || '', piePantalla: cfg.piePantalla || '', pantallaEstilo: cfg.pantallaEstilo || 'pizarra' });
+        setCortesiasMes(Number(cfg.cortesiasMesCajero || 0));
+        setMesas(cfg.mesas === undefined ? 4 : Number(cfg.mesas));
       } catch { /* conserva el modo seguro */ }
       setCatalogVersion(v => v + 1);
     } catch (e) {
@@ -162,7 +167,7 @@ export default function App() {
       if (activa) await cargarCatalogo();
 
       if (usuario && usuario.tipo === 'staff') {
-        setCurrentUser({ id: usuario.id, nombre: usuario.nombre, rol: usuario.rol, sucursalId: usuario.sucursalId });
+        setCurrentUser({ id: usuario.id, nombre: usuario.nombre, rol: usuario.rol, sucursalId: usuario.sucursalId, estaciones: usuario.estaciones || ['barra', 'parrilla'] });
         setRole(usuario.rol);
       } else if (api.getTokenCliente() && activa) {
         // Cliente con sesión guardada: directo a su app (ella misma
@@ -207,16 +212,18 @@ export default function App() {
     return () => clearInterval(t);
   }, [role, sede, refrescarPedidos, refrescarCola, refrescarTurno]);
 
-  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono }) => {
-    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono });
+  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono, destino, mesa }) => {
+    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, destino, mesa });
     await refrescarPedidos(); await refrescarCola();
     addToast(`Pedido ${r.pedido.folio} enviado a preparación`, 'success');
-    return adaptPedido(r.pedido);
+    // `cortesia` viene solo cuando se cobró como cortesía: estado, cupo y leyenda para la Caja.
+    return { ...adaptPedido(r.pedido), cortesia: r.cortesia };
   };
   const cobrarPedidoApi = async (orderId, payInfo = null) => {
-    await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo } : {});
+    const r = await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia } : {});
     await refrescarPedidos(); await refrescarCola();
-    addToast('Cobro confirmado', 'success');
+    addToast(r && r.cortesia ? 'Cortesía registrada' : 'Cobro confirmado', 'success');
+    return r;
   };
   const cancelarPedidoApi = async (orderId) => {
     try { await api.cancelarPedido(orderId); await refrescarPedidos(); await refrescarCola(); addToast('Pedido cancelado', 'warn'); }
@@ -261,11 +268,12 @@ export default function App() {
       api.getProveedores().then(setProveedores),
       api.getMaterias().then(rows => setMaterias(rows.map(adaptMateria))),
       api.getProductosAdmin().then(setProductosAdmin),
-      api.getMateriasCategorias(), api.getCategoriasProducto(),
+      api.getMateriasCategorias().then(rows => replaceArray(MATERIA_CATEGORIAS, rows.map(r => r.nombre))), api.getCategoriasProducto(),
       api.getFidelidad().then(fid => {
         if (fid) setPromoConfig({ activo: fid.activo, cada: fid.cada_n_pedidos, premioId: fid.producto_premio_id });
       }),
       api.getReportes().then(setReportes).catch(() => setReportes(null)),
+      api.getCortesias('pendiente').then(setCortesiasPendientes).catch(() => { /* conserva lo último */ }),
       api.getPreciosPorRevisar().then(rows => { if (revisionCarga === revisionCargaPrecios.current) setPreciosPorRevisar(rows); }),
     ]);
   }, []);
@@ -320,13 +328,13 @@ export default function App() {
   };
 
   const addUsuario = async u => {
-    try { await api.crearUsuario({ nombre: u.nombre, rol: u.rol, pin: u.pin, esAdminGeneral: u.esAdminGeneral }); await recargarAdmin(); addToast('Usuario agregado', 'success'); }
+    try { await api.crearUsuario({ nombre: u.nombre, rol: u.rol, pin: u.pin, esAdminGeneral: u.esAdminGeneral, estaciones: u.estaciones }); await recargarAdmin(); addToast('Usuario agregado', 'success'); }
     catch (e) { addToast(e.message, 'warn'); }
   };
   const updateUsuario = async (id, patch) => {
     try {
       const body = {};
-      ['nombre', 'rol', 'activo'].forEach(k => { if (patch[k] !== undefined) body[k] = patch[k]; });
+      ['nombre', 'rol', 'activo', 'estaciones'].forEach(k => { if (patch[k] !== undefined) body[k] = patch[k]; });
       if (patch.pin) body.pin = patch.pin;
       if (patch.sucursalId !== undefined) body.sucursalId = patch.sucursalId;
       await api.actualizarUsuario(id, body); await recargarAdmin();
@@ -400,6 +408,8 @@ export default function App() {
       setNombreNegocio(cfg.nombreNegocio || '');
       setLogo(cfg.logo || '');
       setPantallaCfg({ lema: cfg.lema || '', piePantalla: cfg.piePantalla || '', pantallaEstilo: cfg.pantallaEstilo || 'pizarra' });
+      setCortesiasMes(Number(cfg.cortesiasMesCajero || 0));
+      setMesas(cfg.mesas === undefined ? 4 : Number(cfg.mesas));
       addToast('Configuración guardada', 'success');
     } catch (e) { addToast(e.message, 'warn'); }
   };
@@ -476,6 +486,7 @@ export default function App() {
           confirmarEntrega={cobrarPedidoApi} marcarNoShow={noShowPedidoApi} addToast={addToast}
           onLogout={logout} turnoAbierto={turnoAbierto} onToggleTurno={toggleTurno} currentUser={currentUser} now={now}
           mostrador={role === 'mostrador' ? { irA: () => setModoMostrador('barra'), pendientes: cola.filter(t => t.status !== 'terminado').length } : null}
+          mesas={mesas}
         />
       )}
       {(role === 'barista' || (role === 'mostrador' && modoMostrador === 'barra')) && (
@@ -500,6 +511,7 @@ export default function App() {
           kpis={kpis} fechaVentas={fechaVentas} setFechaVentas={setFechaVentas} ventasError={ventasError} reportes={reportes} recargarCatalogo={cargarCatalogo} recargarAdmin={recargarAdmin} addToast={addToast}
           smsActivo={smsActivo} onToggleSms={guardarSmsConfig}
           nombreNegocio={nombreNegocio} logo={logo} pantallaCfg={pantallaCfg} onSaveBranding={guardarBranding}
+          cortesiasMes={cortesiasMes} cortesiasPendientes={cortesiasPendientes} mesas={mesas}
           onLogout={logout} turnoAbierto={turnoAbierto} promoConfig={promoConfig} setPromoConfig={guardarPromo}
           usuarios={usuarios} addUsuario={addUsuario} updateUsuario={updateUsuario} currentUser={currentUser}
           materias={materias} addMateria={addMateria} updateMateria={updateMateria} deleteMateria={deleteMateria}

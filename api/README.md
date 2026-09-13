@@ -290,6 +290,21 @@ ahora también acepta `paquetes`). `stockActual` + `costoUnitario` siguen
 valiendo para capturar existencias a mano. `PATCH` acepta `presentacion`
 (`null` la quita). `test/live-purchases.js` (`npm run test:compras:live`).
 
+### Alimentos de parrilla/cocina y extras por ámbito
+
+`POST/PATCH /api/productos` acepta `tipo: 'alimento'` (sin tamaño, leche ni
+tipo de café: 400 si se intenta; `estacion` por defecto `parrilla`; nace con
+su fila en `recetas` y, si un snack cambia a alimento, se le crea). Su receta
+se guarda con `PUT /api/recetas/:id` como la de una bebida, pero solo
+importan `pasos`, `insumosFijos` (varios ingredientes), `tiempoExtraccion`
+(tiempo de preparación) y `temperaturaServicio` (término). `reventa` sigue
+siendo exclusivo de snacks. Los extras llevan `aplicaA` (`bebidas` |
+`alimentos`) en `POST/PATCH /api/opciones/extras`; `calcularPrecioItem`
+rechaza un extra que no aplique al tipo del producto (400 "no aplica"), y el
+trigger de inventario descuenta ingredientes fijos + insumos de los extras
+en snacks y alimentos. `scripts/agregar-parrilla.js <sede> [--apply]` carga el
+menú inicial. `test/live-alimentos.js` (`npm run test:alimentos:live`).
+
 ## Decisiones de seguridad que ya están tomadas
 
 - El PIN nunca se guarda ni compara en texto plano (bcrypt, vía pgcrypto en

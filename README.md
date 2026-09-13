@@ -184,6 +184,35 @@ seleccionada; en **Configuración → Categorías** se renombran, se reordenan
 (las del menú, que son las pestañas de Caja, app y pantalla) y se borran si
 nada las usa. Los proveedores admiten categorías libres con **+ Otra**.
 
+## Parrilla y cocina: alimentos con receta de varios ingredientes
+
+Además de bebidas, frappés y lo comprado hecho, un producto puede ser
+**Parrilla / cocina** (hamburguesas, tortas, platillos). Se prepara con una
+**receta de varios ingredientes del inventario** (pan, carne, queso,
+verduras, salsas, envoltura…) que se captura en Admin → Recetas junto con los
+pasos, el tiempo de preparación y el término; cada venta descuenta esas
+cantidades (y las de los extras elegidos), su costo directo es la suma de
+sus ingredientes y entra a "Costo y precio" y a la revisión de precios. Sale
+por la comanda de su estación (parrilla por defecto) y el parrillero ve la
+receta completa con las notas del cliente. Los **extras** ahora dicen a qué
+aplican: los de **bebidas** (jarabes, crema, shot) y los de **parrilla /
+cocina** (tocino, queso extra, doble carne); Caja, la app del cliente y la
+pantalla del negocio solo ofrecen los que corresponden. Las bebidas
+compradas hechas (jamaica, horchata, refrescos) se dan de alta como
+**Comprado hecho** en la categoría que quieras (por ejemplo Fríos), con
+existencias por pieza y entrega en caja. Migración `db/30_parrilla_alimentos.sql`.
+
+`api/scripts/agregar-parrilla.js <uuid-sede> [--apply]` da de alta en una
+sede todo el menú inicial de parrilla: proveedores **Leo** (carne y pan) y
+**Monterrey** (abarrotes y bebidas), categorías de insumos, 19 insumos con
+niveles de reorden y costo de referencia, la categoría de menú **Parrilla**
+con Hamburguesa, Quesoburger, Hamburguesa vegetariana y Torta (receta,
+ingredientes y pasos), los extras Tocino / Queso extra / Doble carne y, en
+Fríos, Jamaica, Horchata y Refresco ligados a su insumo. Sin `--apply` solo
+ensaya; es idempotente (lo que ya existe se conserva). Precios y cantidades
+son de referencia: se ajustan en Admin, y las existencias reales se cargan
+con Inventario → Registrar compra.
+
 ## Frontend adaptable
 
 `frontend/` es una app React (Vite) con un solo código para cualquier

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Coffee, Sparkles } from 'lucide-react';
+import { CATEGORIES } from '../lib/catalog.js';
 import './cafeMenu.css';
 
 const dinero = n => `$${Number(n).toLocaleString('es-MX', { maximumFractionDigits: 2 })}`;
@@ -27,15 +28,20 @@ function Bebida({ p }) {
   return <article className="cm-drink">
     <FotoBebida p={p}/>
     <div className="cm-drink-copy"><h3>{p.name}</h3>{p.descripcion && <p>{p.descripcion}</p>}
-      <small>{p.sizes ? p.sizeLabel || 'Tamaño disponible' : 'Presentación de la casa'}</small>
+      {p.tipo!=='alimento' && <small>{p.sizes ? p.sizeLabel || 'Tamaño disponible' : 'Presentación de la casa'}</small>}
     </div>
     <div className="cm-price">{p.precioBase > p.price && <del>{dinero(p.precioBase)}</del>}<strong>{dinero(p.price)}</strong></div>
   </article>;
 }
+// Lo comprado hecho (refrescos, aguas embotelladas, galletas) se lista en
+// renglones compactos debajo de lo que se prepara, en cualquier categoría.
 function Columna({ titulo, subtitulo, productos, tono='' }) {
-  return <section className={`cm-column ${tono}`} style={{'--count':Math.max(1,productos.length)}}>
+  const preparados=productos.filter(p=>p.tipo!=='snack');
+  const simples=productos.filter(p=>p.tipo==='snack');
+  return <section className={`cm-column ${tono}`} style={{'--count':Math.max(1,preparados.length)}}>
     <header className="cm-section-head"><span>{subtitulo}</span><h2>{titulo}</h2></header>
-    <div className="cm-drink-list">{productos.map(p=><Bebida key={p.id} p={p}/>)}</div>
+    <div className="cm-drink-list">{preparados.map(p=><Bebida key={p.id} p={p}/>)}</div>
+    {simples.length>0 && <div className="cm-simple-list">{simples.map(p=><div key={p.id} className="cm-snack"><span>{p.icon} {p.name}</span><b>{dinero(p.price)}</b></div>)}</div>}
   </section>;
 }
 export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abierto,desactualizado }) {
@@ -45,12 +51,23 @@ export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abier
   const calientes=productos.filter(p=>categoria(p)==='Calientes');
   const frappes=productos.filter(p=>categoria(p)==='Frappés');
   const frios=productos.filter(p=>categoria(p)==='Fríos');
+  const friosPreparados=frios.filter(p=>p.tipo!=='snack');
+  const friosSimples=frios.filter(p=>p.tipo==='snack'); // refrescos, aguas embotelladas
   const snacks=productos.filter(p=>categoria(p)==='Snacks');
+  // Categorías propias del negocio (Parrilla, Postres…) en una cuarta columna,
+  // en el orden de Configuración → Categorías.
+  const fijas=['Calientes','Fríos','Frappés','Snacks'];
+  const orden=CATEGORIES.map(c=>c.id);
+  const otras=[...new Set(productos.map(categoria))].filter(c=>!fijas.includes(c)).sort((a,b)=>orden.indexOf(a)-orden.indexOf(b));
+  const subtituloDe=c=>/parrilla|asador/i.test(c)?'Recién hecho a la parrilla':/cocina|desayun/i.test(c)?'Hecho en casa':/postre|pan/i.test(c)?'Para cerrar con algo dulce':'De la casa';
+  const extrasBebidas=(opciones?.extras||[]).filter(o=>(o.aplicaA||'bebidas')==='bebidas');
+  const extrasAlimentos=(opciones?.extras||[]).filter(o=>o.aplicaA==='alimentos');
   const groups=opciones ? [
     {title:'Elige tu café',hint:'Recargo por shot de 18 g',items:opciones.cafes},
     {title:'Tu leche favorita',hint:'Para bebidas con leche',items:opciones.leches},
-    {title:'Dale un extra',hint:'Añádelo a tu bebida',items:opciones.extras},
+    {title:'Dale un extra',hint:'Añádelo a tu bebida',items:extrasBebidas},
     {title:'A tu medida',hint:'En bebidas con tamaño a elegir',items:opciones.tamanos},
+    {title:'Para tu parrilla',hint:'Añádelo a tu hamburguesa o torta',items:extrasAlimentos},
   ] : [];
   return <div className="cafe-menu">
     <header className="cm-header">
@@ -58,17 +75,19 @@ export default function CafeMenu({ brand,sedeNombre,productos,opciones,cfg,abier
       <div className="cm-header-message"><span>Una pausa. Un buen café.</span><small>{cfg.lema || 'Encuentra tu favorito'}</small></div>
       <div className="cm-status"><span className={abierto?'open':''}>{abierto?'● Abierto':'Menú de la casa'}</span><small>PRECIOS EN MXN</small></div>
     </header>
-    <main className={`cm-main ${frios.length>1?'cm-many-cold':''}`}>
+    <main className={`cm-main ${friosPreparados.length>1?'cm-many-cold':''} ${otras.length?'cm-four':''}`}>
       <Columna titulo="Calientes" subtitulo="Clásicos que reconfortan" productos={calientes}/>
       <div className="cm-center">
-        {frios.length>1 ? <Columna titulo="Fríos" subtitulo="Tu pausa más fresca" productos={frios} tono="cool"/> : <section className="cm-cold"><div className="cm-section-head"><span>Tu pausa más fresca</span><h2>Fríos</h2></div>
-          {frios.map(p=><article key={p.id} className="cm-cold-item"><FotoBebida p={p} grande/><div><h3>{p.name}</h3><strong>{dinero(p.price)}</strong></div><small>{p.sizes?p.sizeLabel || 'Tamaño disponible':'Presentación de la casa'}</small></article>)}
+        {friosPreparados.length>1 ? <Columna titulo="Fríos" subtitulo="Tu pausa más fresca" productos={frios} tono="cool"/> : <section className="cm-cold"><div className="cm-section-head"><span>Tu pausa más fresca</span><h2>Fríos</h2></div>
+          {friosPreparados.map(p=><article key={p.id} className="cm-cold-item"><FotoBebida p={p} grande/><div><h3>{p.name}</h3><strong>{dinero(p.price)}</strong></div><small>{p.sizes?p.sizeLabel || 'Tamaño disponible':'Presentación de la casa'}</small></article>)}
+          {friosSimples.map(p=><div key={p.id} className="cm-snack"><span>{p.icon} {p.name}</span><b>{dinero(p.price)}</b></div>)}
           {!frios.length && <div className="cm-center-note"><Coffee/><p>Café a tu gusto</p></div>}
         </section>}
-        {frios.length<=1&&<div className="cm-seal"><Sparkles/><span>TU CAFÉ,<br/>A TU MANERA</span><small>Elige café, leche y extras</small></div>}
+        {friosPreparados.length<=1&&<div className="cm-seal"><Sparkles/><span>TU CAFÉ,<br/>A TU MANERA</span><small>Elige café, leche y extras</small></div>}
         {snacks.map(p=><div key={p.id} className="cm-snack"><span>{p.icon} {p.name}</span><b>{dinero(p.price)}</b></div>)}
       </div>
       <Columna titulo="Frappés" subtitulo="Cremosos, frescos, irresistibles" productos={frappes} tono="cool"/>
+      {otras.length>0 && <div className="cm-extra">{otras.map(c=><Columna key={c} titulo={c} subtitulo={subtituloDe(c)} productos={productos.filter(p=>categoria(p)===c)} tono="warm"/>)}</div>}
     </main>
     <section className="cm-customize"><div className="cm-customize-title"><span>HAZLO TUYO</span><h2>Personaliza tu bebida</h2></div>
       <div className="cm-options">{groups.filter(g=>g.items?.length).map(g=><section key={g.title}><h3>{g.title}</h3><small>{g.hint}</small>{g.items.map(o=><div className="cm-option" key={o.id}><span>{o.label}</span><b className={o.delta===0?'included':''}>{recargo(o.delta)}</b></div>)}</section>)}</div>

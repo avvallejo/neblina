@@ -114,6 +114,13 @@ async function validarMateria(id, sucursalId) {
   return id;
 }
 const UNIDADES = ['g', 'kg', 'ml', 'l', 'pieza'];
+// Ámbito de un extra: en qué productos se ofrece.
+const AMBITOS_EXTRA = ['bebidas', 'alimentos'];
+function validarAmbito(v) {
+  if (v === undefined || v === null || v === '') return 'bebidas';
+  if (!AMBITOS_EXTRA.includes(v)) throw new ApiError(400, 'Indica a qué aplica el extra: bebidas o alimentos.');
+  return v;
+}
 
 // Nueva opción de leche, café o extra (los tamaños son fijos: 8/12/16 oz).
 router.post('/:tipo', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {
@@ -137,10 +144,11 @@ router.post('/:tipo', requireAuth, requireRole('admin'), resolveSucursal, asyncH
     const cant = cantidad === undefined || cantidad === null || cantidad === '' ? null : Number(cantidad);
     if (materia && (!Number.isFinite(cant) || cant <= 0)) throw new ApiError(400, 'Indica la porción del extra (cantidad mayor a 0).');
     if (materia && !UNIDADES.includes(unidad)) throw new ApiError(400, 'Unidad inválida.');
+    const aplicaA = validarAmbito(req.body.aplicaA);
     ({ rows } = await query(
-      `INSERT INTO opciones_extra (codigo, etiqueta, delta_precio, materia_prima_id, cantidad, unidad, es_shot_adicional, sucursal_id)
-       VALUES ($1,$2,$3,$4,$5,$6,false,$7) RETURNING *`,
-      [codigo, etiqueta.trim(), delta, materia, materia ? cant : null, materia ? unidad : null, req.sucursalId]
+      `INSERT INTO opciones_extra (codigo, etiqueta, delta_precio, materia_prima_id, cantidad, unidad, es_shot_adicional, sucursal_id, aplica_a)
+       VALUES ($1,$2,$3,$4,$5,$6,false,$7,$8) RETURNING *`,
+      [codigo, etiqueta.trim(), delta, materia, materia ? cant : null, materia ? unidad : null, req.sucursalId, aplicaA]
     ));
   } else {
     ({ rows } = await query(
@@ -188,6 +196,14 @@ router.patch('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, a
     if (req.body.unidad !== undefined) {
       if (req.body.unidad !== null && !UNIDADES.includes(req.body.unidad)) throw new ApiError(400, 'Unidad inválida.');
       add('unidad', req.body.unidad);
+    }
+    if (req.body.aplicaA !== undefined) {
+      const aplicaA = validarAmbito(req.body.aplicaA);
+      if (aplicaA !== 'bebidas') {
+        const shot = await query('SELECT es_shot_adicional FROM opciones_extra WHERE id = $1 AND sucursal_id = $2', [id, req.sucursalId]);
+        if (shot.rows[0]?.es_shot_adicional) throw new ApiError(400, 'El shot extra solo aplica a bebidas.');
+      }
+      add('aplica_a', aplicaA);
     }
   }
   if (sets.length === 0) throw new ApiError(400, 'No se envió ningún campo para actualizar.');

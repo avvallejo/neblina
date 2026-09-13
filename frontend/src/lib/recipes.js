@@ -39,8 +39,35 @@ export function lecheMlPara(size, override) {
   return { 8: 180, 12: 280, 16: 360 }[size] || 280;
 }
 
+// Pasos genéricos de un alimento de parrilla/cocina mientras el admin no
+// captura los suyos (mismos que fn_resetear_receta en la base).
+export const PASOS_ALIMENTO_DEFAULT = [
+  'Reunir los ingredientes de la receta',
+  'Cocinar en la parrilla o plancha',
+  'Armar el platillo y revisar la presentación',
+  'Entregar en la barra de pedidos',
+];
+
 export function buildRecipe(product, sel, override) {
   if (!product) return { ingredientes: [], pasos: [], params: { type: 'simple', fields: [] } };
+
+  // Alimento (hamburguesa, torta…): la receta son sus ingredientes del
+  // inventario + los extras elegidos; sin café, leche ni vaso.
+  if (product.tipo === 'alimento') {
+    const ov = override || {};
+    const ingredientes = (Array.isArray(ov.insumosFijos) ? ov.insumosFijos : [])
+      .map(f => ({ label: f.label, cantidad: formatCantidad(f.cantidad, f.unidad) }));
+    (sel.extras || []).forEach(ex => ingredientes.push(extraIngredient(ex)));
+    const fields = [];
+    if (ov.tiempoExtraccion) fields.push({ label: 'Tiempo de preparación', value: ov.tiempoExtraccion });
+    if (ov.temperatura) fields.push({ label: 'Temperatura / término', value: ov.temperatura });
+    fields.push({ label: 'Rendimiento', value: '1 porción' });
+    return {
+      ingredientes,
+      pasos: ov.pasos && ov.pasos.length ? [...ov.pasos] : [...PASOS_ALIMENTO_DEFAULT],
+      params: { type: 'alimento', fields },
+    };
+  }
 
   if (product.tipo === 'snack') {
     return {

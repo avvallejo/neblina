@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Coffee, ShoppingCart, Snowflake, Trash2, ClipboardList, AlertTriangle, Banknote, CreditCard, ArrowLeftRight, Wallet, Gift } from 'lucide-react';
 import * as api from '../api/client.js';
-import { CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, getProduct, defaultSize, calcUnitPrice, customizationSummary, precioDesde } from '../lib/catalog.js';
+import { CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, getProduct, defaultSize, calcUnitPrice, customizationSummary, precioDesde, extrasPara, esAlimento } from '../lib/catalog.js';
 import { money } from '../lib/helpers.js';
 import { Sheet, Stepper, EmptyState, FormError } from './ui.jsx';
 
@@ -58,6 +58,8 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe, allow
     setSel(s => ({ ...s, extras: s.extras.includes(id) ? s.extras.filter(e => e !== id) : [...s.extras, id] }));
   };
 
+  const alimento = esAlimento(product);
+  const extrasDisponibles = product.extras ? extrasPara(product) : [];
   const catalogPrice = calcUnitPrice(product, sel);
   const [enteredPrice, setEnteredPrice] = useState(null);
   const [priceReason, setPriceReason] = useState('');
@@ -84,17 +86,17 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe, allow
     <Sheet title={product.name} onClose={onClose}>
       {onPreviewRecipe && (
         <button className="recipe-preview-link" onClick={() => onPreviewRecipe(sel)}>
-          <ClipboardList size={14} /> Ver receta de esta bebida
+          <ClipboardList size={14} /> {alimento ? 'Ver receta' : 'Ver receta de esta bebida'}
         </button>
       )}
       {product.sizes && optionBlock('Tamaño', SIZE_OPTIONS, sel.size, id => setSel(s => ({ ...s, size: id })))}
       {product.leche && optionBlock('Leche', MILK_OPTIONS, sel.milk, id => setSel(s => ({ ...s, milk: id })))}
       {product.coffeeType && optionBlock('Café', COFFEE_OPTIONS.map(o => ({...o, delta:Number(product.coffeePrices?.[o.id] ?? o.delta)})), sel.coffeeType, id => setSel(s => ({ ...s, coffeeType: id })))}
-      {product.extras && (
+      {extrasDisponibles.length > 0 && (
         <div className="option-group">
           <div className="option-label">Extras</div>
           <div className="option-row">
-            {EXTRA_OPTIONS.map(o => (
+            {extrasDisponibles.map(o => (
               <button key={o.id} className={`option-chip ${sel.extras.includes(o.id) ? 'selected' : ''}`} onClick={() => toggleExtra(o.id)}>
                 {o.label} (+{o.delta})
               </button>
@@ -115,8 +117,8 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe, allow
         <Stepper value={sel.qty} onChange={v => setSel(s => ({ ...s, qty: v }))} />
       </div>
       <div className="option-group">
-        <div className="option-label">Notas para el barista</div>
-        <textarea className="notes-input" rows={2} placeholder="Ej. sin azúcar, bien caliente..." value={sel.notas} onChange={e => setSel(s => ({ ...s, notas: e.target.value }))} />
+        <div className="option-label">{alimento ? 'Notas para la cocina' : 'Notas para el barista'}</div>
+        <textarea className="notes-input" rows={2} placeholder={alimento ? 'Ej. sin cebolla, término medio...' : 'Ej. sin azúcar, bien caliente...'} value={sel.notas} onChange={e => setSel(s => ({ ...s, notas: e.target.value }))} />
       </div>
       <div className="sheet-footer">
         <div>

@@ -15,6 +15,7 @@ function iconForParam(label) {
   if (l.includes('molienda')) return Sparkles;
   if (l.includes('ajuste')) return GaugeIcon;
   if (l.includes('tiempo') || l.includes('licuado')) return Clock;
+  if (l.includes('término')) return Thermometer;
   if (l.includes('rendimiento')) return Droplets;
   if (l.includes('temperatura')) return Thermometer;
   return Coffee;
@@ -27,10 +28,11 @@ export function RecipeModal({ ticket, product: selectedProduct, onClose, onFinis
   const lecheIng = recipe.ingredientes.find(i => i.label.toLowerCase().includes('leche'));
   const texturaLeche = (override && override.texturaLeche) || 'Microespuma suave y sedosa';
   const showFicha = recipe.params.fields.length > 0;
+  const alimento = product?.tipo === 'alimento';
   const showTextura = !!lecheIng && product?.tipo === 'bebida';
 
   const specRows = [
-    { Icon: CupSoda, label: 'Tamaño de taza', value: sizeLabel },
+    ...(alimento ? [] : [{ Icon: CupSoda, label: 'Tamaño de taza', value: sizeLabel }]),
     ...recipe.params.fields.map(f => ({ Icon: iconForParam(f.label), label: f.label, value: f.value })),
     ...(lecheIng ? [{ Icon: Milk, label: 'Leche', value: lecheIng.cantidad }] : []),
     ...(showTextura ? [{ Icon: Sparkles, label: 'Textura de la leche', value: texturaLeche }] : []),
@@ -73,6 +75,7 @@ export function RecipeModal({ ticket, product: selectedProduct, onClose, onFinis
         <div className="recipe-section">
           <div className="recipe-section-title"><Droplets size={15} /> Ingredientes</div>
           <div className="ingredient-list">
+            {recipe.ingredientes.length === 0 && <div className="field-hint">Sin ingredientes capturados todavía. El administrador los define en Admin → Recetas.</div>}
             {recipe.ingredientes.map((ing, i) => (
               <div key={i} className="ingredient-row"><span>{ing.label}</span><span className="ingredient-qty">{ing.cantidad}</span></div>
             ))}
@@ -115,9 +118,9 @@ export function RecipeModal({ ticket, product: selectedProduct, onClose, onFinis
               <button className="btn-secondary" style={{ flex: 1 }} onClick={onClose}>Volver</button>
             </div>
           ) : ticket.status === 'terminado' ? (
-            <div className="already-done"><Check size={16} /> Bebida terminada</div>
+            <div className="already-done"><Check size={16} /> {alimento ? 'Platillo terminado' : 'Bebida terminada'}</div>
           ) : (
-            <button className="finish-btn" onClick={onFinish}><Check size={18} /> Terminar bebida</button>
+            <button className="finish-btn" onClick={onFinish}><Check size={18} /> {alimento ? 'Terminar platillo' : 'Terminar bebida'}</button>
           )}
         </div>
       </div>

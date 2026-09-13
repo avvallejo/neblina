@@ -64,6 +64,7 @@ ya_tiene() {
     27) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'usuarios' AND column_name = 'estaciones'" ;;
     28) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'vw_stock_bajo' AND column_name = 'a_pedir'" ;;
     29) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'materias_primas' AND column_name = 'presentacion_cantidad'" ;;
+    30) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'opciones_extra' AND column_name = 'aplica_a'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

@@ -21,7 +21,7 @@ async function guardarReventa(client, { productoId, sucursalId, tipo, reventa })
   if (reventa === undefined) return;
   if (tipo !== 'snack') {
     if (reventa === null) return; // las bebidas no llevan reventa: nada que quitar
-    throw new ApiError(400, 'Solo los snacks se ligan a un insumo de reventa; las bebidas usan su receta.');
+    throw new ApiError(400, 'Solo lo comprado hecho (snacks, refrescos, aguas embotelladas) se liga a un insumo de reventa; bebidas y alimentos usan su receta.');
   }
   await client.query('DELETE FROM receta_insumos_fijos WHERE producto_id = $1', [productoId]);
   if (reventa === null) return;

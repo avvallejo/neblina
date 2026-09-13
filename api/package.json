@@ -14,7 +14,8 @@
     "test:cortesias:live": "node test/live-courtesies.js",
     "test:estaciones:live": "node test/live-stations.js",
     "test:reventa:live": "node test/live-resale.js",
-    "test:compras:live": "node test/live-purchases.js"
+    "test:compras:live": "node test/live-purchases.js",
+    "test:alimentos:live": "node test/live-alimentos.js"
   },
   "dependencies": {
     "@aws-sdk/client-sns": "^3.1073.0",

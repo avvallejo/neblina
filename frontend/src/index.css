@@ -301,7 +301,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .custom-badge { position: absolute; top: 10px; right: 10px; color: var(--brand); background: var(--brand-soft); border-radius: 8px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
 
 /* POS de dos paneles en escritorio: menú + carrito lateral */
-.pos-layout { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
+.pos-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+/* Las columnas no deben crecer con su contenido: así la tira de categorías se desplaza en vez de ensanchar la pantalla. */
+.pos-layout > * { min-width: 0; }
+.cat-tabs { max-width: 100%; }
 @media (min-width: 1080px) {
   .pos-layout { grid-template-columns: minmax(0, 1fr) 380px; }
   .pos-cart-panel { position: sticky; top: calc(var(--topbar-h) + 20px); max-height: calc(100vh - var(--topbar-h) - 40px); overflow-y: auto; }
@@ -642,6 +645,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 
 .pz-grid { flex: 1; display: grid; grid-template-columns: repeat(var(--pz-cols, 4), minmax(0, 1fr)); gap: clamp(16px, 2.4vw, 44px); align-content: start; }
 .pz-cat { display: inline-block; font-family: 'Bebas Neue', var(--font-ui); font-weight: 400; font-size: clamp(18px, 1.9vw, 32px); letter-spacing: .12em; color: #1B140E; background: linear-gradient(90deg, var(--pz-gold), var(--pz-gold-soft)); padding: 4px 18px 2px; border-radius: 3px 14px 3px 14px; margin-bottom: clamp(10px, 1.4vw, 20px); text-transform: uppercase; }
+.pz-cat-sub { margin-top: clamp(10px, 1.4vw, 20px); }
 .pz-item { display: flex; gap: clamp(8px, 1vw, 16px); align-items: flex-start; padding: clamp(6px, .9vw, 14px) 0; }
 .pz-item.small { padding: clamp(4px, .6vw, 9px) 0; }
 .pz-icon { flex-shrink: 0; width: clamp(30px, 2.7vw, 48px); height: clamp(30px, 2.7vw, 48px); border-radius: 50%; border: 1.5px solid var(--pz-line); background: rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; font-size: clamp(16px, 1.5vw, 26px); }
@@ -720,6 +724,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .estacion-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-faint); white-space: nowrap; }
 .estacion-tag.parrilla { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .estacion-tag.caja { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.tipo-tag { display: inline-flex; align-items: center; margin-left: 6px; font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); border: 1px dashed var(--line); color: var(--ink-faint); white-space: nowrap; }
 
 /* Snacks de reventa: existencias */
 .existencias-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); white-space: nowrap; }

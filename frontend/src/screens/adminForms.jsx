@@ -546,7 +546,8 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
   const [extras, setExtras] = useState(producto ? producto.extras !== false : true);
   const [frio, setFrio] = useState(producto ? !!producto.frio : false);
   // Quién lo prepara: barra (barista), parrilla (parrillero) o nadie (se entrega en caja).
-  const [estacion, setEstacion] = useState(producto ? producto.estacion || (producto.tipo === 'snack' ? 'parrilla' : 'barra') : 'barra');
+  const [estacion, setEstacion] = useState(producto ? producto.estacion || (['snack', 'alimento'].includes(producto.tipo) ? 'parrilla' : 'barra') : 'barra');
+  const conEstacion = tipo === 'snack' || tipo === 'alimento'; // quién lo prepara se elige por producto
   // Snack de reventa (comprado hecho): insumo del inventario que se descuenta
   // por venta. 'nuevo' = crear el insumo con el nombre del producto al guardar.
   const reventaActual = producto && producto.reventa ? producto.reventa : null;
@@ -611,7 +612,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
       }
     }
     setError('');
-    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim(), estacion: tipo === 'snack' ? estacion : 'barra' };
+    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim(), estacion: conEstacion ? estacion : 'barra' };
     setSaving(true);
     // El insumo nuevo se crea primero (con el nombre del producto, en piezas);
     // los niveles de un insumo existente se actualizan antes de guardar.
@@ -635,10 +636,13 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
       }
       reventa = resto;
     }
+    const activo = isNew ? true : producto.activo !== false;
     const ok = await onSave(
       tipo === 'snack'
-        ? { id: isNew ? undefined : producto.id, ...base, reventa, sizes: false, leche: false, coffeeType: false, extras: false, frio: false, activo: isNew ? true : producto.activo !== false }
-        : { id: isNew ? undefined : producto.id, ...base, sizes, leche, coffeeType: tipo === 'bebida' ? coffeeType : false, extras, frio, activo: isNew ? true : producto.activo !== false }
+        ? { id: isNew ? undefined : producto.id, ...base, reventa, sizes: false, leche: false, coffeeType: false, extras: false, frio: false, activo }
+        : tipo === 'alimento'
+          ? { id: isNew ? undefined : producto.id, ...base, sizes: false, leche: false, coffeeType: false, extras, frio: false, activo }
+          : { id: isNew ? undefined : producto.id, ...base, sizes, leche, coffeeType: tipo === 'bebida' ? coffeeType : false, extras, frio, activo }
     );
     setSaving(false);
     if (ok !== false) onClose();
@@ -693,14 +697,22 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
         <div className="option-row">
           <button className={`option-chip ${tipo === 'bebida' ? 'selected' : ''}`} onClick={() => setTipo('bebida')}>Bebida (espresso)</button>
           <button className={`option-chip ${tipo === 'frappe' ? 'selected' : ''}`} onClick={() => setTipo('frappe')}>Frappé</button>
-          <button className={`option-chip ${tipo === 'snack' ? 'selected' : ''}`} onClick={() => { setTipo('snack'); if (estacion === 'barra') setEstacion('parrilla'); }}>Snack</button>
+          <button className={`option-chip ${tipo === 'alimento' ? 'selected' : ''}`} onClick={() => { setTipo('alimento'); if (estacion === 'barra' || estacion === 'caja') setEstacion('parrilla'); }}>Parrilla / cocina</button>
+          <button className={`option-chip ${tipo === 'snack' ? 'selected' : ''}`} onClick={() => { setTipo('snack'); if (estacion === 'barra') setEstacion('parrilla'); }}>Comprado hecho</button>
+        </div>
+        <div className="field-hint">
+          {tipo === 'alimento'
+            ? 'Hamburguesas, tortas, platillos: llevan una receta con varios ingredientes del inventario; cada venta los descuenta y su costo es la suma. Los ingredientes se capturan en Recetas al guardar.'
+            : tipo === 'snack'
+              ? 'Galletas, refrescos, aguas embotelladas, pan empacado: no se prepara, se compra hecho y se controla por piezas.'
+              : 'Se prepara en barra con café, leche y vaso según lo que elija el cliente.'}
         </div>
       </div>
       <div className="option-group">
         <div className="option-label">¿Quién lo prepara? (comanda)</div>
-        {tipo === 'snack' ? (
+        {conEstacion ? (
           <div className="option-row">
-            {['parrilla', 'barra', 'caja'].map(e => (
+            {(tipo === 'alimento' ? ['parrilla', 'barra'] : ['parrilla', 'barra', 'caja']).map(e => (
               <button key={e} type="button" className={`option-chip ${estacion === e ? 'selected' : ''}`} onClick={() => setEstacion(e)}>{ESTACION_LABELS[e]}</button>
             ))}
           </div>
@@ -708,7 +720,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
           <div className="option-row"><button type="button" className="option-chip selected" disabled>Barra</button></div>
         )}
         <div className="field-hint">
-          {tipo !== 'snack'
+          {!conEstacion
             ? 'Las bebidas y frappés siempre van a la comanda de la barra (barista).'
             : estacion === 'caja'
               ? 'No pasa por ninguna comanda: es un producto empacado que la Caja entrega al momento (galletas, botellas…).'
@@ -774,7 +786,16 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
           )}
         </div>
       )}
-      {tipo !== 'snack' && (
+      {tipo === 'alimento' && (
+        <div className="option-group">
+          <div className="option-label">Personalización que permite</div>
+          <div className="option-row">
+            <button className={`option-chip ${extras ? 'selected' : ''}`} onClick={() => setExtras(v => !v)}>Extras (tocino, queso extra…)</button>
+          </div>
+          <div className="field-hint">Los extras de parrilla/cocina se configuran en Opciones → Extras con "Aplica a: alimentos"; solo esos se ofrecen en este producto.</div>
+        </div>
+      )}
+      {tipo !== 'snack' && tipo !== 'alimento' && (
         <div className="option-group">
           <div className="option-label">Personalización que permite</div>
           <div className="option-row">
@@ -814,6 +835,9 @@ function unidadRecetaDefault(unidadMateria) {
 
 export function RecetaFormSheet({ product, receta, onClose, onSave }) {
   const isFrappe = product.tipo === 'frappe';
+  // Alimento (parrilla/cocina): solo ingredientes del inventario, pasos,
+  // tiempo de preparación y temperatura/término; sin café, leche ni molino.
+  const isAlimento = product.tipo === 'alimento';
   const defaults = buildRecipe(product, { size: '12', milk: 'entera', coffeeType: 'tradicional', extras: [] }, null);
   const [pasos, setPasos] = useState((receta && receta.pasos && receta.pasos.length ? receta.pasos : defaults.pasos).join('\n'));
   const [gramaje, setGramaje] = useState(String((receta && receta.gramajePorShot) || 18));
@@ -821,9 +845,9 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
   const [moliendaEspecial, setMoliendaEspecial] = useState((receta && receta.moliendaEspecial) || 'Media (origen)');
   const [ajusteMolino, setAjusteMolino] = useState((receta && receta.ajusteMolino) || '3.5');
   const [ajusteMolinoEspecial, setAjusteMolinoEspecial] = useState((receta && receta.ajusteMolinoEspecial) || '4.2');
-  const [tiempoExtraccion, setTiempoExtraccion] = useState((receta && (receta.tiempoExtraccion || receta.tiempoLicuado)) || (isFrappe ? '25-30 s' : '26-30 s'));
+  const [tiempoExtraccion, setTiempoExtraccion] = useState((receta && (receta.tiempoExtraccion || receta.tiempoLicuado)) || (isAlimento ? '' : isFrappe ? '25-30 s' : '26-30 s'));
   const [tiempoExtraccionEspecial, setTiempoExtraccionEspecial] = useState((receta && (receta.tiempoExtraccionEspecial || receta.tiempoExtraccion)) || '26-30 s');
-  const [temperatura, setTemperatura] = useState((receta && receta.temperatura) || (isFrappe ? 'Frío / con hielo' : (product.frio ? '92°C / servir frío' : '92°C')));
+  const [temperatura, setTemperatura] = useState((receta && receta.temperatura) || (isAlimento ? '' : isFrappe ? 'Frío / con hielo' : (product.frio ? '92°C / servir frío' : '92°C')));
   const [texturaLeche, setTexturaLeche] = useState((receta && receta.texturaLeche) || 'Microespuma suave y sedosa');
   const [error, setError] = useState('');
 
@@ -912,22 +936,25 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
         lecheMlPorTamano[t.id] = n;
       }
     }
-    if (!isFrappe || product.coffeeType) {
+    if (!isAlimento && (!isFrappe || product.coffeeType)) {
       const g = Number(gramaje);
       if (!Number.isFinite(g) || g <= 0) { setError('El gramaje de café por shot debe ser mayor a 0.'); return; }
     }
+    if (isAlimento && (insumos || []).length === 0) { setError('Agrega al menos un ingrediente del inventario: de ahí salen el costo y el descuento de inventario.'); return; }
     setError('');
     const insumosFijos = (insumos || []).map(i => ({ materiaPrimaId: i.materiaPrimaId, cantidad: Number(i.cantidad), unidad: i.unidad }));
-    onSave(product.id, isFrappe
-      ? { pasos: pasosArr, gramajePorShot: product.coffeeType ? Number(gramaje) : undefined, molienda, tiempoLicuado: tiempoExtraccion, temperatura, insumosFijos, lecheMlPorTamano }
-      : { pasos: pasosArr, gramajePorShot: Number(gramaje) || 18, molienda, moliendaEspecial, ajusteMolino, ajusteMolinoEspecial, tiempoExtraccion, tiempoExtraccionEspecial, temperatura, texturaLeche, insumosFijos, lecheMlPorTamano }
+    onSave(product.id, isAlimento
+      ? { pasos: pasosArr, tiempoExtraccion: tiempoExtraccion.trim() || undefined, temperatura: temperatura.trim() || undefined, insumosFijos }
+      : isFrappe
+        ? { pasos: pasosArr, gramajePorShot: product.coffeeType ? Number(gramaje) : undefined, molienda, tiempoLicuado: tiempoExtraccion, temperatura, insumosFijos, lecheMlPorTamano }
+        : { pasos: pasosArr, gramajePorShot: Number(gramaje) || 18, molienda, moliendaEspecial, ajusteMolino, ajusteMolinoEspecial, tiempoExtraccion, tiempoExtraccionEspecial, temperatura, texturaLeche, insumosFijos, lecheMlPorTamano }
     );
     onClose();
   };
 
   return (
     <Sheet title={`Editar receta: ${product.name}`} onClose={onClose}>
-      <div className="option-group">
+      {!isAlimento && <div className="option-group">
         <div className="option-label">Ingredientes base (se ajustan al tamaño y opciones que elija el cliente)</div>
         <div className="spec-table">
           {(!isFrappe || product.coffeeType) && (
@@ -967,15 +994,15 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
           </div>
         </div>
         <div className="field-hint" style={{ marginTop: 8 }}>El café se elige al vender y su recargo se configura en Opciones → Cafés. No lo agregues otra vez como ingrediente fijo. Los ingredientes base se descuentan del inventario con la materia prima que corresponda a lo que el cliente pida (tipo de café, tipo de leche, tamaño). El vaso y la tapa de cada tamaño son los mismos para todas las bebidas de la sucursal.</div>
-      </div>
+      </div>}
 
       <div className="option-group">
-        <div className="option-label">Ingredientes fijos de este producto (del inventario)</div>
+        <div className="option-label">{isAlimento ? 'Ingredientes de la receta (del inventario)' : 'Ingredientes fijos de este producto (del inventario)'}</div>
         {insumos === null ? (
           <div className="field-hint">Cargando ingredientes…</div>
         ) : (
           <>
-            {insumos.length === 0 && <div className="field-hint" style={{ marginBottom: 8 }}>Sin ingredientes fijos todavía. Agrega los insumos que lleva esta bebida (jarabes, chocolate, toppings…).</div>}
+            {insumos.length === 0 && <div className="field-hint" style={{ marginBottom: 8 }}>{isAlimento ? 'Sin ingredientes todavía. Agrega todo lo que lleva una porción: pan, carne, queso, verduras, salsas, empaque…' : 'Sin ingredientes fijos todavía. Agrega los insumos que lleva esta bebida (jarabes, chocolate, toppings…).'}</div>}
             {insumos.map((i, idx) => {
               const m = materiaDe(i.materiaPrimaId);
               return (
@@ -996,7 +1023,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
               <button className="btn-secondary" onClick={agregarInsumo} disabled={materias.length === 0}><Plus size={14} /> Agregar ingrediente</button>
               {insumos.length > 0 && <span className="insumo-costo">Costo de estos ingredientes: <strong>${costoInsumos.toFixed(2)}</strong></span>}
             </div>
-            <div className="field-hint" style={{ marginTop: 8 }}>Jarabes, chocolate, toppings… todo lo que lleva esta bebida además de los ingredientes base. Al guardar, el costo del producto y su precio sugerido se actualizan solos.</div>
+            <div className="field-hint" style={{ marginTop: 8 }}>{isAlimento ? 'Cada venta descuenta estas cantidades del inventario (más los extras que elija el cliente). Al guardar, el costo del producto y su precio sugerido se actualizan solos.' : 'Jarabes, chocolate, toppings… todo lo que lleva esta bebida además de los ingredientes base. Al guardar, el costo del producto y su precio sugerido se actualizan solos.'}</div>
           </>
         )}
       </div>
@@ -1004,7 +1031,19 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
         <div className="option-label">Pasos de preparación (uno por línea)</div>
         <textarea className="notes-input" rows={6} value={pasos} onChange={e => setPasos(e.target.value)} />
       </div>
-      {!isFrappe && (
+      {isAlimento && (
+        <div className="option-group two-col">
+          <div>
+            <div className="option-label">Tiempo de preparación (opcional)</div>
+            <input className="text-input" value={tiempoExtraccion} onChange={e => setTiempoExtraccion(e.target.value)} placeholder="Ej. 8-10 min" />
+          </div>
+          <div>
+            <div className="option-label">Temperatura / término (opcional)</div>
+            <input className="text-input" value={temperatura} onChange={e => setTemperatura(e.target.value)} placeholder="Ej. plancha a fuego medio, término medio" />
+          </div>
+        </div>
+      )}
+      {!isFrappe && !isAlimento && (
         <div className="option-group">
           <div className="option-label">Tiempo extracción (tradicional)</div>
           <input className="text-input" value={tiempoExtraccion} onChange={e => setTiempoExtraccion(e.target.value)} placeholder="26-30 s" />
@@ -1016,7 +1055,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
           <input className="text-input" value={tiempoExtraccion} onChange={e => setTiempoExtraccion(e.target.value)} placeholder="25-30 s" />
         </div>
       )}
-      <div className="option-group two-col">
+      {!isAlimento && <div className="option-group two-col">
         <div>
           <div className="option-label">Molienda{!isFrappe ? ' (tradicional)' : ''}</div>
           <input className="text-input" value={molienda} onChange={e => setMolienda(e.target.value)} />
@@ -1027,8 +1066,8 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
             <input className="text-input" value={ajusteMolino} onChange={e => setAjusteMolino(e.target.value)} />
           </div>
         )}
-      </div>
-      {!isFrappe && (
+      </div>}
+      {!isFrappe && !isAlimento && (
         <div className="option-group two-col">
           <div>
             <div className="option-label">Molienda (origen especial)</div>
@@ -1040,16 +1079,16 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
           </div>
         </div>
       )}
-      {!isFrappe && (
+      {!isFrappe && !isAlimento && (
         <div className="option-group">
           <div className="option-label">Tiempo extracción (origen especial)</div>
           <input className="text-input" value={tiempoExtraccionEspecial} onChange={e => setTiempoExtraccionEspecial(e.target.value)} placeholder="26-30 s" />
         </div>
       )}
-      <div className="option-group">
+      {!isAlimento && <div className="option-group">
         <div className="option-label">Temperatura de servicio</div>
         <input className="text-input" value={temperatura} onChange={e => setTemperatura(e.target.value)} />
-      </div>
+      </div>}
       {product.leche && !isFrappe && (
         <div className="option-group">
           <div className="option-label">Textura de la leche</div>
@@ -1526,6 +1565,8 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
   const [delta, setDelta] = useState(opcion && opcion.delta_precio !== undefined ? String(Number(opcion.delta_precio)) : '');
   const [materiaId, setMateriaId] = useState((opcion && opcion.materia_prima_id) || (tipo !== 'tamanos' && !esShot && materias[0] ? materias[0].id : ''));
   const [descuenta, setDescuenta] = useState(tipo !== 'extras' || esShot || !!(opcion ? opcion.materia_prima_id : true));
+  // Extras: a qué productos se ofrecen (bebidas | alimentos de parrilla/cocina).
+  const [aplicaA, setAplicaA] = useState((opcion && opcion.aplica_a) || 'bebidas');
   const materia = materias.find(m => m.id === materiaId);
   // La porción se muestra en la unidad chica de su familia (0.015 l -> 15 ml).
   const porcionInicial = (() => {
@@ -1571,6 +1612,7 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
       body.materiaPrimaId = usaInsumo ? materiaId : null;
       body.cantidad = usaInsumo ? Number(cantidad) : null;
       body.unidad = usaInsumo ? unidad : null;
+      body.aplicaA = aplicaA;
     }
     setSaving(true);
     const ok = await onSave(tipo, isNew ? null : opcion.id, body);
@@ -1588,6 +1630,16 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
 
       {tipo === 'extras' && !esShot && (
         <div className="option-group">
+          <div className="option-label">Aplica a</div>
+          <div className="option-row">
+            <button type="button" className={`option-chip ${aplicaA === 'bebidas' ? 'selected' : ''}`} onClick={() => setAplicaA('bebidas')}>Bebidas</button>
+            <button type="button" className={`option-chip ${aplicaA === 'alimentos' ? 'selected' : ''}`} onClick={() => setAplicaA('alimentos')}>Parrilla / cocina</button>
+          </div>
+          <div className="field-hint">{aplicaA === 'alimentos' ? 'Se ofrece en hamburguesas, tortas y demás alimentos (tocino, queso extra, doble carne…).' : 'Se ofrece en bebidas y frappés (jarabes, crema, shot extra…).'}</div>
+        </div>
+      )}
+      {tipo === 'extras' && !esShot && (
+        <div className="option-group">
           <div className="option-label">Inventario</div>
           <div className="option-row">
             <button type="button" className={`option-chip ${descuenta ? 'selected' : ''}`} onClick={() => setDescuenta(true)}>Descuenta un insumo</button>
@@ -1599,7 +1651,7 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
 
       {usaInsumo && (
         <div className="option-group">
-          <div className="option-label">{tipo === 'extras' ? 'Insumo y porción por bebida' : 'Materia prima que descuenta'}</div>
+          <div className="option-label">{tipo === 'extras' ? 'Insumo y porción por venta' : 'Materia prima que descuenta'}</div>
           {tipo === 'extras' ? (
             <div className="insumo-row">
               <select className="text-input" value={materiaId} onChange={e => cambiarMateria(e.target.value)}>

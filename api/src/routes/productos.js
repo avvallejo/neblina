@@ -10,6 +10,18 @@ const { normalizarEstacionProducto } = require('../services/stations');
 const { normalizarReventa, guardarReventa, reventaSql } = require('../services/resale');
 const router = express.Router();
 
+// bebida y frappé se preparan en barra con café/leche/vaso según la venta;
+// alimento (parrilla/cocina) con una receta de varios ingredientes; snack es
+// lo comprado hecho (galletas, refrescos, aguas embotelladas) con reventa.
+const TIPOS_PRODUCTO = ['bebida', 'frappe', 'snack', 'alimento'];
+
+// Un alimento no lleva las opciones de bebida (tamaño, leche, tipo de café).
+function validarOpcionesPorTipo(tipo, { permiteTamanos, permiteLeche, permiteTipoCafe }) {
+  if (tipo === 'alimento' && (permiteTamanos || permiteLeche || permiteTipoCafe)) {
+    throw new ApiError(400, 'Un alimento no lleva tamaño, leche ni tipo de café; sus variantes van como extras.');
+  }
+}
+
 function requireAdminForInactiveCatalog(req, res, next) {
   if (!req.query.incluirInactivos) return next();
   return requireAuth(req, res, err => {
@@ -151,9 +163,10 @@ router.post('/', asyncHandler(async (req, res) => {
   const { nombre, categoriaId, tipo, icono, precioBase, permiteTamanos, permiteLeche, permiteTipoCafe, permiteExtras, esFrio, margenPorcentaje } = req.body;
   const imagen = productImage(req.body.imagen);
   const nombreLimpio = cleanText(nombre, { required: true, field: 'un nombre', max: 120 });
-  if (!['bebida', 'frappe', 'snack'].includes(tipo)) throw new ApiError(400, 'Tipo inválido.');
+  if (!TIPOS_PRODUCTO.includes(tipo)) throw new ApiError(400, 'Tipo inválido.');
   if (!categoriaId) throw new ApiError(400, 'Selecciona una categoría.');
   const precio = parseNumber(precioBase, 'precio base', { required: true, min: 0 });
+  validarOpcionesPorTipo(tipo, { permiteTamanos: toBoolean(permiteTamanos), permiteLeche: toBoolean(permiteLeche), permiteTipoCafe: toBoolean(permiteTipoCafe) });
 
   const categoriaPropia = await query('SELECT id FROM categorias_producto WHERE id = $1 AND sucursal_id = $2', [categoriaId, req.sucursalId]);
   if (categoriaPropia.rows.length === 0) throw new ApiError(400, 'La categoría no pertenece a esta sucursal.');
@@ -212,8 +225,11 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     add('categoria_id', req.body.categoriaId);
   }
   if (req.body.tipo !== undefined) {
-    if (!['bebida', 'frappe', 'snack'].includes(req.body.tipo)) throw new ApiError(400, 'Tipo inválido.');
+    if (!TIPOS_PRODUCTO.includes(req.body.tipo)) throw new ApiError(400, 'Tipo inválido.');
     add('tipo', req.body.tipo);
+  }
+  if (req.body.tipo === 'alimento') {
+    validarOpcionesPorTipo('alimento', { permiteTamanos: toBoolean(req.body.permiteTamanos), permiteLeche: toBoolean(req.body.permiteLeche), permiteTipoCafe: toBoolean(req.body.permiteTipoCafe) });
   }
   if (req.body.icono !== undefined) add('icono', cleanText(req.body.icono, { field: 'ícono', max: 12 }) || '☕');
   if (req.body.descripcion !== undefined) add('descripcion', cleanText(req.body.descripcion, { field: 'descripción', max: 140 }) || null);
@@ -251,6 +267,11 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     }
     if (!row) throw new ApiError(404, 'Producto no encontrado.');
     await guardarReventa(client, { productoId: row.id, sucursalId: req.sucursalId, tipo: row.tipo, reventa });
+    // Si dejó de ser snack (p. ej. ahora es alimento) necesita su receta.
+    if (row.tipo !== 'snack' && req.body.tipo !== undefined) {
+      const { rows: creada } = await client.query('INSERT INTO recetas (producto_id) VALUES ($1) ON CONFLICT (producto_id) DO NOTHING RETURNING id', [row.id]);
+      if (creada.length) await client.query('SELECT fn_resetear_receta($1)', [row.id]);
+    }
     return row;
   });
   res.json(producto);

@@ -9,7 +9,7 @@ import {
   Gift, BadgeCheck,
 } from 'lucide-react';
 import * as api from '../api/client.js';
-import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, ESTACION_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
+import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, ESTACION_LABELS, TIPO_PRODUCTO_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
 import { money, unidadDisplay, stockPct, convertirCantidad, formatNumeroInput as formatNumero } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
 import { ConfirmDialog, EmptyState, FormError } from '../components/ui.jsx';
@@ -134,7 +134,7 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
           <div key={p.id} className="list-row">
             <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
               <div className="list-row-title">{p.icon} {p.name}{p.activo === false ? ' • Inactivo' : ''}</div>
-              <div className="list-row-sub">{p.cat} • {p.sizes ? `desde ${money(precioDesde(p))}` : money(p.price)} <span className={`estacion-tag ${p.estacion || 'barra'}`}>{ESTACION_LABELS[p.estacion || 'barra']}</span>
+              <div className="list-row-sub">{p.cat} • {p.sizes ? `desde ${money(precioDesde(p))}` : money(p.price)} <span className={`estacion-tag ${p.estacion || 'barra'}`}>{ESTACION_LABELS[p.estacion || 'barra']}</span>{(p.tipo === 'alimento' || p.tipo === 'snack') && <span className="tipo-tag">{TIPO_PRODUCTO_LABELS[p.tipo]}</span>}
                 {p.reventa && (
                   <span className={`existencias-tag ${p.agotado ? 'agotado' : p.reventa.stock < p.reventa.stockMinimo ? 'bajo' : ''}`}>
                     {p.agotado ? 'Agotado' : `Quedan ${formatNumero(p.reventa.stock)} pzas`}{p.reventa.aPedir > 0 ? ` · pedir ${formatNumero(p.reventa.aPedir)}` : ''}
@@ -159,7 +159,7 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
 function RecetasSection({ productos, onView, recetaOverrides }) {
   return (
     <>
-      <p className="promo-summary-card">Toca una bebida para ver su receta (12 oz, leche entera, café tradicional) y desde ahí editarla: ingredientes base (café por shot y leche por tamaño), ingredientes fijos del inventario, pasos y parámetros de extracción. El vaso/tapa y los extras se resuelven solos según lo que el cliente elija.</p>
+      <p className="promo-summary-card">Toca un producto para ver su receta y desde ahí editarla. Bebidas: ingredientes base (café por shot y leche por tamaño), ingredientes fijos del inventario, pasos y parámetros de extracción; el vaso/tapa y los extras se resuelven solos según lo que el cliente elija. Alimentos de parrilla/cocina: sus ingredientes del inventario, pasos, tiempo y término.</p>
       <p className="field-hint">También puedes editar las recetas de bebidas inactivas. Para ponerlas a la venta, revisa sus insumos y empaques y actívalas en Catálogo de productos.</p>
       <div className="product-grid">
         {productos.filter(p => p.tipo !== 'snack').map(p => (
@@ -428,7 +428,7 @@ function OpcionesSection({ addToast, onOpcionesChanged }) {
         </div>
         <div>
           <div className="section-title"><Sparkles size={15} /> Extras</div>
-          {data.extras.map(e => <Fila key={e.id} tipo="extras" o={e} extraSub={porcion(e)} />)}
+          {data.extras.map(e => <Fila key={e.id} tipo="extras" o={e} extraSub={`${e.aplica_a === 'alimentos' ? 'parrilla/cocina' : 'bebidas'} · ${porcion(e)}`} />)}
           <button className="btn-secondary" style={{ marginTop: 4 }} onClick={() => setEditing({ tipo: 'extras', opcion: null })}><Plus size={15} /> Nuevo extra</button>
         </div>
       </div>

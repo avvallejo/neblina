@@ -103,7 +103,8 @@ export default function MenuBoard({ sucursalId }) {
     { titulo: 'Tamaños', items: opciones.tamanos },
     { titulo: 'Café', items: opciones.cafes },
     { titulo: 'Leche', items: opciones.leches },
-    { titulo: 'Extras', items: opciones.extras },
+    { titulo: 'Extras', items: opciones.extras.filter(o => (o.aplicaA || 'bebidas') === 'bebidas') },
+    { titulo: 'Extras parrilla', items: opciones.extras.filter(o => o.aplicaA === 'alimentos') },
   ].filter(g => g.items.length > 0) : [];
 
   return (
@@ -185,11 +186,14 @@ function Pizarra({ brand, sedeNombre, cfg, categorias, productos, abierto, hora,
   const enPromo = productos.some(p => p.precioBase > p.price);
   const tituloPromo = promoApertura ? promoApertura.nombre : (enPromo ? 'Promoción' : null);
   const columnas = categorias.map(cat => ({ cat, items: productos.filter(p => p.cat === cat) })).filter(c => c.items.length > 0);
-  const extras = opciones ? [
-    ...opciones.extras,
+  // Extras de bebidas (+ leches y cafés con recargo) y, aparte, los de parrilla/cocina.
+  const extrasBebidas = opciones ? [
+    ...opciones.extras.filter(o => (o.aplicaA || 'bebidas') === 'bebidas'),
     ...opciones.leches.filter(o => o.delta > 0),
     ...opciones.cafes.filter(o => o.delta > 0),
   ] : [];
+  const extrasAlimentos = opciones ? opciones.extras.filter(o => o.aplicaA === 'alimentos') : [];
+  const extras = [...extrasBebidas, ...extrasAlimentos];
   const pie = (cfg.piePantalla || '').split('•').map(t => t.trim()).filter(Boolean);
   // Una categoría con muchas bebidas ocupa dos columnas (los ítems fluyen en
   // dos); y si aun así hay muchas filas, toda la parrilla se reduce un poco
@@ -298,17 +302,21 @@ function Pizarra({ brand, sedeNombre, cfg, categorias, productos, abierto, hora,
         ))}
         {extras.length > 0 && (
           <section className="pz-col pz-extras">
-            <h2 className="pz-cat">Extras</h2>
-            {extras.map(o => (
-              <div key={`${o.codigo}-${o.label}`} className="pz-item small">
-                <div className="pz-item-body">
-                  <div className="pz-item-line">
-                    <span className="pz-item-name">{o.label}</span>
-                    <span className="pz-dots" />
-                    <span className="pz-price">{o.delta > 0 ? `+${fmt$(o.delta)}` : 'incluido'}</span>
+            {[{ titulo: 'Extras', items: extrasBebidas }, { titulo: 'Extras parrilla', items: extrasAlimentos }].filter(g => g.items.length > 0).map((g, gi) => (
+              <React.Fragment key={g.titulo}>
+                <h2 className={`pz-cat${gi > 0 ? ' pz-cat-sub' : ''}`}>{g.titulo}</h2>
+                {g.items.map(o => (
+                  <div key={`${o.codigo}-${o.label}`} className="pz-item small">
+                    <div className="pz-item-body">
+                      <div className="pz-item-line">
+                        <span className="pz-item-name">{o.label}</span>
+                        <span className="pz-dots" />
+                        <span className="pz-price">{o.delta > 0 ? `+${fmt$(o.delta)}` : 'incluido'}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                ))}
+              </React.Fragment>
             ))}
           </section>
         )}

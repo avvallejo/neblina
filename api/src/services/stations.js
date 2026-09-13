@@ -46,7 +46,7 @@ async function resolverDestino(queryFn, sucursalId, { destino, mesa }, { obligat
 }
 
 function normalizarEstacionProducto(value, { tipo } = {}) {
-  if (value === undefined || value === null || value === '') return tipo === 'snack' ? 'parrilla' : 'barra';
+  if (value === undefined || value === null || value === '') return tipo === 'snack' || tipo === 'alimento' ? 'parrilla' : 'barra';
   if (!ESTACIONES_PRODUCTO.includes(value)) throw new ApiError(400, 'Estación inválida (barra, parrilla o caja).');
   return value;
 }

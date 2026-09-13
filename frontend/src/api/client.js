@@ -151,6 +151,7 @@ function adaptOpcion(o, tipo) {
     ...(o.leche_ml !== undefined && o.leche_ml !== null ? { lecheMl: Number(o.leche_ml) } : {}), // tamaños: leche predeterminada de la sede
     ...(o.es_shot_adicional ? { esShot: true } : {}),
     ...(tipo === 'extra' && o.cantidad ? { cantidad: Number(o.cantidad), unidad: o.unidad } : {}), // porción del extra (para la receta)
+    ...(tipo === 'extra' ? { aplicaA: o.aplica_a || 'bebidas' } : {}), // bebidas | alimentos
   };
 }
 

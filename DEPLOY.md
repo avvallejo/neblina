@@ -80,6 +80,14 @@ un valor al enum `metodo_pago`, por eso su primer `ALTER TYPE` va fuera de
 transacción (igual que la 16). `db/migrar.sh` ahora reconoce por su huella
 cualquier migración que la base ya tenga aunque no esté registrada.
 
+La migración 30 (alimentos de parrilla/cocina y extras por ámbito) agrega el
+valor `alimento` al enum `tipo_producto` (su `ALTER TYPE` también va fuera de
+transacción) y la columna `opciones_extra.aplica_a` con valor `bebidas` para
+todo lo existente: nada cambia para los extras y productos actuales. El
+menú inicial de parrilla se carga después, por sede, con
+`node scripts/agregar-parrilla.js <uuid-sede> --apply` dentro del contenedor
+de la API (sin `--apply` solo ensaya).
+
 ---
 
 ## Parte 1 — Subir el proyecto a GitHub (la cuenta nueva)

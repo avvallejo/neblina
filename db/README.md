@@ -95,6 +95,14 @@ reales.
     insumos (`materias_primas.presentacion_cantidad/_unidad/_nombre`, con
     CHECK de coherencia) y `lotes.paquetes`. La API deriva el costo unitario
     de cada compra (incluida la primera, al dar de alta).
+30. **`30_parrilla_alimentos.sql`** — Tipo de producto `alimento`
+    (parrilla/cocina: receta de varios ingredientes, sin café/leche/vaso;
+    CHECK `productos_alimento_sin_opciones_bebida`), `opciones_extra.aplica_a`
+    (`bebidas` | `alimentos`, el shot solo bebidas), `fn_descontar_inventario`
+    y `fn_costo_teorico_producto` para snacks y alimentos (ingredientes fijos
+    + extras), `fn_resetear_receta` con pasos de alimento y
+    `vw_precios_por_revisar` con alimentos que ya tienen ingredientes. El
+    `ALTER TYPE` va fuera de transacción (como 16 y 26). Re-ejecutable.
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -116,7 +124,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
-# … y así hasta 29_presentacion_insumos.sql (o simplemente: db/migrar.sh)
+# … y así hasta 30_parrilla_alimentos.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

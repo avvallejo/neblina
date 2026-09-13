@@ -54,12 +54,16 @@ async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extra
     if (r.rows.length === 0) throw new ApiError(400, 'Opción de café inválida.');
     total += Number(r.rows[0].delta_precio);
   }
+  // Cada extra aplica a un ámbito: los de alimentos (tocino, queso extra…) no
+  // se venden en una bebida ni los de bebidas (vainilla, shot) en una hamburguesa.
+  const ambito = producto.tipo === 'alimento' ? 'alimentos' : 'bebidas';
   for (const extraId of extraIds) {
     // eslint-disable-next-line no-await-in-loop
     const r = sucursalId
-      ? await queryFn('SELECT delta_precio FROM opciones_extra WHERE id = $1 AND activo AND sucursal_id = $2', [extraId, sucursalId])
-      : await queryFn('SELECT delta_precio FROM opciones_extra WHERE id = $1 AND activo', [extraId]);
+      ? await queryFn('SELECT delta_precio, etiqueta, aplica_a FROM opciones_extra WHERE id = $1 AND activo AND sucursal_id = $2', [extraId, sucursalId])
+      : await queryFn('SELECT delta_precio, etiqueta, aplica_a FROM opciones_extra WHERE id = $1 AND activo', [extraId]);
     if (r.rows.length === 0) throw new ApiError(400, `Extra inválido: ${extraId}`);
+    if ((r.rows[0].aplica_a || 'bebidas') !== ambito) throw new ApiError(400, `El extra "${r.rows[0].etiqueta}" no aplica a "${producto.nombre}".`);
     total += Number(r.rows[0].delta_precio);
   }
   if (!Number.isFinite(total) || total < 0) throw new ApiError(400, 'La combinación seleccionada produce un precio inválido.');

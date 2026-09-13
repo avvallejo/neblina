@@ -23,3 +23,12 @@
 @media(max-width:999px){.cm-many-cold{grid-template-columns:1fr 1fr}.cm-many-cold .cm-center{display:flex}.cm-many-cold .cm-center .cm-photo{width:100px;max-height:none}}
 @media(max-width:600px){.cm-many-cold{grid-template-columns:1fr}}
 .cm-photo.cm-uploaded{background:none;mix-blend-mode:normal;object-fit:contain;border-radius:12px}
+
+/* Cuarta columna: categorías propias del negocio (Parrilla, Postres…) */
+.cm-main.cm-four{grid-template-columns:minmax(0,1.1fr) minmax(0,.62fr) minmax(0,1.1fr) minmax(0,1.1fr)}.cm-extra{display:flex;flex-direction:column;gap:2vh;min-width:0;min-height:0}.cm-extra .cm-column{flex:1}.warm .cm-section-head h2{color:#d0663a}
+@media(max-width:999px){.cm-main.cm-four{grid-template-columns:1fr 1fr}.cm-extra{grid-column:1/-1}}
+@media(max-width:600px){.cm-main.cm-four{grid-template-columns:1fr}.cm-extra{grid-column:auto}}
+.cm-simple-list{display:flex;flex-direction:column;gap:.4vh;margin-top:1vh}.cm-column .cm-snack{font-size:clamp(13px,1.05vw,20px)}
+/* Con cuatro columnas cada renglón es más angosto y más bajo: tipografía un punto menor y descripción en una línea. */
+.cm-four .cm-drink h3{font-size:clamp(15px,1.15vw,25px)}.cm-four .cm-drink-copy p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.3vh}.cm-four .cm-drink-icon{font-size:3.2vw}.cm-four .cm-price strong{font-size:clamp(22px,2.2vw,46px)}.cm-four .cm-drink{gap:.5vw}
+.cm-four.cm-many-cold .cm-center .cm-photo{width:clamp(48px,4.4vw,96px);max-height:4.4vw}.cm-four .cm-center .cm-drink h3{font-size:clamp(14px,1vw,21px)}.cm-four .cm-center .cm-price strong{font-size:clamp(20px,1.8vw,38px)}.cm-four .cm-center .cm-drink-copy p,.cm-four .cm-center .cm-drink-copy small{display:none}.cm-four .cm-center .cm-drink-icon{width:clamp(48px,4.4vw,96px);font-size:clamp(26px,2.6vw,52px)}

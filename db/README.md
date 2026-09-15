@@ -103,6 +103,11 @@ reales.
     + extras), `fn_resetear_receta` con pasos de alimento y
     `vw_precios_por_revisar` con alimentos que ya tienen ingredientes. El
     `ALTER TYPE` va fuera de transacción (como 16 y 26). Re-ejecutable.
+31. **`31_revision_precio_costos.sql`** — `fn_revision_precio` incluye el
+    costo indirecto por unidad de la sede (gastos fijos ÷ unidades estimadas)
+    y el margen/redondeo del negocio: cambiar cualquiera de ellos en Admin →
+    Costos devuelve a "precios por revisar" los productos con "Mantener
+    precio". Invalida a propósito las decisiones guardadas (reaparecen una vez).
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -124,7 +129,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
-# … y así hasta 30_parrilla_alimentos.sql (o simplemente: db/migrar.sh)
+# … y así hasta 31_revision_precio_costos.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

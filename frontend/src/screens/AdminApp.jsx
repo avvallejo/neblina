@@ -502,7 +502,7 @@ function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
   const guardarMargen = async payload => {
     try {
       await api.guardarMargen(payload);
-      await despuesDeCambiar('Margen y volumen guardados');
+      await despuesDeCambiar('Margen y volumen guardados; revisa los precios sugeridos');
       return true;
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };

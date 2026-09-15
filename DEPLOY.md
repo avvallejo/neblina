@@ -88,6 +88,11 @@ menú inicial de parrilla se carga después, por sede, con
 `node scripts/agregar-parrilla.js <uuid-sede> --apply` dentro del contenedor
 de la API (sin `--apply` solo ensaya).
 
+La migración 31 solo redefine `fn_revision_precio`. Efecto visible: después
+de aplicarla, todos los productos cuyo precio difiera del sugerido vuelven a
+"precios por revisar" aunque se les hubiera dado "Mantener precio"; es una
+sola vez, para volver a decidir con el sugerido actual.
+
 ---
 
 ## Parte 1 — Subir el proyecto a GitHub (la cuenta nueva)

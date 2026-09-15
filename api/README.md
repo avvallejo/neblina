@@ -305,6 +305,16 @@ trigger de inventario descuenta ingredientes fijos + insumos de los extras
 en snacks y alimentos. `scripts/agregar-parrilla.js <sede> [--apply]` carga el
 menú inicial. `test/live-alimentos.js` (`npm run test:alimentos:live`).
 
+### Revisión de precios y costos del negocio
+
+`POST /api/productos/:id/mantener-precio` guarda la huella
+`fn_revision_precio(id)`; el producto reaparece en
+`GET /api/productos/precios-por-revisar` cuando la huella cambia. Desde la
+migración 31 la huella también cubre `fn_costo_fijo_unitario` (gastos fijos ÷
+unidades estimadas) y el margen/redondeo de `configuracion_margen`, así que
+`PUT /api/promociones/margen` y los cambios en `/api/gastos-fijos` reavivan la
+revisión de todo el catálogo. `test/live-price-review.js`.
+
 ## Decisiones de seguridad que ya están tomadas
 
 - El PIN nunca se guarda ni compara en texto plano (bcrypt, vía pgcrypto en

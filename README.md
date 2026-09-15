@@ -92,8 +92,13 @@ ingredientes del inventario → el sistema calcula el costo prorrateado
 (insumos + parte de renta/sueldos) → tú solo decides el margen (general de la
 sucursal o propio del producto) y aplicas el precio sugerido con un clic → el
 producto aparece en el menú de la app y en la **pantalla del negocio** (una
-URL fija para la TV del local: `/?pantalla=menu&sucursal=<id>`, se actualiza
-sola). La pantalla tiene dos estilos (Admin → Configuración → Pantalla del
+URL fija; ver abajo). Si prefieres conservar tu precio aunque difiera del
+sugerido, **Mantener precio** lo silencia hasta que cambie algo que lo
+sostenga: la receta, un ingrediente o su costo, o los costos del negocio en
+Admin → Costos (unidades estimadas al mes, gastos fijos, margen general,
+redondeo). Existencias y el margen propio del producto no lo reavivan.
+La pantalla del negocio es una URL fija para la TV del local
+(`/?pantalla=menu&sucursal=<id>`, se actualiza sola). La pantalla tiene dos estilos (Admin → Configuración → Pantalla del
 negocio): **Pizarra** (oscuro y dorado, como un menú impreso: columnas por
 categoría con la descripción corta de cada producto, precio normal tachado
 cuando hay precio promocional, columna de extras, lema y pie configurables; sin

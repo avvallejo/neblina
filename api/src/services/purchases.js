@@ -95,6 +95,20 @@ async function registrarCompra(client, { materiaId, sucursalId, usuarioId, body 
     await client.query('UPDATE materias_primas SET stock_actual = stock_actual + $1 WHERE id = $2', [cantidadStock, materiaId]);
     await client.query(`INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, lote_id, usuario_id) VALUES ($1,'compra',$2,$3,$4)`, [materiaId, cantidadStock, lote.id, usuarioId]);
   }
+  // Contabilidad: la compra sale del dinero (caja/banco o queda por pagar) y
+  // entra al inventario; NO es gasto — el gasto se reconoce al consumir.
+  if (costo > 0) {
+    const A = require('./accounting');
+    const { rows: [nombre] } = await client.query('SELECT nombre FROM materias_primas WHERE id = $1', [materiaId]);
+    const cuenta = await A.cuentaPorClave(client.query.bind(client), sucursalId, 'compra_insumos');
+    const pagado = body.pagado === undefined ? true : !!body.pagado;
+    await A.crearEgreso(client, {
+      sucursalId, usuarioId, fecha: A.fechaISO(lote.fecha_compra), cuentaContable: cuenta,
+      concepto: `Compra: ${nombre.nombre} · ${paquetes ? `${paquetes} paquete(s)` : `${cantidad} ${unidadLote}`}`,
+      monto: costo, cuentaDineroId: pagado ? body.cuentaDineroId : null, pagado,
+      proveedorId: body.proveedorId || null, loteId: lote.id, referencia: body.numeroLote,
+    });
+  }
   return { ...lote, costo_unitario_referencia: costoUnitario };
 }
 

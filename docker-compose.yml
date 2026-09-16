@@ -57,6 +57,7 @@ services:
       - ./db/29_presentacion_insumos.sql:/docker-entrypoint-initdb.d/29_presentacion_insumos.sql:ro
       - ./db/30_parrilla_alimentos.sql:/docker-entrypoint-initdb.d/30_parrilla_alimentos.sql:ro
       - ./db/31_revision_precio_costos.sql:/docker-entrypoint-initdb.d/31_revision_precio_costos.sql:ro
+      - ./db/32_contabilidad.sql:/docker-entrypoint-initdb.d/32_contabilidad.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

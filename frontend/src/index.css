@@ -441,6 +441,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 
 .admin-columns { display: grid; grid-template-columns: 1fr; gap: 22px; align-items: start; }
 @media (min-width: 1080px) { .admin-columns { grid-template-columns: 1.35fr 1fr; } }
+/* Las columnas no crecen con su contenido (tiras de pestañas, filas anchas): se desplazan o envuelven. */
+.admin-columns > * { min-width: 0; }
 
 .list-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 16px; margin-bottom: 8px; }
 .list-row-main { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; }
@@ -756,3 +758,58 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .categoria-nombre { flex: 1 1 160px; font-weight: 700; font-size: 13.5px; }
 .categoria-uso { color: var(--ink-faint); font-weight: 600; font-size: 12px; white-space: nowrap; }
 .categoria-acciones { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-left: auto; }
+
+/* ===== Contabilidad y mayordomía ===== */
+.conta-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.conta-tabs { padding-bottom: 0; flex: 1; min-width: 0; }
+.conta-tabs .cat-tab { display: inline-flex; align-items: center; gap: 6px; }
+.mes-picker { display: flex; align-items: center; gap: 6px; }
+.mes-picker .text-input { width: auto; min-width: 150px; padding: 8px 10px; }
+.er-table { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 12px; }
+.er-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13.5px; font-weight: 700; }
+.er-row:last-child { border-bottom: 0; }
+.er-row.sub { padding-left: 28px; font-weight: 600; color: var(--ink-faint); font-size: 12.5px; }
+.er-row.total { background: var(--surface-2); font-weight: 800; }
+.er-row.neta { background: var(--brand-soft, rgba(180, 85, 29, 0.08)); font-size: 15px; font-weight: 900; }
+.er-row.neta .er-value { color: var(--brand); font-size: 18px; }
+.er-label { min-width: 0; }
+.er-detalle { color: var(--ink-faint); font-weight: 600; font-size: 12px; }
+.er-value { font-family: var(--font-mono); white-space: nowrap; }
+.er-value.faint, .faint { color: var(--ink-faint); font-weight: 600; }
+.rojo { color: var(--danger); }
+.ok { color: var(--ok); }
+.egreso-row .warn { color: var(--warn); font-weight: 700; }
+.pill-cerrado { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-faint); text-transform: none; letter-spacing: 0; }
+.mayordomia-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 12px; }
+.mayordomia-card > div { display: flex; flex-direction: column; gap: 4px; }
+.mayordomia-card strong { font-size: 20px; font-family: var(--font-mono); }
+.mayordomia-card strong.brand { color: var(--brand); }
+.mayordomia-card .field-hint { margin: 0; }
+.mayordomia-table { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.mayordomia-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 0.9fr 0.9fr 1fr 1fr auto; gap: 8px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 700; min-width: 720px; }
+.mayordomia-row:last-child { border-bottom: 0; }
+.mayordomia-row.head { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); background: var(--surface-2); }
+.mayordomia-row span:not(:first-child) { text-align: right; font-family: var(--font-mono); }
+.mayordomia-row .option-row { text-align: right; }
+.btn-secondary.small { padding: 5px 10px; font-size: 12px; }
+.flujo-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
+.flujo-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; margin-bottom: 8px; }
+.flujo-head strong { font-family: var(--font-mono); font-size: 18px; color: var(--brand); }
+.flujo-head strong.rojo { color: var(--danger); }
+.flujo-grid { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+.flujo-grid span:nth-child(even) { font-family: var(--font-mono); text-align: right; }
+.egreso-row { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 14px; margin-bottom: 8px; }
+.egreso-row.por-pagar { border-color: rgba(166, 109, 11, 0.45); box-shadow: inset 4px 0 0 var(--warn); }
+.egreso-row.pendiente { border-style: dashed; }
+.egreso-row.registrado { opacity: .75; }
+.egreso-main { flex: 1; min-width: 0; }
+.egreso-monto { font-family: var(--font-mono); white-space: nowrap; font-size: 15px; }
+.egreso-tag { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); }
+.egreso-tag.gasto { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.egreso-tag.otro { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.salidas-caja { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.salida-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13px; font-weight: 700; }
+.salida-row small { color: var(--ink-faint); font-weight: 600; }
+.salida-row strong { font-family: var(--font-mono); white-space: nowrap; }
+.salida-form { margin-top: 10px; }
+@media (max-width: 640px) { .mayordomia-row { min-width: 640px; } }

@@ -315,6 +315,24 @@ unidades estimadas) y el margen/redondeo de `configuracion_margen`, así que
 `PUT /api/promociones/margen` y los cambios en `/api/gastos-fijos` reavivan la
 revisión de todo el catálogo. `test/live-price-review.js`.
 
+### Contabilidad y mayordomía
+
+`/api/contabilidad` (solo admin, por sede): `config` (porcentajes de diezmo y
+ofrenda, fecha de arranque), `cuentas` y `cuentas-dinero` (catálogo y saldos),
+`egresos` (alta, edición, marcar pagado, anular con motivo y auditoría),
+`recurrentes?periodo=AAAA-MM` + `recurrentes/:id/registrar` (gastos fijos del
+mes, uno solo por gasto y periodo), `traspasos`, `estado-resultados?periodo=`,
+`flujo?periodo=`, `mayordomia?anio=`, `cierres` (cerrar / reabrir con motivo) y
+`consolidado/estado-resultados` (solo administrador general). El costo de
+ventas sale de `movimientos_inventario` valuado con el costo congelado en cada
+movimiento; las compras (`POST /materias-primas/:id/lotes`) crean su egreso en
+la cuenta "Compra de insumos" con `cuentaDineroId`/`pagado`, y
+`POST /turnos/actual/salidas` registra una salida de caja del turno (baja el
+efectivo esperado de `drawerSql`). Con el mes cerrado, cualquier alta o cambio
+de egreso de ese mes devuelve 409. `scripts/configurar-contabilidad.js <sede>
+[--apply]` deja la sede lista. `test/live-contabilidad.js`
+(`npm run test:contabilidad:live`).
+
 ## Decisiones de seguridad que ya están tomadas
 
 - El PIN nunca se guarda ni compara en texto plano (bcrypt, vía pgcrypto en

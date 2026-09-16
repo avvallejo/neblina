@@ -93,6 +93,22 @@ de aplicarla, todos los productos cuyo precio difiera del sugerido vuelven a
 "precios por revisar" aunque se les hubiera dado "Mantener precio"; es una
 sola vez, para volver a decidir con el sugerido actual.
 
+La migración 32 (contabilidad y mayordomía) crea tablas nuevas y siembra en
+cada sede su catálogo de cuentas y sus cuentas de dinero (Caja y Banco); no
+toca ventas, inventario ni precios. Agrega
+`movimientos_inventario.costo_unitario` y lo rellena en el historial con el
+costo del lote o el de referencia. Después de desplegar, por cada sede:
+
+```bash
+docker exec cafeteria-api node scripts/configurar-contabilidad.js <uuid-sede>          # ensayo
+docker exec cafeteria-api node scripts/configurar-contabilidad.js <uuid-sede> --apply  # aplica
+```
+
+Ese script fija los porcentajes de diezmo y ofrenda, la fecha desde la que
+cuenta la contabilidad y los gastos fijos del dueño (sueldo y préstamo). Ojo:
+esos gastos fijos entran al costo indirecto por unidad, así que los productos
+aparecerán en "precios por revisar" con un sugerido más alto.
+
 ---
 
 ## Parte 1 — Subir el proyecto a GitHub (la cuenta nueva)

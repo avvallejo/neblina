@@ -218,6 +218,44 @@ ensaya; es idempotente (lo que ya existe se conserva). Precios y cantidades
 son de referencia: se ajustan en Admin, y las existencias reales se cargan
 con Inventario → Registrar compra.
 
+## Contabilidad y mayordomía (diezmo y ofrenda)
+
+**Admin → Contabilidad** convierte las ventas y el inventario en una
+contabilidad de verdad, con cuatro pestañas:
+
+- **Estado de resultados** (por mes): ventas cobradas − costo de ventas
+  (los insumos que realmente se consumieron, valuados al costo del lote, más
+  mermas) = utilidad bruta; − gastos de operación = utilidad de operación;
+  − gastos financieros e impuestos = **utilidad neta**. Al lado, el flujo de
+  dinero de Caja y Banco (saldo inicial + ventas + traspasos − egresos) y el
+  cierre del mes, que congela los números y bloquea cambios hasta reabrirlo
+  con un motivo.
+- **Egresos**: todo lo que sale de dinero, con fecha, cuenta contable, con qué
+  se pagó (Caja, Banco o "queda por pagar"), proveedor, referencia y nota. Los
+  gastos fijos configurados en Costos se proponen cada mes para confirmar el
+  pago real (presupuesto ↔ realidad), las compras de insumos llegan solas
+  desde Inventario y hay traspasos Caja ↔ Banco para los depósitos.
+- **Mayordomía**: el año mes por mes — utilidad neta, **diezmo** y **ofrenda**
+  calculados (porcentajes configurables; por omisión 10 % y 5 % de la utilidad
+  neta), lo entregado y lo pendiente, con un botón para registrar cada entrega
+  y ligarla al mes que corresponde. Un mes con pérdida no genera diezmo.
+- **Cuentas**: catálogo de cuentas editable (renta, sueldos, servicios,
+  préstamo, impuestos, equipo, retiros, diezmo…), saldos de Caja y Banco y los
+  porcentajes de mayordomía.
+
+Qué baja la utilidad y qué no: bajan el costo de ventas, los gastos de
+operación, los financieros y los impuestos. **No** bajan la compra de insumos
+(sale del dinero y entra al inventario; se vuelve gasto al consumirse), las
+inversiones en equipo, los retiros del dueño ni el diezmo entregado. En Caja,
+el cajero registra **salidas de caja** (pagar al proveedor, hielo, un mandado):
+bajan el efectivo esperado del arqueo y quedan como egreso real.
+
+`api/scripts/configurar-contabilidad.js <uuid-sede> [--apply]` deja la sede
+lista: diezmo 10 %, ofrenda 5 %, fecha de arranque de la contabilidad y los
+gastos fijos "Sueldo del dueño" y "Pago de préstamo" ligados a su cuenta
+(montos ajustables con `SUELDO`, `PRESTAMO`, `DIEZMO`, `OFRENDA`, `INICIO`).
+Migración `db/32_contabilidad.sql`.
+
 ## Frontend adaptable
 
 `frontend/` es una app React (Vite) con un solo código para cualquier

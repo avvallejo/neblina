@@ -6,8 +6,9 @@ import {
   LayoutDashboard, Lock, Droplets, Package, Coffee, ClipboardList, Receipt,
   Settings, Building2, BarChart3, Plus, Pencil, UserPlus, Sparkles, AlertTriangle,
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
-  Gift, BadgeCheck,
+  Gift, BadgeCheck, BookOpen,
 } from 'lucide-react';
+import ContabilidadSection from './ContabilidadSection.jsx';
 import * as api from '../api/client.js';
 import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, ESTACION_LABELS, TIPO_PRODUCTO_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
 import { money, unidadDisplay, stockPct, convertirCantidad, formatNumeroInput as formatNumero } from '../lib/helpers.js';
@@ -480,7 +481,7 @@ function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
 
   const guardarGasto = async payload => {
     try {
-      if (payload.id) await api.actualizarGastoFijo(payload.id, { concepto: payload.concepto, categoria: payload.categoria, montoMensual: payload.montoMensual });
+      if (payload.id) await api.actualizarGastoFijo(payload.id, { concepto: payload.concepto, categoria: payload.categoria, montoMensual: payload.montoMensual, cuentaContableId: payload.cuentaContableId, cuentaDineroId: payload.cuentaDineroId, diaPago: payload.diaPago });
       else await api.crearGastoFijo(payload);
       await despuesDeCambiar(payload.id ? 'Gasto actualizado; revisa los precios sugeridos' : 'Gasto agregado; revisa los precios sugeridos');
       return true;
@@ -856,6 +857,7 @@ export default function AdminApp(props) {
     { id: 'materias', label: 'Inventario', Icon: Droplets, badge: materiasBajas.length },
     { id: 'recetas', label: 'Recetas', Icon: ClipboardList },
     { id: 'costos', label: 'Costos', Icon: DollarSign },
+    { id: 'contabilidad', label: 'Contabilidad', Icon: BookOpen },
     { id: 'proveedores', label: 'Proveedores', Icon: Package },
     { id: 'usuarios', label: 'Personal', Icon: Lock },
     { id: 'reportes', label: 'Reportes', Icon: Receipt },
@@ -875,6 +877,7 @@ export default function AdminApp(props) {
     productos: ['Catálogo de productos', `${productosAdmin.length} producto(s)`],
     recetas: ['Recetas', 'Vista estándar por producto'],
     costos: ['Costos indirectos', 'Gastos fijos, margen y punto de equilibrio'],
+    contabilidad: ['Contabilidad', 'Egresos, estado de resultados, mayordomía y cuentas'],
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
     reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],
     autorizaciones: ['Autorizaciones', `${(cortesiasPendientes || []).length} cortesía(s) fuera del plan por resolver`],
@@ -899,7 +902,7 @@ export default function AdminApp(props) {
       onLogout={onLogout}
       title={title}
       subtitle={subtitle}
-      wide={['reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones'].includes(screen)}
+      wide={['reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones', 'contabilidad'].includes(screen)}
       topRight={esGeneral ? <span className="sede-pill"><Building2 size={13} /> {sedeNombre || 'Elige sucursal'}</span> : null}
     >
       {screen === 'dashboard' && (
@@ -1035,6 +1038,7 @@ export default function AdminApp(props) {
       {screen === 'recetas' && <RecetasSection productos={productosAdmin} onView={setRecipeProduct} recetaOverrides={recetaOverrides} />}
       {screen === 'opciones' && <OpcionesSection addToast={addToast} onOpcionesChanged={recargarCatalogo} />}
       {screen === 'costos' && <CostosSection addToast={addToast} sedeNombre={sedeNombre} onCostosChanged={recargarAdmin} />}
+      {screen === 'contabilidad' && <ContabilidadSection addToast={addToast} esGeneral={esGeneral} sedeNombre={sedeNombre} proveedores={proveedores} />}
       {screen === 'reportes' && <ReportesSection data={reportes} />}
       {screen === 'autorizaciones' && <AutorizacionesSection pendientes={cortesiasPendientes} addToast={addToast} onResolved={recargarAdmin} />}
       {screen === 'comparativo' && esGeneral && <ComparativoSection addToast={addToast} />}

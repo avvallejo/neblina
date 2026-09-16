@@ -375,13 +375,52 @@ export function actualizarMateria(id, m) {
 export function eliminarMateria(id, desvincular = false) { return request(`/materias-primas/${id}${desvincular ? '?desvincular=true' : ''}`, { method: 'DELETE' }); }
 
 // Compras (lotes) y ajustes de conteo físico — el kardex del inventario.
-export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad, paquetes }) {
+export function registrarCompra(materiaId, { cantidadComprada, unidad, costoTotal, proveedorId, numeroLote, fechaCaducidad, paquetes, cuentaDineroId, pagado }) {
   return request(`/materias-primas/${materiaId}/lotes`, {
     method: 'POST',
     // Con `paquetes`, el servidor usa la presentación del insumo (N paquetes × contenido).
-    body: paquetes ? { paquetes, costoTotal, proveedorId, numeroLote, fechaCaducidad } : { cantidadComprada, unidad: unidad ? normalizeUnidadMedida(unidad) : undefined, costoTotal, proveedorId, numeroLote, fechaCaducidad },
+    // cuentaDineroId/pagado: con qué se pagó la compra (Contabilidad); sin cuenta = queda por asignar.
+    body: paquetes ? { paquetes, costoTotal, proveedorId, numeroLote, fechaCaducidad, cuentaDineroId, pagado } : { cantidadComprada, unidad: unidad ? normalizeUnidadMedida(unidad) : undefined, costoTotal, proveedorId, numeroLote, fechaCaducidad, cuentaDineroId, pagado },
   });
 }
+
+/* ============================================================
+   CONTABILIDAD Y MAYORDOMÍA (admin)
+   ============================================================ */
+export function getContabilidadConfig() { return request('/contabilidad/config'); }
+export function guardarContabilidadConfig(body) { return request('/contabilidad/config', { method: 'PUT', body }); }
+export function getCuentasContables() { return request('/contabilidad/cuentas'); }
+export function crearCuentaContable(body) { return request('/contabilidad/cuentas', { method: 'POST', body }); }
+export function actualizarCuentaContable(id, body) { return request(`/contabilidad/cuentas/${id}`, { method: 'PATCH', body }); }
+export function eliminarCuentaContable(id) { return request(`/contabilidad/cuentas/${id}`, { method: 'DELETE' }); }
+export function getCuentasDinero() { return request('/contabilidad/cuentas-dinero'); }
+export function actualizarCuentaDinero(id, body) { return request(`/contabilidad/cuentas-dinero/${id}`, { method: 'PATCH', body }); }
+export function getEgresos({ periodo, pendientes, cuenta } = {}) {
+  const q = new URLSearchParams();
+  if (periodo) q.set('periodo', periodo);
+  if (pendientes) q.set('pendientes', 'true');
+  if (cuenta) q.set('cuenta', cuenta);
+  return request(`/contabilidad/egresos?${q.toString()}`);
+}
+export function crearEgreso(body) { return request('/contabilidad/egresos', { method: 'POST', body }); }
+export function actualizarEgreso(id, body) { return request(`/contabilidad/egresos/${id}`, { method: 'PATCH', body }); }
+export function anularEgreso(id, motivo) { return request(`/contabilidad/egresos/${id}/anular`, { method: 'POST', body: { motivo } }); }
+export function getRecurrentes(periodo) { return request(`/contabilidad/recurrentes?periodo=${periodo}`); }
+export function registrarRecurrente(id, body) { return request(`/contabilidad/recurrentes/${id}/registrar`, { method: 'POST', body }); }
+export function getTraspasos(periodo) { return request(`/contabilidad/traspasos?periodo=${periodo}`); }
+export function crearTraspaso(body) { return request('/contabilidad/traspasos', { method: 'POST', body }); }
+export function anularTraspaso(id) { return request(`/contabilidad/traspasos/${id}/anular`, { method: 'POST' }); }
+export function getEstadoResultados(periodo) { return request(`/contabilidad/estado-resultados?periodo=${periodo}`); }
+export function getEstadoConsolidado(periodo) { return request(`/contabilidad/consolidado/estado-resultados?periodo=${periodo}`); }
+export function getFlujoDinero(periodo) { return request(`/contabilidad/flujo?periodo=${periodo}`); }
+export function getMayordomia(anio) { return request(`/contabilidad/mayordomia?anio=${anio}`); }
+export function getCierresMes() { return request('/contabilidad/cierres'); }
+export function cerrarMes(periodo) { return request('/contabilidad/cierres', { method: 'POST', body: { periodo } }); }
+export function reabrirMes(periodo, motivo) { return request(`/contabilidad/cierres/${periodo}`, { method: 'DELETE', body: { motivo } }); }
+// Caja: salidas de efectivo del turno.
+export function getSalidasTurno() { return request('/turnos/actual/salidas'); }
+export function getCuentasSalidaTurno() { return request('/turnos/salidas/cuentas'); }
+export function registrarSalidaTurno(body) { return request('/turnos/actual/salidas', { method: 'POST', body }); }
 export function ajustarStock(materiaId, { nuevaCantidad, motivo, stockEsperado, fechaCaducidad }) {
   return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo, stockEsperado, fechaCaducidad } });
 }
@@ -435,8 +474,8 @@ export function mantenerPrecio(id, revision) {
 // Costos indirectos: gastos fijos mensuales de la sede (renta, sueldos…) y la
 // configuración de margen/volumen con la que se prorratean por bebida.
 export function getGastosFijos() { return request('/gastos-fijos'); }
-export function crearGastoFijo({ concepto, categoria, montoMensual }) {
-  return request('/gastos-fijos', { method: 'POST', body: { concepto, categoria, montoMensual } });
+export function crearGastoFijo({ concepto, categoria, montoMensual, cuentaContableId, cuentaDineroId, diaPago }) {
+  return request('/gastos-fijos', { method: 'POST', body: { concepto, categoria, montoMensual, cuentaContableId, cuentaDineroId, diaPago } });
 }
 export function actualizarGastoFijo(id, body) { return request(`/gastos-fijos/${id}`, { method: 'PATCH', body }); }
 export function eliminarGastoFijo(id) { return request(`/gastos-fijos/${id}`, { method: 'DELETE' }); }

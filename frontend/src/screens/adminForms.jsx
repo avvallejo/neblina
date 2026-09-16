@@ -313,6 +313,7 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
   const [cantidadCompra, setCantidadCompra] = useState('');
   const [unidadCompra, setUnidadCompra] = useState(item ? normalizeUnidad(item.unidad || 'kg') : 'kg');
   const [totalPagado, setTotalPagado] = useState('');
+  const [pagoCompra, setPagoCompra] = useState({ cuentaDineroId: null, pagado: true }); // Contabilidad: con qué se pagó la primera compra
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -390,6 +391,8 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
         payload.primeraCompra = { cantidadComprada: n, unidad: unidadCompra, costoTotal: totalNum };
       }
       if (!Number.isFinite(totalNum) || totalNum < 0) { setError('Indica cuánto pagaste en total (puede ser 0 si fue regalo).'); return; }
+      payload.primeraCompra.cuentaDineroId = pagoCompra.pagado ? pagoCompra.cuentaDineroId : null;
+      payload.primeraCompra.pagado = pagoCompra.pagado;
     } else {
       if (stockActual === '' || costoUnitario === '') { setError(isNew ? 'Indica las existencias que tienes y su costo estimado.' : 'Completa stock actual y costo.'); return; }
       const stockNum = parseFloat(stockActual);
@@ -474,6 +477,7 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
                   ? <>Existencia inicial: <strong>{formatNumeroInput(cantidadCompraControl)} {unidadDisplay(unidad)}</strong> · costo de referencia: <strong>${costoDerivado.toFixed(4)} por {unidadDisplay(unidad)}</strong></>
                   : 'El costo por unidad se calcula solo con lo que compraste y lo que pagaste.'}
               </div>
+              <PagoCuentaPicker value={pagoCompra} onChange={setPagoCompra} hint="Contabilidad: la compra sale de esta cuenta (o queda por pagar) y entra al inventario." />
             </>
           ) : (
             <div className="option-group two-col" style={{ marginTop: 10 }}>
@@ -1282,6 +1286,7 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
   const [proveedorId, setProveedorId] = useState(materia.proveedorId || '');
   const [numeroLote, setNumeroLote] = useState('');
   const [fechaCaducidad, setFechaCaducidad] = useState('');
+  const [pago, setPago] = useState({ cuentaDineroId: null, pagado: true }); // Contabilidad: con qué se pagó
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -1307,6 +1312,8 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
       proveedorId: proveedorId || null,
       numeroLote: numeroLote.trim() || undefined,
       fechaCaducidad: fechaCaducidad || undefined,
+      cuentaDineroId: pago.pagado ? pago.cuentaDineroId : null,
+      pagado: pago.pagado,
     });
     setSaving(false);
     if (ok !== false) onClose();
@@ -1373,6 +1380,7 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
           <input className="text-input" type="date" value={fechaCaducidad} onChange={e => setFechaCaducidad(e.target.value)} />
         </div>
       </div>
+      <PagoCuentaPicker value={pago} onChange={setPago} hint={pago.pagado ? "La compra sale de esta cuenta y entra al inventario (no es gasto: se reconoce al consumir)." : "Queda como cuenta por pagar en Contabilidad; márcala pagada cuando liquides al proveedor."} />
       <FormError>{error}</FormError>
       <div className="sheet-footer">
         <span />
@@ -1443,13 +1451,45 @@ export function AjusteStockSheet({ materia, onClose, onSave }) {
 // unidades que se espera vender al mes y eso es el "costo indirecto" que se
 // suma al costo de receta de CADA bebida.
 // ----------------------------------------------------------------------------
-export const GASTO_CATEGORIAS = ['Renta', 'Personal', 'Servicios', 'Transporte', 'Seguros', 'Mantenimiento', 'Otro'];
+export const GASTO_CATEGORIAS = ['Renta', 'Personal', 'Servicios', 'Transporte', 'Seguros', 'Mantenimiento', 'Financiero', 'Impuestos', 'Otro'];
+
+// Chips "¿con qué se pagó?" (Caja / Banco / queda por pagar). Carga las cuentas
+// de dinero de la sede si no se le pasan. value = { cuentaDineroId, pagado }.
+export function PagoCuentaPicker({ value, onChange, cuentas: cuentasProp, permitirPorPagar = true, label = '¿Con qué se pagó?', hint }) {
+  const [cuentas, setCuentas] = useState(cuentasProp || []);
+  useEffect(() => {
+    if (cuentasProp) { setCuentas(cuentasProp); return undefined; }
+    let vivo = true;
+    api.getCuentasDinero().then(rows => { if (!vivo) return; setCuentas(rows); if (value.pagado && !value.cuentaDineroId && rows[0]) onChange({ cuentaDineroId: rows[0].id, pagado: true }); }).catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuentasProp]);
+  if (!cuentas.length) return null;
+  return (
+    <div className="option-group">
+      <div className="option-label">{label}</div>
+      <div className="option-row">
+        {cuentas.map(c => (
+          <button key={c.id} type="button" className={`option-chip ${value.pagado && value.cuentaDineroId === c.id ? 'selected' : ''}`} onClick={() => onChange({ cuentaDineroId: c.id, pagado: true })}>{c.tipo === 'efectivo' ? '💵' : '🏦'} {c.nombre}</button>
+        ))}
+        {permitirPorPagar && <button type="button" className={`option-chip ${!value.pagado ? 'selected' : ''}`} onClick={() => onChange({ cuentaDineroId: null, pagado: false })}>Queda por pagar</button>}
+      </div>
+      {hint && <div className="field-hint">{hint}</div>}
+    </div>
+  );
+}
 
 export function GastoFijoFormSheet({ gasto, onClose, onSave }) {
   const isNew = !gasto || !gasto.id;
   const [concepto, setConcepto] = useState(gasto ? gasto.concepto || '' : '');
   const [categoria, setCategoria] = useState(gasto ? gasto.categoria || 'Otro' : 'Renta');
   const [monto, setMonto] = useState(gasto && gasto.monto_mensual !== undefined ? String(Number(gasto.monto_mensual)) : '');
+  // Contabilidad: a qué cuenta va cada pago real, con qué se paga y qué día.
+  const [cuentas, setCuentas] = useState([]);
+  const [cuentaContableId, setCuentaContableId] = useState(gasto ? gasto.cuenta_contable_id || '' : '');
+  const [pago, setPago] = useState({ cuentaDineroId: gasto ? gasto.cuenta_dinero_id || null : null, pagado: true });
+  const [diaPago, setDiaPago] = useState(gasto && gasto.dia_pago ? String(gasto.dia_pago) : '1');
+  useEffect(() => { let vivo = true; api.getCuentasContables().then(r => { if (vivo) setCuentas(r.filter(c => c.activo !== false)); }).catch(() => {}); return () => { vivo = false; }; }, []);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -1457,9 +1497,11 @@ export function GastoFijoFormSheet({ gasto, onClose, onSave }) {
     const montoNum = Number(monto);
     if (!concepto.trim()) { setError('Describe el gasto (ej. "Renta del local").'); return; }
     if (!Number.isFinite(montoNum) || montoNum < 0) { setError('Indica el monto mensual (puede ser 0).'); return; }
+    const dia = Number(diaPago);
+    if (!Number.isInteger(dia) || dia < 1 || dia > 28) { setError('El día de pago debe estar entre 1 y 28.'); return; }
     setError('');
     setSaving(true);
-    const ok = await onSave({ id: isNew ? null : gasto.id, concepto: concepto.trim(), categoria, montoMensual: Math.round(montoNum * 100) / 100 });
+    const ok = await onSave({ id: isNew ? null : gasto.id, concepto: concepto.trim(), categoria, montoMensual: Math.round(montoNum * 100) / 100, cuentaContableId: cuentaContableId ? Number(cuentaContableId) : undefined, cuentaDineroId: pago.cuentaDineroId || null, diaPago: dia });
     setSaving(false);
     if (ok !== false) onClose();
   };
@@ -1483,6 +1525,27 @@ export function GastoFijoFormSheet({ gasto, onClose, onSave }) {
         <input className="text-input" type="number" min="0" step="0.01" inputMode="decimal" value={monto} onChange={e => setMonto(e.target.value)} placeholder="Ej. 3500" />
         <div className="field-hint">Si el gasto no es mensual (ej. un seguro anual), divídelo: $5,400 al año = $450 al mes.</div>
       </div>
+      {cuentas.length > 0 && (
+        <div className="option-group">
+          <div className="option-label">Cuenta contable (Contabilidad)</div>
+          <select className="text-input" value={cuentaContableId} onChange={e => setCuentaContableId(e.target.value)}>
+            <option value="">Según la categoría</option>
+            {['gasto_operacion', 'gasto_financiero', 'impuesto'].map(g => (
+              <optgroup key={g} label={{ gasto_operacion: 'Gastos de operación', gasto_financiero: 'Gastos financieros', impuesto: 'Impuestos' }[g]}>
+                {cuentas.filter(c => c.grupo === g).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <div className="field-hint">Cada mes, Contabilidad → Egresos te propone este gasto para confirmar el pago real en esta cuenta.</div>
+        </div>
+      )}
+      <div className="option-group two-col">
+        <div>
+          <div className="option-label">Día de pago (1-28)</div>
+          <input className="text-input" type="number" min="1" max="28" step="1" value={diaPago} onChange={e => setDiaPago(e.target.value)} />
+        </div>
+      </div>
+      <PagoCuentaPicker value={pago} onChange={setPago} permitirPorPagar={false} label="Normalmente se paga con" />
       <FormError>{error}</FormError>
       <div className="sheet-footer">
         <button className="btn-ghost" onClick={onClose}>Cancelar</button>

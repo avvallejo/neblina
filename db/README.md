@@ -108,6 +108,17 @@ reales.
     y el margen/redondeo del negocio: cambiar cualquiera de ellos en Admin →
     Costos devuelve a "precios por revisar" los productos con "Mantener
     precio". Invalida a propósito las decisiones guardadas (reaparecen una vez).
+32. **`32_contabilidad.sql`** — **Contabilidad y mayordomía**:
+    `cuentas_contables` (catálogo por sede; `grupo` decide si baja la utilidad),
+    `cuentas_dinero` (Caja y Banco con saldo inicial fechado), `egresos` (todo
+    lo que sale de dinero: gastos, compras ligadas al lote, salidas de caja del
+    turno, diezmo; pagado/por pagar, único por gasto fijo y mes),
+    `traspasos_dinero`, `cierres_mes` (congela el mes) y `gastos_fijos` ligados
+    a cuenta contable, cuenta de dinero y día de pago. Agrega
+    `movimientos_inventario.costo_unitario` (congelado al registrar, para que el
+    costo de ventas de un mes no cambie con compras posteriores),
+    `fn_grupo_afecta_utilidad`, `fn_contabilidad_semilla` y un trigger que siembra
+    el catálogo en cada sede nueva. Re-ejecutable.
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -129,7 +140,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
-# … y así hasta 31_revision_precio_costos.sql (o simplemente: db/migrar.sh)
+# … y así hasta 32_contabilidad.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

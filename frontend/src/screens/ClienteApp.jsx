@@ -264,7 +264,10 @@ export default function ClienteApp({ brand, sede, turnoAbierto, promoConfig, sms
 
   const cancelarMiPedidoApp = React.useCallback(async (orderId) => {
     try {
-      await api.cancelarMiPedido(orderId);
+      // El motivo es obligatorio en el servidor (queda en la auditoría); desde
+      // la app del cliente no se le pide: cancelar su propio pedido sin cobrar
+      // ya dice todo lo que hay que saber.
+      await api.cancelarMiPedido(orderId, 'Cancelado por el cliente desde la app');
       await refrescarCuenta();
       addToast('Tu pedido fue cancelado', 'warn');
     } catch (e) { addToast(e.message, 'warn'); }

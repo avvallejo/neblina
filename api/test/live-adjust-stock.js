@@ -1,7 +1,7 @@
 // Solo Docker local; todos los datos de prueba se revierten al terminar.
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const { ajustarStock } = require('./src/services/adjustStock');
+const { pool } = require('../src/db');
+const { ajustarStock } = require('../src/services/adjustStock');
 
 (async () => {
   assert.equal(process.env.NODE_ENV, 'development', 'Ejecutar solo en desarrollo');

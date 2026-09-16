@@ -1,8 +1,16 @@
 // Docker local: migra y simula ventas dentro de una transacción revertida.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { pool } = require('./src/db');
-const { calcularPrecioItem } = require('./src/utils/pricing');
+const { pool } = require('../src/db');
+const { calcularPrecioItem } = require('../src/utils/pricing');
+// La ruta del repo cambia según dónde corra (contenedor /workspace o clon local).
+const path = require('node:path');
+const migracion = nombre => {
+  const candidatos = [path.join('/workspace/db', nombre), path.resolve(__dirname, '../../db', nombre), path.resolve(__dirname, '../db', nombre)];
+  const encontrado = candidatos.find(p => fs.existsSync(p));
+  if (!encontrado) throw new Error(`No encuentro la migración ${nombre} (busqué en ${candidatos.join(', ')}).`);
+  return encontrado;
+};
 (async () => {
   assert.equal(process.env.NODE_ENV,'development');
   const c = await pool.connect();
@@ -15,7 +23,7 @@ const { calcularPrecioItem } = require('./src/utils/pricing');
       VALUES ('QA frappé', $1,$2,'frappe',50,false,false,false,false) RETURNING id`,[cat.id,cat.sucursal_id]);
     await c.query("INSERT INTO recetas (producto_id,pasos) VALUES ($1,'[\"Licuar\"]') ON CONFLICT (producto_id) DO NOTHING",[p.id]);
     await c.query("INSERT INTO receta_insumos_fijos (producto_id,materia_prima_id,cantidad,unidad) VALUES ($1,$2,14,'g')",[p.id,coffees[0].materia_prima_id]);
-    const migration = fs.readFileSync('/workspace/db/18_cafe_frappes_seleccionable.sql','utf8').replace(/^BEGIN;$/m,'').replace(/^COMMIT;$/m,'');
+    const migration = fs.readFileSync(migracion('18_cafe_frappes_seleccionable.sql'),'utf8').replace(/^BEGIN;$/m,'').replace(/^COMMIT;$/m,'');
     await c.query(migration);
     assert.equal((await c.query('SELECT permite_tipo_cafe FROM productos WHERE id=$1',[p.id])).rows[0].permite_tipo_cafe,true);
     assert.equal(Number((await c.query('SELECT gramaje_por_shot FROM recetas WHERE producto_id=$1',[p.id])).rows[0].gramaje_por_shot),18);

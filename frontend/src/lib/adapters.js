@@ -23,6 +23,11 @@ export function adaptPedido(p) {
     cobrado: !!p.cobrado,
     noShow: !!p.no_show,
     cancelado: !!p.cancelado,
+    // Cancelación con motivo: 'pendiente' (espera al admin), 'autorizada' o
+    // 'rechazada'. Un ticket con solicitud pendiente SIGUE contando en ventas.
+    cancelacionEstado: p.cancelacion_estado || null,
+    cancelacionMotivo: p.cancelacion_motivo || '',
+    cancelacionNota: p.cancelacion_nota || '',
     esRecompensaPura: !!p.es_regalo_fidelidad,
     createdAt: p.creado_en ? new Date(p.creado_en).getTime() : Date.now(),
     estado: p.estado || 'pendiente',

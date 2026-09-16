@@ -1,7 +1,7 @@
 // Ejecutado por verify-daily-and-cleanup.py SOLO en su base temporal.
 const assert = require('node:assert/strict');
-const { query, withTransaction, pool } = require('./src/db');
-const { eliminarMateria } = require('./src/services/deleteMateria');
+const { query, withTransaction, pool } = require('../src/db');
+const { eliminarMateria } = require('../src/services/deleteMateria');
 (async () => {
   assert.match(process.env.PGDATABASE, /^codex_check_/, 'Solo una base temporal de prueba');
   const sede = '11111111-1111-4111-8111-111111111111';

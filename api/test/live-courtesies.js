@@ -2,10 +2,10 @@
 // Todo corre dentro de una transacción que se revierte al final.
 //   node test/live-courtesies.js
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const { planDelMes, resolverCortesia, resolverPendiente, listarCortesias, leyendaCortesia, normalizarCupo, CLAVE_CUPO } = require('./src/services/courtesies');
-const { drawerSql } = require('./src/services/cashDrawer');
-const { dailySalesSql } = require('./src/services/dailySales');
+const { pool } = require('../src/db');
+const { planDelMes, resolverCortesia, resolverPendiente, listarCortesias, leyendaCortesia, normalizarCupo, CLAVE_CUPO } = require('../src/services/courtesies');
+const { drawerSql } = require('../src/services/cashDrawer');
+const { dailySalesSql } = require('../src/services/dailySales');
 
 (async () => {
   assert.equal(process.env.NODE_ENV, 'development');

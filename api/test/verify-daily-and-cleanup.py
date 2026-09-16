@@ -75,7 +75,9 @@ try:
     sql(cleanup, '-v', f'sucursal_id={sede}', '-v', 'aplicar=true')
     assert sql('SELECT count(*) FROM materias_primas') == '3', 'Cleanup is repeatable'
     sql('GRANT ALL ON ALL TABLES IN SCHEMA public TO cafeteria_app; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO cafeteria_app;')
-    test_code = (root / 'api/test/live-delete-materia.js').read_text()
+    # Se manda por stdin: node resuelve los require desde el directorio de
+    # trabajo del contenedor (la raíz de la API), no desde test/.
+    test_code = (root / 'api/test/live-delete-materia.js').read_text().replace("require('../src/", "require('./src/")
     result = subprocess.run(['docker','exec','-i','-e',f'PGDATABASE={database}','cafeteria-api','node'],
                             input=test_code,text=True,capture_output=True)
     if result.returncode:

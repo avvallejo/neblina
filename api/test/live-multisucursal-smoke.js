@@ -92,6 +92,12 @@ async function cleanup() {
   if (state.sedeB) {
     await query('DELETE FROM configuracion WHERE sucursal_id = $1', [state.sedeB.id]);
     await query('DELETE FROM configuracion_margen WHERE sucursal_id = $1', [state.sedeB.id]);
+    // Contabilidad: cada sede nace con su catálogo de cuentas (migración 32).
+    await query('DELETE FROM egresos WHERE sucursal_id = $1', [state.sedeB.id]);
+    await query('DELETE FROM traspasos_dinero WHERE sucursal_id = $1', [state.sedeB.id]);
+    await query('DELETE FROM cierres_mes WHERE sucursal_id = $1', [state.sedeB.id]);
+    await query('DELETE FROM cuentas_dinero WHERE sucursal_id = $1', [state.sedeB.id]);
+    await query('DELETE FROM cuentas_contables WHERE sucursal_id = $1', [state.sedeB.id]);
     await query('DELETE FROM sucursales WHERE id = $1', [state.sedeB.id]);
   }
 }
@@ -159,13 +165,13 @@ async function main() {
   const estadoPrevioA = await request(`/turnos/estado?sucursal=${A}`);
   let abriTurnoA = false;
   if (!estadoPrevioA.data.abierto) {
-    const turnoA = await request('/turnos/abrir', { method: 'POST', token: tCajeroA, body: {} });
+    const turnoA = await request('/turnos/abrir', { method: 'POST', token: tCajeroA, body: { fondoInicial: 0 } });
     assert(turnoA.status === 201, `abrir turno en A esperado 201, recibido ${turnoA.status}: ${JSON.stringify(turnoA.data)}`);
     abriTurnoA = true;
   }
-  const turnoB = await request('/turnos/abrir', { method: 'POST', token: tCajeroB, body: {} });
+  const turnoB = await request('/turnos/abrir', { method: 'POST', token: tCajeroB, body: { fondoInicial: 0 } });
   assert(turnoB.status === 201, `abrir turno en B (con A ya abierto) esperado 201, recibido ${turnoB.status}`);
-  const turnoADoble = await request('/turnos/abrir', { method: 'POST', token: tCajeroA, body: {} });
+  const turnoADoble = await request('/turnos/abrir', { method: 'POST', token: tCajeroA, body: { fondoInicial: 0 } });
   assert(turnoADoble.status === 409, 'segundo turno en la MISMA sede debe rechazarse con 409');
   const estadoB = await request(`/turnos/estado?sucursal=${B}`);
   assert(estadoB.status === 200 && estadoB.data.abierto === true, 'el estado público por sede debe reflejar el turno de B');

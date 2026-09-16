@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import VentaDirecta from './VentaDirecta';
 import CajaDinero from './CajaDinero';
 import { adaptPedido } from '../lib/adapters';
-import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets, Gift } from 'lucide-react';
+import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets, Gift, Ban } from 'lucide-react';
 import * as api from '../api/client.js';
-import { getProduct, NO_SHOW_WARNING_MS, CORTESIA_ESTADO_LABELS, destinoLabel } from '../lib/catalog.js';
-import { money } from '../lib/helpers.js';
+import { getProduct, NO_SHOW_WARNING_MS, CORTESIA_ESTADO_LABELS, CANCELACION_ESTADO_LABELS, destinoLabel } from '../lib/catalog.js';
+import { money, fmtHora } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
-import { StatusChip, ConfirmDialog, EmptyState, Sheet } from '../components/ui.jsx';
+import { StatusChip, ConfirmDialog, EmptyState, Sheet, CancelacionSheet, useAccionUnica } from '../components/ui.jsx';
 import { CategoryTabs, ProductGrid, CustomizeSheet, CartView, CheckoutView } from '../components/menu.jsx';
 
 // Leyenda de una cortesía recién registrada. Cuando excedió el cupo del mes
@@ -54,7 +54,9 @@ function DetalleVenta({id}) {
   </details>;
 }
 
-function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
+// `recargar` es un contador: cambia cuando la Caja cancela un ticket, para
+// volver a pedir las ventas del día que se está consultando.
+function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow, recargar = 0 }) {
   const [fecha,setFecha]=useState(()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City'}).format(new Date()));
   const [sales,setSales]=useState({fecha:null,orders:[]}),[error,setError]=useState('');
   React.useEffect(()=>{
@@ -65,7 +67,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
       if(alive)setSales({fecha,orders:rows.map(adaptPedido)});
     }).catch(e=>{if(alive)setError(e.message);});
     return()=>{alive=false;};
-  },[fecha,liveOrders]);
+  },[fecha,liveOrders,recargar]);
   const loading=sales.fecha!==fecha;
   const orders=loading?[]:sales.orders;
   const total = orders.filter(o => o.cobrado && !o.noShow && o.estado!=='cancelado').reduce((s, o) => s + o.total, 0);
@@ -84,7 +86,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
             <div>
               <div className="turno-id">{o.folio}</div>
               <div className="turno-sub">
-                {new Date(o.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} • {o.numItems} producto(s) • {o.payMethod}
+                {fmtHora(o.createdAt)} • {o.numItems} producto(s) • {o.payMethod}
                 {o.destino && ` • ${destinoLabel(o)}`}
                 {o.origen === 'app' && o.cliente && ` • 🌐 En línea — ${o.cliente.nombre} ${o.cliente.apellido}`}
               </div>
@@ -95,8 +97,12 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
               <div className="turno-amount">{o.esCortesia ? 'Cortesía' : money(o.total)}</div>
               <StatusChip status={status} />
               {o.esCortesia && o.cortesiaEstado && <span className={`cortesia-tag ${o.cortesiaEstado}`}><Gift size={11} /> {CORTESIA_ESTADO_LABELS[o.cortesiaEstado] || o.cortesiaEstado}</span>}
-              {status === 'pendiente' && (
-                <button className="link-danger" onClick={() => onCancel(o.id)}>Cancelar</button>
+              {/* Ya cancelado lo dice la etiqueta de estado; aquí solo lo que
+                  falta saber: que hay una solicitud esperando o que se rechazó. */}
+              {o.cancelacionEstado && !o.cancelado && (
+                <span className={`cancelacion-tag ${o.cancelacionEstado}`} title={o.cancelacionMotivo}>
+                  <Ban size={11} /> {CANCELACION_ESTADO_LABELS[o.cancelacionEstado] || o.cancelacionEstado}
+                </span>
               )}
               {status === 'listo' && (
                 <div className="turno-actions">
@@ -105,6 +111,11 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onNoShow }) {
                   </button>
                   <button className="link-danger" onClick={() => onNoShow(o.id)}>No recogido</button>
                 </div>
+              )}
+              {/* Cualquier ticket se puede cancelar (con motivo), de cualquier
+                  fecha: los duplicados también se cobran y se preparan. */}
+              {!o.cancelado && o.cancelacionEstado !== 'pendiente' && status !== 'no_show' && (
+                <button className="link-danger" onClick={() => onCancel(o)}>Cancelar ticket</button>
               )}
             </div>
           </div>
@@ -127,6 +138,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
   const [amounts, setAmounts] = useState(null);
   const [lastOrder, setLastOrder] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [recargarVentas, setRecargarVentas] = useState(0);
   const [noShowTarget, setNoShowTarget] = useState(null);
   const [chargingOrder, setChargingOrder] = useState(null);
 
@@ -182,14 +194,26 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
     }
   };
 
+  const [entregando, entregar] = useAccionUnica(confirmarEntrega);
   const handleCobrarClick = order => {
     if (order.total > 0) {
       setChargingOrder(order);
       setAmounts({ subtotal: order.total, discountAmt: 0, total: order.total });
       setScreen('checkout');
     } else {
-      confirmarEntrega(order.id);
+      // Entrega sin cobro: también un solo toque (ver useAccionUnica).
+      if (!entregando) entregar(order.id);
     }
+  };
+
+  // Cancelación con motivo. La leyenda que vuelve del servidor dice si el
+  // ticket ya salió de las ventas o si espera al administrador.
+  const pedirCancelacion = async (orderId, motivo) => {
+    const r = await cancelOrderFn(orderId, motivo);
+    setCancelTarget(null);
+    setRecargarVentas(n => n + 1);
+    if (r && r.leyenda) addToast(r.leyenda, r.cancelacion_estado === 'pendiente' ? 'warn' : 'success');
+    return r;
   };
 
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
@@ -263,8 +287,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
       {screen === 'confirmed' && lastOrder && <ConfirmedView order={lastOrder} onNewSale={() => setScreen('menu')} />}
       {screen === 'turno' && (
         <TurnoView
-          orders={orders} now={now}
-          onCancel={id => setCancelTarget(id)}
+          orders={orders} now={now} recargar={recargarVentas}
+          onCancel={order => setCancelTarget(order)}
           onCobrar={handleCobrarClick}
           onNoShow={id => setNoShowTarget(id)}
         />
@@ -278,15 +302,16 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, cancel
         />
       )}
 
-      <ConfirmDialog
-        open={!!cancelTarget}
-        title="Cancelar pedido"
-        message="¿Seguro que quieres cancelar este pedido? Esta acción notificará a la barra de preparación."
-        confirmLabel="Sí, cancelar"
-        danger
-        onCancel={() => setCancelTarget(null)}
-        onConfirm={() => { cancelOrderFn(cancelTarget); setCancelTarget(null); }}
-      />
+      {cancelTarget && (
+        <CancelacionSheet
+          folio={cancelTarget.folio}
+          importe={cancelTarget.esCortesia ? null : cancelTarget.total}
+          fecha={cancelTarget.createdAt}
+          inmediata={!cancelTarget.cobrado && cancelTarget.estado === 'pendiente'}
+          onClose={() => setCancelTarget(null)}
+          onSubmit={motivo => pedirCancelacion(cancelTarget.id, motivo)}
+        />
+      )}
 
       <ConfirmDialog
         open={!!noShowTarget}

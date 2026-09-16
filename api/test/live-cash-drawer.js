@@ -1,7 +1,7 @@
 // Docker local; todos los cambios se revierten.
 const assert=require('node:assert/strict');
-const {pool}=require('./src/db');
-const {moneyAmount,cashPart,setOpeningFund,drawerSql}=require('./src/services/cashDrawer');
+const {pool}=require('../src/db');
+const {moneyAmount,cashPart,setOpeningFund,drawerSql}=require('../src/services/cashDrawer');
 (async()=>{assert.equal(process.env.NODE_ENV,'development');const c=await pool.connect();try{
  await c.query('BEGIN');
  const {rows:[u]}=await c.query('SELECT id,sucursal_id FROM usuarios WHERE sucursal_id IS NOT NULL LIMIT 1');const s=u.sucursal_id;

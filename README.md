@@ -142,6 +142,34 @@ marca, no revierte la venta. La caja del turno muestra las cortesías dadas
 pago** aparece la fila **Cortesías** con el valor regalado (no suma a ventas).
 Migración `db/26_cortesias.sql`.
 
+## Cancelar un ticket (con motivo y autorización)
+
+Un ticket duplicado, un cobro equivocado o un cliente que se arrepintió ya no
+se quedan inflando las ventas del día. En **Caja → Ventas** cada ticket —de
+cualquier fecha, cobrado o no— tiene **Cancelar ticket**: se escribe el motivo
+y el sistema decide qué pasa:
+
+- si el ticket **no se cobró y no se empezó a preparar**, se cancela al momento
+  (no movía dinero ni inventario) y solo queda registrado el motivo;
+- en cualquier otro caso queda **pendiente**: el ticket **sigue contando en las
+  ventas del día** hasta que un administrador autorice la cancelación en
+  **Admin → Autorizaciones → Cancelaciones** (el badge suma cortesías y
+  cancelaciones). Un administrador que cancela su propio ticket lo autoriza de
+  una vez.
+
+Al autorizar, el ticket sale de las ventas del día, de la caja del turno y del
+estado de resultados; sus ítems quedan cancelados; el punto de fidelidad se
+devuelve; y **los insumos que se hubieran consumido regresan al inventario**
+(un movimiento de ajuste que apunta al consumo que revierte, así el costo de
+ventas del mes también se corrige y autorizar dos veces nunca devuelve el
+doble). Rechazar deja todo como estaba, con la nota del administrador para la
+Caja. Un mes ya cerrado en Contabilidad no se puede tocar: primero se reabre.
+
+De paso, los botones de una sola vez (Confirmar pago, Cobrar, Registrar venta)
+se bloquean mientras la petición viaja: un segundo toque en una conexión lenta
+era justamente lo que creaba tickets duplicados. Migración
+`db/33_cancelaciones.sql`.
+
 ## Mesas, para llevar y comandas por estación
 
 En **Configuración → Mesas** se indica cuántas mesas tiene la sucursal (4 por

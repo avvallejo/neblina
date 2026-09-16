@@ -2,10 +2,10 @@
 // con rollback sobre una sede creada al vuelo (así los números son exactos).
 //   node test/live-contabilidad.js   (desde la raíz de la API, como los demás live-*)
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const A = require('./src/services/accounting');
-const { registrarCompra } = require('./src/services/purchases');
-const { drawerSql } = require('./src/services/cashDrawer');
+const { pool } = require('../src/db');
+const A = require('../src/services/accounting');
+const { registrarCompra } = require('../src/services/purchases');
+const { drawerSql } = require('../src/services/cashDrawer');
 
 (async () => {
   assert.equal(process.env.NODE_ENV, 'development');

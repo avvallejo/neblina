@@ -4,7 +4,7 @@ import { Coffee, ShoppingCart, Snowflake, Trash2, ClipboardList, AlertTriangle, 
 import * as api from '../api/client.js';
 import { CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, getProduct, defaultSize, calcUnitPrice, customizationSummary, precioDesde, extrasPara, esAlimento } from '../lib/catalog.js';
 import { money } from '../lib/helpers.js';
-import { Sheet, Stepper, EmptyState, FormError } from './ui.jsx';
+import { Sheet, Stepper, EmptyState, FormError, useAccionUnica } from './ui.jsx';
 
 export function CategoryTabs({ active, onSelect }) {
   return (
@@ -305,6 +305,8 @@ export function CortesiaSheet({ total, onClose, onConfirm }) {
 
 export function CheckoutView({ amounts, onConfirm, onBack, allowCortesia = false, destinoTexto = '' }) {
   const { total } = amounts;
+  // Un solo cobro por más veces que se toque el botón (ver useAccionUnica).
+  const [cobrando, cobrar] = useAccionUnica(onConfirm);
   const [method, setMethod] = useState('efectivo');
   const [cash, setCash] = useState('');
   const [mixCash, setMixCash] = useState('');
@@ -381,20 +383,20 @@ export function CheckoutView({ amounts, onConfirm, onBack, allowCortesia = false
       )}
 
       <div className="sheet-footer" style={{ marginTop: 16 }}>
-        <button className="btn-ghost" onClick={onBack}>Volver</button>
+        <button className="btn-ghost" onClick={onBack} disabled={cobrando}>Volver</button>
         <button
           className="btn-primary"
-          disabled={!canConfirm}
-          onClick={() => onConfirm({ method, importeEfectivo:method==='mixto'?Number(mixCash):undefined, cashGiven: method === 'efectivo' ? cashGiven : null, change: method === 'efectivo' ? change : null })}
+          disabled={!canConfirm || cobrando}
+          onClick={() => cobrar({ method, importeEfectivo:method==='mixto'?Number(mixCash):undefined, cashGiven: method === 'efectivo' ? cashGiven : null, change: method === 'efectivo' ? change : null })}
         >
-          Confirmar pago
+          {cobrando ? 'Cobrando…' : 'Confirmar pago'}
         </button>
       </div>
       {cortesiaOpen && (
         <CortesiaSheet
           total={total}
           onClose={() => setCortesiaOpen(false)}
-          onConfirm={motivo => onConfirm({ method: 'cortesia', motivoCortesia: motivo || undefined, cashGiven: null, change: null, importeEfectivo: undefined })}
+          onConfirm={motivo => cobrar({ method: 'cortesia', motivoCortesia: motivo || undefined, cashGiven: null, change: null, importeEfectivo: undefined })}
         />
       )}
     </div>

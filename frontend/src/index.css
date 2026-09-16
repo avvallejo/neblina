@@ -701,6 +701,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .cortesia-tag.pendiente { background: var(--warn-soft); color: var(--warn); }
 .cortesia-tag.rechazada { background: var(--danger-soft); color: var(--danger); }
 .cortesia-tag.autorizada { background: var(--ok-soft); color: var(--ok); }
+/* Estado de la cancelación de un ticket (Caja y Autorizaciones). */
+.cancelacion-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; background: var(--danger-soft); color: var(--danger); }
+.cancelacion-tag.pendiente { background: var(--warn-soft); color: var(--warn); }
+.cancelacion-tag.rechazada { background: var(--accent-soft); color: var(--accent); }
 .autorizacion-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; align-items: start; }
 .autorizacion-card.pendiente { border-color: rgba(166, 109, 11, 0.45); box-shadow: inset 4px 0 0 var(--warn); }
 .autorizacion-card .folio { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }

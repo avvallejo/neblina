@@ -1,7 +1,7 @@
 // Local only. Creates a temporary product and removes it after checking HTTP persistence.
 const assert=require('node:assert/strict');
 const jwt=require('jsonwebtoken');
-const {pool}=require('./src/db');
+const {pool}=require('../src/db');
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 (async()=>{
  assert.equal(process.env.NODE_ENV,'development');let id;

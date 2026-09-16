@@ -4,7 +4,32 @@ import {
   X, Check, Clock, AlertTriangle, AlertCircle, Minus, Plus, Droplets,
   Banknote, Sparkles, User,
 } from 'lucide-react';
-import { mmss } from '../lib/helpers.js';
+import { mmss, money } from '../lib/helpers.js';
+
+// ACCIONES DE UNA SOLA VEZ (cobrar, confirmar pago, vender).
+// En una conexión lenta el botón se queda ahí mientras la petición viaja y un
+// segundo toque creaba OTRO ticket: así se duplicaron ventas. Este enganche
+// bloquea la acción hasta que la primera termina (la traba es un ref, no un
+// estado, para que dos toques en el mismo instante no se cuelen), y la libera
+// si falla para poder reintentar. Devuelve [enCurso, ejecutar].
+export function useAccionUnica(accion) {
+  const [enCurso, setEnCurso] = React.useState(false);
+  const corriendo = React.useRef(false);
+  const montado = React.useRef(true);
+  React.useEffect(() => () => { montado.current = false; }, []);
+  const ejecutar = React.useCallback(async (...args) => {
+    if (corriendo.current) return undefined;
+    corriendo.current = true;
+    setEnCurso(true);
+    try {
+      return await accion(...args);
+    } finally {
+      corriendo.current = false;
+      if (montado.current) setEnCurso(false);
+    }
+  }, [accion]);
+  return [enCurso, ejecutar];
+}
 
 export function StatusChip({ status }) {
   const map = {
@@ -48,6 +73,56 @@ export function Sheet({ title, onClose, children }) {
         <div className="sheet-body">{children}</div>
       </div>
     </div>
+  );
+}
+
+// CANCELAR UN TICKET (Caja y Barra). El motivo es obligatorio: es lo que lee
+// el administrador en Autorizaciones para decidir. Nadie baja las ventas del
+// día por su cuenta: si el ticket ya se cobró o ya se empezó a preparar, esto
+// solo deja la solicitud registrada y el ticket sigue contando hasta que el
+// administrador la autorice. `onSubmit(motivo)` hace la llamada.
+export function CancelacionSheet({ folio, importe = null, fecha = null, inmediata = false, onClose, onSubmit }) {
+  const [motivo, setMotivo] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [enviando, enviar] = useAccionUnica(async () => {
+    setError('');
+    try { await onSubmit(motivo.trim()); }
+    catch (e) { setError(e.message); }
+  });
+  return (
+    <Sheet title={`Cancelar ticket ${folio || ''}`.trim()} onClose={onClose}>
+      {(importe !== null || fecha) && (
+        <div className="cortesia-total">
+          <span className="footer-label">Importe del ticket</span>
+          <span className="price-total big">{importe === null ? 'Cortesía' : money(importe)}</span>
+          {fecha && <span className="field-hint">{new Date(fecha).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</span>}
+        </div>
+      )}
+      <div className={`cortesia-plan ${inmediata ? 'ok' : 'warn'}`} role={inmediata ? 'status' : 'alert'}>
+        <strong>{inmediata ? 'Se cancela al momento' : 'Necesita autorización del administrador'}</strong>
+        <span>
+          {inmediata
+            ? 'Este ticket no se cobró ni se empezó a preparar, así que no cambia el corte del día.'
+            : 'El ticket sigue contando en las ventas del día hasta que un administrador autorice la cancelación en Autorizaciones. Al autorizarla, los insumos regresan al inventario.'}
+        </span>
+      </div>
+      <div className="option-group">
+        <label className="option-label" htmlFor="cancelacion-motivo">Motivo de la cancelación</label>
+        <input
+          id="cancelacion-motivo" className="text-input" maxLength={300} autoFocus
+          placeholder="Ej. ticket duplicado / el cliente se arrepintió / cobro equivocado"
+          value={motivo} onChange={e => setMotivo(e.target.value)}
+        />
+        <span className="field-hint">Escribe qué pasó: el administrador lo leerá para autorizar.</span>
+        <FormError>{error}</FormError>
+      </div>
+      <div className="sheet-footer">
+        <button className="btn-ghost" onClick={onClose} disabled={enviando}>Volver</button>
+        <button className="btn-danger" disabled={enviando || motivo.trim().length < 3} onClick={enviar}>
+          {enviando ? 'Enviando…' : inmediata ? 'Cancelar ticket' : 'Pedir cancelación'}
+        </button>
+      </div>
+    </Sheet>
   );
 }
 

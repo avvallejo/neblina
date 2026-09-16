@@ -62,6 +62,7 @@ export default function App() {
   const [cortesiasMes, setCortesiasMes] = useState(0); // cupo mensual de cortesías de la sede (rol cajero)
   const [mesas, setMesas] = useState(4); // mesas de la sede (destino del pedido en Caja)
   const [cortesiasPendientes, setCortesiasPendientes] = useState([]); // admin: esperan autorización
+  const [cancelacionesPendientes, setCancelacionesPendientes] = useState([]); // admin: tickets por cancelar
   const [recetaOverrides, setRecetaOverrides] = useState({});
   // Rol "mostrador" (caja + barra en la misma persona): qué pantalla ve ahora.
   const [modoMostrador, setModoMostrador] = useState('caja');
@@ -225,9 +226,15 @@ export default function App() {
     addToast(r && r.cortesia ? 'Cortesía registrada' : 'Cobro confirmado', 'success');
     return r;
   };
-  const cancelarPedidoApi = async (orderId) => {
-    try { await api.cancelarPedido(orderId); await refrescarPedidos(); await refrescarCola(); addToast('Pedido cancelado', 'warn'); }
-    catch (e) { addToast(e.message, 'warn'); }
+  // Cancelación con motivo. El servidor decide si el ticket se cancela al
+  // momento o si queda pendiente de que el administrador la autorice; la
+  // leyenda que devuelve es la que hay que mostrarle a quien la pidió. El
+  // error se propaga para que la hoja lo enseñe junto al campo del motivo.
+  const cancelarPedidoApi = async (orderId, motivo) => {
+    const r = await api.cancelarPedido(orderId, motivo);
+    await refrescarPedidos(); await refrescarCola();
+    if (r && r.cancelacion_estado === 'pendiente') await refrescarCancelaciones();
+    return r;
   };
   const noShowPedidoApi = async (orderId) => {
     try { await api.noShowPedido(orderId); await refrescarPedidos(); await refrescarCola(); addToast('Marcado como no recogido', 'warn'); }
@@ -261,6 +268,11 @@ export default function App() {
   };
 
   // ---- Datos de administración ----
+  // Solo para el administrador: la cola de cancelaciones por autorizar.
+  const refrescarCancelaciones = React.useCallback(async () => {
+    try { setCancelacionesPendientes(await api.getCancelaciones('pendiente')); } catch { /* el cajero no la consulta */ }
+  }, []);
+
   const recargarAdmin = React.useCallback(async () => {
     const revisionCarga = ++revisionCargaPrecios.current;
     await Promise.allSettled([
@@ -274,6 +286,7 @@ export default function App() {
       }),
       api.getReportes().then(setReportes).catch(() => setReportes(null)),
       api.getCortesias('pendiente').then(setCortesiasPendientes).catch(() => { /* conserva lo último */ }),
+      api.getCancelaciones('pendiente').then(setCancelacionesPendientes).catch(() => { /* conserva lo último */ }),
       api.getPreciosPorRevisar().then(rows => { if (revisionCarga === revisionCargaPrecios.current) setPreciosPorRevisar(rows); }),
     ]);
   }, []);
@@ -511,7 +524,7 @@ export default function App() {
           kpis={kpis} fechaVentas={fechaVentas} setFechaVentas={setFechaVentas} ventasError={ventasError} reportes={reportes} recargarCatalogo={cargarCatalogo} recargarAdmin={recargarAdmin} addToast={addToast}
           smsActivo={smsActivo} onToggleSms={guardarSmsConfig}
           nombreNegocio={nombreNegocio} logo={logo} pantallaCfg={pantallaCfg} onSaveBranding={guardarBranding}
-          cortesiasMes={cortesiasMes} cortesiasPendientes={cortesiasPendientes} mesas={mesas}
+          cortesiasMes={cortesiasMes} cortesiasPendientes={cortesiasPendientes} cancelacionesPendientes={cancelacionesPendientes} mesas={mesas}
           onLogout={logout} turnoAbierto={turnoAbierto} promoConfig={promoConfig} setPromoConfig={guardarPromo}
           usuarios={usuarios} addUsuario={addUsuario} updateUsuario={updateUsuario} currentUser={currentUser}
           materias={materias} addMateria={addMateria} updateMateria={updateMateria} deleteMateria={deleteMateria}

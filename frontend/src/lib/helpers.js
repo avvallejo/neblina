@@ -9,8 +9,12 @@ export function mmss(seconds) {
   return `${mm}:${ss}`;
 }
 
+// Todas las horas del negocio son de Ciudad de México (igual que en la base de
+// datos): un iPad con otra zona horaria no debe cambiar la hora de un ticket.
+export const TZ_NEGOCIO = 'America/Mexico_City';
+
 export function fmtHora(ts) {
-  return new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString('es-MX', { timeZone: TZ_NEGOCIO, hour: '2-digit', minute: '2-digit' });
 }
 
 export function validPhone(str) {

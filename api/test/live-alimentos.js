@@ -2,10 +2,10 @@
 // (NODE_ENV=development). Transacción con rollback.
 //   node test/live-alimentos.js   (desde la raíz de la API, como los demás live-*)
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const { calcularPrecioItem } = require('./src/utils/pricing');
-const { normalizarEstacionProducto } = require('./src/services/stations');
-const { guardarReventa } = require('./src/services/resale');
+const { pool } = require('../src/db');
+const { calcularPrecioItem } = require('../src/utils/pricing');
+const { normalizarEstacionProducto } = require('../src/services/stations');
+const { guardarReventa } = require('../src/services/resale');
 
 (async () => {
   assert.equal(process.env.NODE_ENV, 'development');

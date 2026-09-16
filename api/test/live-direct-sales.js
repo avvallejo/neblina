@@ -1,9 +1,9 @@
 // Ejecutar en Docker local: docker exec -i cafeteria-api node < api/test/live-direct-sales.js
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {pool}=require('./src/db');
-const {registrarVenta}=require('./src/services/directSales');
-const {dailySalesSql}=require('./src/services/dailySales');
+const {pool}=require('../src/db');
+const {registrarVenta}=require('../src/services/directSales');
+const {dailySalesSql}=require('../src/services/dailySales');
 (async()=>{
  assert.equal(process.env.NODE_ENV,'development');const c=await pool.connect();
  try{

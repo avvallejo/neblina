@@ -286,8 +286,19 @@ export function getPlanCortesias() { return request('/cortesias/plan'); } // { l
 export function getCortesias(estado = '') { return request(estado ? `/cortesias?estado=${encodeURIComponent(estado)}` : '/cortesias'); } // admin
 export function autorizarCortesia(id, nota) { return request(`/cortesias/${id}/autorizar`, { method: 'PATCH', body: { nota } }); }
 export function rechazarCortesia(id, nota) { return request(`/cortesias/${id}/rechazar`, { method: 'PATCH', body: { nota } }); }
-export function cancelarPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH' }); }
-export function cancelarMiPedido(id) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', useClienteToken: true }); }
+
+/* ============================================================
+   CANCELACIÓN DE TICKETS (motivo obligatorio; el admin autoriza)
+   ============================================================ */
+// La Caja pide la cancelación de cualquier ticket, de cualquier fecha. Si el
+// ticket no se había cobrado ni preparado se cancela al momento; si no, queda
+// pendiente y el ticket SIGUE contando en las ventas hasta que el admin
+// autorice. Respuesta: { cancelacion_estado, leyenda, insumosDevueltos }.
+export function cancelarPedido(id, motivo) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', body: { motivo } }); }
+export function cancelarMiPedido(id, motivo) { return request(`/pedidos/${id}/cancelar`, { method: 'PATCH', body: { motivo }, useClienteToken: true }); }
+export function getCancelaciones(estado = '') { return request(estado ? `/cancelaciones?estado=${encodeURIComponent(estado)}` : '/cancelaciones'); } // admin
+export function autorizarCancelacion(id, nota) { return request(`/cancelaciones/${id}/autorizar`, { method: 'PATCH', body: { nota } }); }
+export function rechazarCancelacion(id, nota) { return request(`/cancelaciones/${id}/rechazar`, { method: 'PATCH', body: { nota } }); }
 export function noShowPedido(id) { return request(`/pedidos/${id}/no-show`, { method: 'PATCH' }); }
 
 /* ============================================================

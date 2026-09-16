@@ -6,11 +6,11 @@ import {
   LayoutDashboard, Lock, Droplets, Package, Coffee, ClipboardList, Receipt,
   Settings, Building2, BarChart3, Plus, Pencil, UserPlus, Sparkles, AlertTriangle,
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
-  Gift, BadgeCheck, BookOpen,
+  Gift, BadgeCheck, BookOpen, Ban,
 } from 'lucide-react';
 import ContabilidadSection from './ContabilidadSection.jsx';
 import * as api from '../api/client.js';
-import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, ESTACION_LABELS, TIPO_PRODUCTO_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
+import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, CANCELACION_ESTADO_LABELS, ESTACION_LABELS, TIPO_PRODUCTO_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
 import { money, unidadDisplay, stockPct, convertirCantidad, formatNumeroInput as formatNumero } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
 import { ConfirmDialog, EmptyState, FormError } from '../components/ui.jsx';
@@ -244,11 +244,11 @@ function ReportesSection({ data, consolidado }) {
   );
 }
 
-/* ---------- Autorizaciones: cortesías que excedieron el cupo del mes ---------- */
+/* ---------- Autorizaciones: cortesías fuera de cupo y cancelaciones de tickets ---------- */
 
 // Las pendientes llegan desde App (se refrescan cada 5 s con el resto de
 // admin); el historial se consulta aquí al entrar y tras cada decisión.
-function AutorizacionesSection({ pendientes, addToast, onResolved }) {
+function CortesiasPanel({ pendientes, addToast, onResolved }) {
   const [historial, setHistorial] = useState(null);
   const [notas, setNotas] = useState({});
   const [busyId, setBusyId] = useState(null);
@@ -314,6 +314,114 @@ function AutorizacionesSection({ pendientes, addToast, onResolved }) {
           : historial.length === 0 ? <EmptyState icon={Gift} title="Aún no hay cortesías registradas" />
           : historial.map(tarjeta)}
       </div>
+    </div>
+  );
+}
+
+
+// Cancelaciones de tickets pedidas por la Caja. Mientras están pendientes el
+// ticket SIGUE contando en las ventas del día: solo al autorizar se cancela,
+// baja del corte y los insumos regresan al inventario.
+function CancelacionesPanel({ pendientes, addToast, onResolved }) {
+  const [historial, setHistorial] = useState(null);
+  const [notas, setNotas] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  const cargarHistorial = React.useCallback(() => {
+    api.getCancelaciones().then(rows => setHistorial(rows.filter(r => r.cancelacion_estado !== 'pendiente'))).catch(e => addToast(e.message, 'warn'));
+  }, [addToast]);
+  useEffect(() => { cargarHistorial(); }, [cargarHistorial]);
+
+  const resolver = async (row, decision) => {
+    setBusyId(row.id);
+    try {
+      const nota = (notas[row.id] || '').trim();
+      const r = decision === 'autorizada'
+        ? await api.autorizarCancelacion(row.id, nota || undefined)
+        : await api.rechazarCancelacion(row.id, nota || undefined);
+      addToast(
+        decision === 'autorizada'
+          ? `Ticket ${row.folio} cancelado: sale de las ventas${r && r.insumosDevueltos ? ` y regresaron ${r.insumosDevueltos} insumo(s) al inventario` : ''}.`
+          : `Cancelación de ${row.folio} rechazada: el ticket sigue contando.`,
+        decision === 'autorizada' ? 'success' : 'warn');
+      setNotas(n => ({ ...n, [row.id]: '' }));
+      await onResolved();
+      cargarHistorial();
+    } catch (e) { addToast(e.message, 'warn'); }
+    finally { setBusyId(null); }
+  };
+
+  const fecha = iso => new Date(iso).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'medium', timeStyle: 'short' });
+  const tarjeta = r => (
+    <div key={r.id} className={`autorizacion-card ${r.cancelacion_estado}`}>
+      <div>
+        <div className="folio">{r.folio} <span className={`cancelacion-tag ${r.cancelacion_estado}`}>{CANCELACION_ESTADO_LABELS[r.cancelacion_estado] || r.cancelacion_estado}</span></div>
+        <div className="meta">
+          Ticket del {fecha(r.creado_en)} · Caja: {r.cajero_nombre || '—'}{r.cobrado ? ` · cobrado (${r.metodo_pago || 'sin método'})` : ' · sin cobrar'}
+          {r.origen === 'app' && r.cliente_nombre ? ` · pedido en línea de ${r.cliente_nombre} ${r.cliente_apellido || ''}` : ''}
+          <br />Motivo de la Caja: {r.cancelacion_motivo || '—'} <span className="field-hint">({r.solicitada_por_nombre || 'personal'}, {fecha(r.cancelacion_solicitada_en)})</span>
+          {r.cancelacion_estado !== 'pendiente' && (
+            <><br />{r.cancelacion_estado === 'autorizada' ? 'Autorizada' : 'Rechazada'} por {r.resuelta_por_nombre || 'administración'}{r.cancelacion_resuelta_en ? ` el ${fecha(r.cancelacion_resuelta_en)}` : ''}{r.cancelacion_nota ? ` — "${r.cancelacion_nota}"` : ''}</>
+          )}
+        </div>
+        {r.detalle && <div className="detalle">{r.detalle}</div>}
+        {r.cancelacion_estado === 'pendiente' && Number(r.insumos_por_devolver) > 0 && (
+          <div className="detalle">Al autorizar regresarán {r.insumos_por_devolver} movimiento(s) de insumo al inventario.</div>
+        )}
+      </div>
+      <div className="valor">{money(r.total)}</div>
+      {r.cancelacion_estado === 'pendiente' && (
+        <div className="acciones">
+          <input className="text-input" maxLength={300} placeholder="Nota para la Caja (opcional)" value={notas[r.id] || ''} onChange={e => setNotas(n => ({ ...n, [r.id]: e.target.value }))} />
+          <button className="btn-danger small" disabled={busyId === r.id} onClick={() => resolver(r, 'autorizada')}><Ban size={14} /> Autorizar cancelación</button>
+          <button className="btn-ghost small" disabled={busyId === r.id} onClick={() => resolver(r, 'rechazada')}>Rechazar</button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="admin-columns">
+      <div>
+        <div className="section-title"><AlertTriangle size={15} /> Cancelaciones por autorizar</div>
+        <p className="field-hint" style={{ marginBottom: 12 }}>
+          Tickets que la Caja pidió cancelar (duplicados, cobros equivocados…). Hasta que autorices, el ticket sigue contando
+          en las ventas del día. Al autorizar: sale del corte y del estado de resultados, y los insumos que se hubieran
+          consumido regresan al inventario. Si rechazas, todo queda como estaba.
+        </p>
+        {(pendientes || []).length === 0
+          ? <EmptyState icon={Ban} title="Sin cancelaciones pendientes" subtitle="Cuando la Caja pida cancelar un ticket, aparecerá aquí" />
+          : pendientes.map(tarjeta)}
+      </div>
+      <div>
+        <div className="section-title"><Ban size={15} /> Historial de cancelaciones</div>
+        {historial === null ? <EmptyState icon={Ban} title="Cargando…" />
+          : historial.length === 0 ? <EmptyState icon={Ban} title="Aún no hay cancelaciones resueltas" />
+          : historial.map(tarjeta)}
+      </div>
+    </div>
+  );
+}
+
+// Dos colas con el mismo peso: cortesías fuera de cupo y cancelaciones de
+// tickets. La pestaña trae su propio contador de pendientes.
+function AutorizacionesSection({ cortesias, cancelaciones, addToast, onResolved }) {
+  const [tab, setTab] = useState(() => ((cancelaciones || []).length && !(cortesias || []).length ? 'cancelaciones' : 'cortesias'));
+  const tabs = [
+    { id: 'cortesias', label: 'Cortesías', Icon: Gift, n: (cortesias || []).length },
+    { id: 'cancelaciones', label: 'Cancelaciones', Icon: Ban, n: (cancelaciones || []).length },
+  ];
+  return (
+    <div>
+      <div className="cat-tabs conta-tabs">
+        {tabs.map(t => (
+          <button key={t.id} className={`cat-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            <t.Icon size={15} /> {t.label}{t.n > 0 ? ` (${t.n})` : ''}
+          </button>
+        ))}
+      </div>
+      {tab === 'cortesias'
+        ? <CortesiasPanel pendientes={cortesias} addToast={addToast} onResolved={onResolved} />
+        : <CancelacionesPanel pendientes={cancelaciones} addToast={addToast} onResolved={onResolved} />}
     </div>
   );
 }
@@ -760,7 +868,7 @@ export default function AdminApp(props) {
     proveedores, addProveedor, updateProveedor, deleteProveedor,
     productosAdmin, recetaOverrides, setRecetaOverride,
     recargarCatalogo, recargarAdmin, onSedesChanged, preciosPorRevisar,
-    cortesiasMes = 0, cortesiasPendientes = [], mesas = 4,
+    cortesiasMes = 0, cortesiasPendientes = [], cancelacionesPendientes = [], mesas = 4,
   } = props;
 
   const [screen, setScreen] = useState('dashboard');
@@ -861,7 +969,7 @@ export default function AdminApp(props) {
     { id: 'proveedores', label: 'Proveedores', Icon: Package },
     { id: 'usuarios', label: 'Personal', Icon: Lock },
     { id: 'reportes', label: 'Reportes', Icon: Receipt },
-    { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: (cortesiasPendientes || []).length },
+    { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: (cortesiasPendientes || []).length + (cancelacionesPendientes || []).length },
     ...(esGeneral ? [
       { id: 'comparativo', label: 'Comparativo', Icon: BarChart3 },
       { id: 'sucursales', label: 'Sucursales', Icon: Building2 },
@@ -880,7 +988,7 @@ export default function AdminApp(props) {
     contabilidad: ['Contabilidad', 'Egresos, estado de resultados, mayordomía y cuentas'],
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
     reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],
-    autorizaciones: ['Autorizaciones', `${(cortesiasPendientes || []).length} cortesía(s) fuera del plan por resolver`],
+    autorizaciones: ['Autorizaciones', `${(cortesiasPendientes || []).length} cortesía(s) y ${(cancelacionesPendientes || []).length} cancelación(es) por resolver`],
     comparativo: ['Comparativo de sucursales', 'Todas las sedes'],
     sucursales: ['Sucursales', 'Administración del negocio completo'],
     config: ['Configuración', sedeNombre ? `De ${sedeNombre}` : 'De la sucursal'],
@@ -1040,7 +1148,7 @@ export default function AdminApp(props) {
       {screen === 'costos' && <CostosSection addToast={addToast} sedeNombre={sedeNombre} onCostosChanged={recargarAdmin} />}
       {screen === 'contabilidad' && <ContabilidadSection addToast={addToast} esGeneral={esGeneral} sedeNombre={sedeNombre} proveedores={proveedores} />}
       {screen === 'reportes' && <ReportesSection data={reportes} />}
-      {screen === 'autorizaciones' && <AutorizacionesSection pendientes={cortesiasPendientes} addToast={addToast} onResolved={recargarAdmin} />}
+      {screen === 'autorizaciones' && <AutorizacionesSection cortesias={cortesiasPendientes} cancelaciones={cancelacionesPendientes} addToast={addToast} onResolved={recargarAdmin} />}
       {screen === 'comparativo' && esGeneral && <ComparativoSection addToast={addToast} />}
       {screen === 'sucursales' && esGeneral && <SucursalesSection addToast={addToast} onSedesChanged={onSedesChanged} />}
 

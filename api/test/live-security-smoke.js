@@ -43,10 +43,22 @@ function staffToken(user) {
   );
 }
 
+// Desde el multisucursal, todo el personal que no es admin general pertenece a
+// una sede (chk_usuarios_sucursal): las pruebas usan la primera sede activa.
+let sedePruebas = null;
+async function sedeDePruebas() {
+  if (!sedePruebas) {
+    const { rows } = await query('SELECT id FROM sucursales WHERE activo = true ORDER BY creado_en LIMIT 1');
+    if (!rows.length) throw new Error('No hay sucursales activas para la prueba.');
+    sedePruebas = rows[0].id;
+  }
+  return sedePruebas;
+}
+
 async function createTempStaff(name, role, pin) {
   const result = await query(
-    'INSERT INTO usuarios (nombre, rol, pin_hash) VALUES ($1,$2,$3) RETURNING id, nombre, rol, token_version',
-    [`${marker}-${name}`, role, await bcrypt.hash(pin, 4)]
+    'INSERT INTO usuarios (nombre, rol, pin_hash, sucursal_id) VALUES ($1,$2,$3,$4) RETURNING id, nombre, rol, token_version, sucursal_id',
+    [`${marker}-${name}`, role, await bcrypt.hash(pin, 4), await sedeDePruebas()]
   );
   return result.rows[0];
 }
@@ -103,17 +115,21 @@ async function main() {
     ...(rewardProduct.permite_tipo_cafe ? { cafeId: coffeeResult.rows[0]?.id } : {}),
   };
 
-  let customer = (await query('SELECT id, telefono, recompensa_pendiente FROM clientes ORDER BY creado_en LIMIT 1')).rows[0];
+  // El cliente y su token viven en la MISMA sede que el personal de prueba:
+  // desde el multisucursal, el token del cliente lleva su sede (`suc`).
+  const sede = await sedeDePruebas();
+  let customer = (await query('SELECT id, telefono, recompensa_pendiente FROM clientes WHERE sucursal_id = $1 ORDER BY creado_en LIMIT 1', [sede])).rows[0];
   if (!customer) {
     customer = (await query(
-      "INSERT INTO clientes (nombre, apellido, telefono, telefono_verificado) VALUES ('Security','Smoke','9999999999',true) RETURNING id, telefono, recompensa_pendiente"
+      "INSERT INTO clientes (nombre, apellido, telefono, telefono_verificado, sucursal_id) VALUES ('Security','Smoke','9999999999',true,$1) RETURNING id, telefono, recompensa_pendiente",
+      [sede]
     )).rows[0];
     customerWasCreated = true;
   }
   customerId = customer.id;
   originalReward = customer.recompensa_pendiente;
   await query('UPDATE clientes SET recompensa_pendiente = false WHERE id = $1', [customerId]);
-  const customerToken = jwt.sign({ tipo: 'cliente', id: customerId, telefono: customer.telefono }, process.env.JWT_SECRET, { expiresIn: '5m' });
+  const customerToken = jwt.sign({ tipo: 'cliente', id: customerId, telefono: customer.telefono, suc: sede }, process.env.JWT_SECRET, { expiresIn: '5m' });
   const syncIds = {
     invalidGift: crypto.randomUUID(),
     invalidOption: crypto.randomUUID(),
@@ -129,7 +145,7 @@ async function main() {
 
   await query("UPDATE configuracion SET valor = 'false'::jsonb WHERE clave = 'sms_verificacion'");
   const existingPhone = await request('/auth/cliente/registro', {
-    body: { telefono: customer.telefono, nombre: 'Attacker', apellido: 'Attempt' },
+    body: { telefono: customer.telefono, nombre: 'Attacker', apellido: 'Attempt', sucursalId: await sedeDePruebas() },
   });
   assert(existingPhone.status === 409 && !existingPhone.data?.token, `registro existente esperado 409 sin token, recibido ${existingPhone.status}`);
   await query("UPDATE configuracion SET valor = 'true'::jsonb WHERE clave = 'sms_verificacion'");

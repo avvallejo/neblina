@@ -88,6 +88,14 @@ export function destinoLabel({ destino, mesaNumero, origen } = {}) {
 }
 export const CORTESIA_ESTADO_LABELS = { dentro_plan: 'Cortesía del plan', pendiente: 'Pendiente de autorización', autorizada: 'Cortesía autorizada', rechazada: 'Cortesía rechazada' };
 
+// Cancelación de tickets: mientras está "pendiente" el ticket sigue contando
+// en las ventas del día; solo al autorizarla baja del corte.
+export const CANCELACION_ESTADO_LABELS = {
+  pendiente: 'Cancelación por autorizar',
+  autorizada: 'Cancelado',
+  rechazada: 'Cancelación rechazada',
+};
+
 // Ventana para avisar al cajero que un pedido en línea lleva mucho tiempo
 // listo sin cobrarse (política corta para poder probarla en demo).
 export const NO_SHOW_WARNING_MS = 3 * 60 * 1000;

@@ -109,6 +109,14 @@ cuenta la contabilidad y los gastos fijos del dueño (sueldo y préstamo). Ojo:
 esos gastos fijos entran al costo indirecto por unidad, así que los productos
 aparecerán en "precios por revisar" con un sugerido más alto.
 
+La migración 33 (cancelación de tickets) agrega columnas a `pedidos`, recrea
+`vw_pedidos_con_estado` y no toca ningún dato existente: los tickets de antes
+quedan sin estado de cancelación, como están hoy. También cambia el valor por
+omisión de `lotes.fecha_compra` a la fecha de México; las compras ya
+registradas no cambian. Después de desplegar, la Caja ve el botón **Cancelar
+ticket** en Ventas y el administrador la pestaña **Cancelaciones** dentro de
+Autorizaciones. No hay script que correr.
+
 ---
 
 ## Parte 1 — Subir el proyecto a GitHub (la cuenta nueva)

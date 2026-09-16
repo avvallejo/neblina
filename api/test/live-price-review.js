@@ -1,7 +1,7 @@
 // Solo desarrollo, tras aplicar db/19: prueba de persistencia con rollback.
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const { mantenerPrecio, preciosPorRevisar } = require('./src/services/priceReview');
+const { pool } = require('../src/db');
+const { mantenerPrecio, preciosPorRevisar } = require('../src/services/priceReview');
 (async () => {
   assert.equal(process.env.NODE_ENV,'development');
   const c = await pool.connect();

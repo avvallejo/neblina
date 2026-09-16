@@ -1,7 +1,7 @@
 // Docker local, migración 20 instalada. Todo se revierte.
 const assert=require('node:assert/strict');
-const {pool}=require('./src/db');
-const {calcularPrecioItem}=require('./src/utils/pricing');
+const {pool}=require('../src/db');
+const {calcularPrecioItem}=require('../src/utils/pricing');
 (async()=>{
   assert.equal(process.env.NODE_ENV,'development');
   const c=await pool.connect();

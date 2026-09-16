@@ -2,8 +2,8 @@
 // Corre dentro de una transacción que se revierte al final.
 //   node test/live-stations.js   (desde la raíz de la API, como los demás live-*)
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const { resolverDestino, normalizarMesas, normalizarEstacionProducto, normalizarEstacionesUsuario, entregarItemsDeCaja, estacionesDe, leerMesas, CLAVE_MESAS } = require('./src/services/stations');
+const { pool } = require('../src/db');
+const { resolverDestino, normalizarMesas, normalizarEstacionProducto, normalizarEstacionesUsuario, entregarItemsDeCaja, estacionesDe, leerMesas, CLAVE_MESAS } = require('../src/services/stations');
 
 (async () => {
   assert.equal(process.env.NODE_ENV, 'development');

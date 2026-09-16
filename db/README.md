@@ -119,6 +119,19 @@ reales.
     costo de ventas de un mes no cambie con compras posteriores),
     `fn_grupo_afecta_utilidad`, `fn_contabilidad_semilla` y un trigger que siembra
     el catálogo en cada sede nueva. Re-ejecutable.
+33. **`33_cancelaciones.sql`** — **Cancelación de tickets con autorización**:
+    `pedidos.cancelacion_estado` (`pendiente` / `autorizada` / `rechazada`) con
+    motivo, quién la pidió, quién la resolvió y la nota, más un CHECK que
+    mantiene coherentes estado y `cancelado`. Agrega
+    `movimientos_inventario.revierte_movimiento_id` (único) y
+    `fn_revertir_consumo_pedido`, que devuelve al lote y al stock lo que el
+    pedido consumió con un movimiento de `ajuste` al mismo costo congelado —
+    idempotente, así autorizar dos veces no devuelve el doble. Extiende
+    `fn_confirmar_cobro_pedido` para regresar el punto de fidelidad al cancelar
+    un ticket cobrado, recrea `vw_pedidos_con_estado` (cambiaron las columnas de
+    `pedidos`) y fecha las compras con el día de México
+    (`lotes.fecha_compra` por omisión, antes `CURRENT_DATE` en UTC: una compra
+    de la tarde caía "mañana" y su egreso salía del mes). Re-ejecutable.
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -140,7 +153,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
-# … y así hasta 32_contabilidad.sql (o simplemente: db/migrar.sh)
+# … y así hasta 33_cancelaciones.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

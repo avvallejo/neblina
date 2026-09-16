@@ -333,6 +333,22 @@ de egreso de ese mes devuelve 409. `scripts/configurar-contabilidad.js <sede>
 [--apply]` deja la sede lista. `test/live-contabilidad.js`
 (`npm run test:contabilidad:live`).
 
+### Cancelación de tickets
+
+`PATCH /pedidos/:id/cancelar { motivo }` (Caja, barra, admin y el cliente con
+su propio pedido; el motivo es obligatorio, mínimo 3 caracteres). Devuelve
+`cancelacion_estado` y la `leyenda` que hay que mostrar: `autorizada` cuando el
+ticket no se había cobrado ni empezado a preparar (o cuando lo pide un admin),
+`pendiente` en cualquier otro caso — y mientras esté pendiente el pedido SIGUE
+contando en ventas. `/api/cancelaciones` (solo admin, por sede): `GET
+?estado=pendiente` da la cola con el motivo, el detalle del ticket y cuántos
+movimientos de insumo regresarían; `PATCH /:id/autorizar` cancela de verdad
+(ítems, ventas del día, caja del turno, estado de resultados, punto de
+fidelidad y devolución de inventario vía `fn_revertir_consumo_pedido`) y
+`PATCH /:id/rechazar` lo deja como estaba. Ambas guardan auditoría con el
+motivo y la nota. Un ticket de un mes contable ya cerrado devuelve 409.
+`test/live-cancelaciones.js` (`npm run test:cancelaciones:live`).
+
 ## Decisiones de seguridad que ya están tomadas
 
 - El PIN nunca se guarda ni compara en texto plano (bcrypt, vía pgcrypto en

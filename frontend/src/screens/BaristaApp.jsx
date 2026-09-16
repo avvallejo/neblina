@@ -5,7 +5,7 @@ import { Coffee, Clock, Droplets, ClipboardList, AlertCircle, Sparkles, AlertTri
 import { getProduct, customizationSummary, destinoLabel, rolEtiqueta } from '../lib/catalog.js';
 import { fmtHora } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
-import { Gauge, ConfirmDialog, EmptyState } from '../components/ui.jsx';
+import { Gauge, EmptyState, CancelacionSheet } from '../components/ui.jsx';
 import { RecipeModal, MermaModal } from '../components/recipe.jsx';
 
 // A dónde va lo que se prepara: MESA n, BARRA, PARA LLEVAR o pedido en línea.
@@ -25,7 +25,7 @@ function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma, 
       <div className="ticket-head">
         <div>
           <div className="ticket-id">{ticket.folio || ticket.id}</div>
-          <div className="ticket-time">{new Date(ticket.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div className="ticket-time">{fmtHora(ticket.createdAt)}</div>
         </div>
         <Gauge seconds={elapsedSec} size={68} />
       </div>
@@ -140,15 +140,15 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
         />
       )}
       {mermaTicket && <MermaModal ticket={mermaTicket} onClose={() => setMermaTicket(null)} onSave={addMerma} />}
-      <ConfirmDialog
-        open={!!cancelTarget}
-        title="Cancelar pedido"
-        message={cancelTarget ? `¿Cancelar el pedido ${cancelTarget.folio || cancelTarget.orderId}? Solo se puede mientras no inicie su preparación.` : ''}
-        confirmLabel="Sí, cancelar"
-        danger
-        onConfirm={() => { onCancelar(cancelTarget.orderId); setCancelTarget(null); }}
-        onCancel={() => setCancelTarget(null)}
-      />
+      {cancelTarget && (
+        <CancelacionSheet
+          folio={cancelTarget.folio || cancelTarget.orderId}
+          fecha={cancelTarget.createdAt}
+          inmediata={cancelTarget.status === 'pendiente'}
+          onClose={() => setCancelTarget(null)}
+          onSubmit={async motivo => { await onCancelar(cancelTarget.orderId, motivo); setCancelTarget(null); }}
+        />
+      )}
     </AppShell>
   );
 }

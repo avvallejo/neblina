@@ -348,7 +348,7 @@ async function mayordomiaAnual(queryFn, sucursalId, anio, cfg) {
 }
 
 module.exports = {
-  GRUPOS, GRUPO_LABELS, AFECTA_UTILIDAD, MESES, CLAVE_DIEZMO, CLAVE_OFRENDA, CLAVE_INICIO, DIEZMO_DEFAULT, OFRENDA_DEFAULT,
+  TZ, GRUPOS, GRUPO_LABELS, AFECTA_UTILIDAD, MESES, CLAVE_DIEZMO, CLAVE_OFRENDA, CLAVE_INICIO, DIEZMO_DEFAULT, OFRENDA_DEFAULT,
   validarPeriodo, rangoPeriodo, periodoDe, validarFecha, fechaISO, validarPorcentaje, hoyMx, round2,
   leerConfigContabilidad, cuentaPorClave, cuentaDineroPorClave, validarCuentaContable, validarCuentaDinero,
   mesCerrado, exigirMesAbierto, crearEgreso, listarEgresos, obtenerEgreso, egresoSql, normalizarFechas,

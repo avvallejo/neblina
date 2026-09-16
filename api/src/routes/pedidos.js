@@ -9,6 +9,7 @@ const { validateDate } = require('../services/dailySales');
 const { prepareOrderLines } = require('../services/orderValidation');
 const { resolverCortesia, respuestaCortesia } = require('../services/courtesies');
 const { resolverDestino, entregarItemsDeCaja } = require('../services/stations');
+const { solicitarCancelacion } = require('../services/cancellations');
 
 const {cashPart}=require('../services/cashDrawer');
 const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'mixto', 'cortesia'];
@@ -184,34 +185,19 @@ router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (
   res.json(resultado);
 }));
 
-// Cancelar un pedido. Lo permite el CLIENTE (solo el suyo), el BARISTA, la CAJA
-// y el ADMIN, pero SOLO si la preparación no ha iniciado (ningún ítem dejó de
-// estar 'pendiente'). Si ya inició, se rechaza: para lo ya preparado y no
-// recogido está el flujo de no-show, no la cancelación.
+// Pedir la cancelación de un pedido, SIEMPRE con motivo. Lo permite el CLIENTE
+// (solo el suyo y sin cobrar), el BARISTA, la CAJA y el ADMIN.
+// Si el ticket no se cobró y la preparación no había iniciado, se cancela al
+// momento; en cualquier otro caso queda pendiente de que un administrador la
+// autorice (Admin → Autorizaciones) y hasta entonces sigue contando en ventas.
 router.patch('/:id/cancelar', asyncHandler(async (req, res) => {
   if (req.auth.tipo === 'staff' && !['barista', 'cajero', 'mostrador', 'admin'].includes(req.auth.rol)) {
     throw new ApiError(403, 'No autorizado para cancelar pedidos.');
   }
-  await withTransaction(async client => {
-    const ped = await client.query('SELECT cliente_id, cancelado FROM pedidos WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
-    if (ped.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
-    // El cliente solo puede cancelar SU propio pedido.
-    if (req.auth.tipo === 'cliente' && ped.rows[0].cliente_id !== req.auth.id) {
-      throw new ApiError(403, 'No puedes cancelar un pedido que no es tuyo.');
-    }
-    if (ped.rows[0].cancelado) return; // idempotente: ya estaba cancelado
-
-    // La preparación "inició" en cuanto algún ítem deja de estar 'pendiente'.
-    const iniciado = await client.query(
-      "SELECT 1 FROM pedido_items WHERE pedido_id = $1 AND estado <> 'pendiente' LIMIT 1",
-      [req.params.id]
-    );
-    if (iniciado.rows.length > 0) throw new ApiError(409, 'No se puede cancelar: la preparación ya inició.');
-
-    await client.query('UPDATE pedidos SET cancelado = true WHERE id = $1', [req.params.id]);
-    await client.query("UPDATE pedido_items SET estado = 'cancelado' WHERE pedido_id = $1", [req.params.id]);
-  });
-  res.json({ ok: true });
+  const resultado = await withTransaction(client => solicitarCancelacion(client, {
+    pedidoId: req.params.id, sucursalId: req.sucursalId, auth: req.auth, motivo: req.body.motivo,
+  }));
+  res.json({ ok: true, ...resultado });
 }));
 
 // El cliente nunca pasó por un pedido ya listo: el trigger de la base de

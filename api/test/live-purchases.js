@@ -1,8 +1,8 @@
 // Prueba viva de compras con presentación y costo derivado (NODE_ENV=development).
 // Transacción con rollback. node test/live-purchases.js (desde la raíz de la API).
 const assert = require('node:assert/strict');
-const { pool } = require('./src/db');
-const { normalizarPresentacion, resolverCantidadCompra, registrarCompra } = require('./src/services/purchases');
+const { pool } = require('../src/db');
+const { normalizarPresentacion, resolverCantidadCompra, registrarCompra } = require('../src/services/purchases');
 
 (async () => {
   assert.equal(process.env.NODE_ENV, 'development');

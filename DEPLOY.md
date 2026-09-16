@@ -109,6 +109,24 @@ cuenta la contabilidad y los gastos fijos del dueño (sueldo y préstamo). Ojo:
 esos gastos fijos entran al costo indirecto por unidad, así que los productos
 aparecerán en "precios por revisar" con un sugerido más alto.
 
+La migración 34 (costeo por margen de contribución) cambia cómo se calcula el
+precio sugerido, no los precios: siembra el margen de cada producto con el que
+hoy deja su precio de lista y el de cada categoría con la mediana de los suyos,
+así que al terminar **ningún producto aparece en "precios por revisar"**. Ojo
+con dos cambios de significado:
+
+* `productos.margen_porcentaje` pasa de ser "% de ganancia sobre el costo" a ser
+  **margen de contribución** (de cada peso vendido, cuánto queda después de los
+  insumos). Lo mismo el margen general de la sede. Por eso ahora no puede
+  llegar a 100.
+* El **pago del préstamo** y el **sueldo del dueño** dejan de entrar al costo de
+  los productos (siguen en el estado de resultados y en el cálculo del diezmo).
+  Se cambia cuenta por cuenta en Admin → Costos → "Qué gastos entran al precio".
+
+No hay script que correr. Después de desplegar conviene revisar en Costos los
+márgenes por categoría y los pesos por estación (barra 1, parrilla 1.5,
+refrigerador 0.25).
+
 La migración 33 (cancelación de tickets) agrega columnas a `pedidos`, recrea
 `vw_pedidos_con_estado` y no toca ningún dato existente: los tickets de antes
 quedan sin estado de cancelación, como están hoy. También cambia el valor por

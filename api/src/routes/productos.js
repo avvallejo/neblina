@@ -76,23 +76,40 @@ router.get('/:id/precio-sugerido', requireAuth, requireRole('admin'), resolveSuc
   const { rows } = await query(
     `SELECT
        fn_costo_teorico_producto($1) AS costo_directo,
-       fn_costo_fijo_unitario($2) AS costo_indirecto_unitario,
+       fn_costo_indirecto_producto($1) AS costo_indirecto_unitario,
        fn_costo_total_unitario($1) AS costo_total,
        fn_precio_punto_equilibrio($1) AS precio_punto_equilibrio,
        fn_precio_sugerido($1) AS precio_sugerido,
+       fn_margen_contribucion_producto($1) AS margen_aplicado,
+       fn_contribucion_actual($1) AS margen_actual,
+       cat.margen_contribucion AS margen_categoria,
+       cat.nombre AS categoria_nombre,
        cm.porcentaje_ganancia_normal AS margen_sucursal,
-       COALESCE(cm.redondeo, 1) AS redondeo
-     FROM (SELECT 1) x
+       COALESCE(cm.redondeo, 1) AS redondeo,
+       COALESCE(pe.peso, 1) AS peso_estacion,
+       fn_gastos_fijos_costeables_mes($2) AS gastos_fijos_costeables_mes
+     FROM productos p
+     LEFT JOIN categorias_producto cat ON cat.id = p.categoria_id
+     LEFT JOIN pesos_estacion pe ON pe.sucursal_id = p.sucursal_id AND pe.estacion = COALESCE(p.estacion, 'barra')
      LEFT JOIN LATERAL (
        SELECT porcentaje_ganancia_normal, redondeo FROM configuracion_margen
        WHERE sucursal_id = $2 ORDER BY actualizado_en DESC LIMIT 1
-     ) cm ON true`,
+     ) cm ON true
+     WHERE p.id = $1`,
     [req.params.id, req.sucursalId]
   );
+  const fila = rows[0] || {};
   res.json({
-    ...rows[0],
+    ...fila,
     precio_base: propio.rows[0].precio_base,
     margen_producto: propio.rows[0].margen_porcentaje,
+    // De dónde salió el margen que se aplicó, para poder explicarlo en pantalla.
+    margen_origen: propio.rows[0].margen_porcentaje !== null ? 'producto'
+      : fila.margen_categoria !== null && fila.margen_categoria !== undefined ? 'categoria' : 'sede',
+    // El piso mandó: el margen solo no alcanzaba a pagar su parte de fijos.
+    piso_manda: fila.costo_total !== null && fila.precio_sugerido !== null
+      ? Number(fila.costo_total) > Number(fila.costo_directo) / (1 - Number(fila.margen_aplicado) / 100)
+      : false,
   });
 }));
 
@@ -114,11 +131,14 @@ router.get('/:id/desglose-costo', requireAuth, requireRole('admin'), resolveSucu
 
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
 
+// Margen de CONTRIBUCIÓN (migración 34): de cada peso vendido, cuánto queda
+// después de pagar los insumos. Por eso nunca llega a 100: el precio es
+// insumo / (1 - margen), y con 100 sería una división entre cero.
 function parseMargen(valor) {
   if (valor === undefined) return undefined;
   if (valor === null || valor === '') return null;
   const n = Number(valor);
-  if (!Number.isFinite(n) || n <= 0 || n > 1000) throw new ApiError(400, 'El margen debe ser un porcentaje entre 0 y 1000.');
+  if (!Number.isFinite(n) || n <= 0 || n >= 100) throw new ApiError(400, 'El margen de contribución debe ser un porcentaje mayor que 0 y menor que 100.');
   return Math.round(n * 100) / 100;
 }
 
@@ -126,10 +146,11 @@ function parseMargen(valor) {
 // si ningún producto la usa. Aparecen en Caja, la app del cliente y la TV.
 router.post('/categorias', asyncHandler(async (req, res) => {
   const nombre = cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 });
+  const margen = parseMargen(req.body.margenContribucion);
   const { rows } = await query(
-    `INSERT INTO categorias_producto (nombre, sucursal_id, orden)
-     VALUES ($1, $2, (SELECT COALESCE(MAX(orden), 0) + 1 FROM categorias_producto WHERE sucursal_id = $2)) RETURNING *`,
-    [nombre, req.sucursalId]
+    `INSERT INTO categorias_producto (nombre, sucursal_id, orden, margen_contribucion)
+     VALUES ($1, $2, (SELECT COALESCE(MAX(orden), 0) + 1 FROM categorias_producto WHERE sucursal_id = $2), $3) RETURNING *`,
+    [nombre, req.sucursalId, margen === undefined ? null : margen]
   );
   res.status(201).json(rows[0]);
 }));
@@ -145,9 +166,23 @@ router.put('/categorias/orden', asyncHandler(async (req, res) => {
   const { rows } = await query('SELECT * FROM categorias_producto WHERE sucursal_id = $1 ORDER BY orden', [req.sucursalId]);
   res.json(rows);
 }));
+// Se puede cambiar el nombre, el margen de contribución objetivo, o ambos.
 router.patch('/categorias/:id', asyncHandler(async (req, res) => {
-  const nombre = cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 });
-  const { rows } = await query('UPDATE categorias_producto SET nombre = $1 WHERE id = $2 AND sucursal_id = $3 RETURNING *', [nombre, req.params.id, req.sucursalId]);
+  const campos = [];
+  const valores = [];
+  if (req.body.nombre !== undefined) {
+    valores.push(cleanText(req.body.nombre, { required: true, field: 'un nombre de categoría', max: 40 }));
+    campos.push(`nombre = $${valores.length}`);
+  }
+  if (req.body.margenContribucion !== undefined) {
+    valores.push(parseMargen(req.body.margenContribucion));
+    campos.push(`margen_contribucion = $${valores.length}`);
+  }
+  if (!campos.length) throw new ApiError(400, 'Nada que actualizar.');
+  valores.push(req.params.id, req.sucursalId);
+  const { rows } = await query(
+    `UPDATE categorias_producto SET ${campos.join(', ')} WHERE id = $${valores.length - 1} AND sucursal_id = $${valores.length} RETURNING *`,
+    valores);
   if (!rows.length) throw new ApiError(404, 'Categoría no encontrada.');
   res.json(rows[0]);
 }));

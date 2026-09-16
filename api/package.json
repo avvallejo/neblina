@@ -17,7 +17,8 @@
     "test:compras:live": "node test/live-purchases.js",
     "test:alimentos:live": "node test/live-alimentos.js",
     "test:contabilidad:live": "node test/live-contabilidad.js",
-    "test:cancelaciones:live": "node test/live-cancelaciones.js"
+    "test:cancelaciones:live": "node test/live-cancelaciones.js",
+    "test:margen:live": "node test/live-margen-contribucion.js"
   },
   "dependencies": {
     "@aws-sdk/client-sns": "^3.1073.0",

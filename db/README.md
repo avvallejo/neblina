@@ -119,6 +119,24 @@ reales.
     costo de ventas de un mes no cambie con compras posteriores),
     `fn_grupo_afecta_utilidad`, `fn_contabilidad_semilla` y un trigger que siembra
     el catálogo en cada sede nueva. Re-ejecutable.
+34. **`34_margen_contribucion.sql`** — **El precio se fija por margen de
+    contribución**: `cuentas_contables.entra_al_costo` (con trigger que pone lo
+    sensato según el grupo; préstamo y sueldo del dueño fuera),
+    `pesos_estacion` por sede (barra 1, parrilla 1.5, caja 0.25, sembrada
+    también en cada sede nueva), `categorias_producto.margen_contribucion` y el
+    cambio de significado de `productos.margen_porcentaje` (era markup sobre el
+    costo, ahora es margen de contribución < 100). Funciones nuevas:
+    `fn_gastos_fijos_costeables_mes`, `fn_costo_indirecto_producto` (reparto por
+    peso de estación sobre la mezcla real de 30 días; suma exactamente los
+    gastos costeables), `fn_margen_contribucion_producto` (producto → categoría
+    → sede) y `fn_contribucion_actual`. `fn_precio_sugerido` pasa a
+    `insumo / (1 - margen)` con piso en `fn_costo_total_unitario`, y
+    `fn_revision_precio` deja de depender del reparto (que cambia con cada
+    venta) para depender de las decisiones: margen, redondeo, gastos costeables
+    y peso de la estación. Recrea `vw_precios_por_revisar`,
+    `vw_desglose_costo_producto` y `vw_punto_equilibrio_negocio` (ahora sobre
+    ventas reales de 30 días). Siembra los márgenes desde los precios vigentes,
+    así que al aplicarla ningún precio cambia. Re-ejecutable.
 33. **`33_cancelaciones.sql`** — **Cancelación de tickets con autorización**:
     `pedidos.cancelacion_estado` (`pendiente` / `autorizada` / `rechazada`) con
     motivo, quién la pidió, quién la resolvió y la nota, más un CHECK que
@@ -153,7 +171,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
-# … y así hasta 33_cancelaciones.sql (o simplemente: db/migrar.sh)
+# … y así hasta 34_margen_contribucion.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

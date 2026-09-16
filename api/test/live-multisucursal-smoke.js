@@ -39,6 +39,8 @@ const state = {
   clientes: [],         // ids de clientes creados
   productoB: null,
   categoriaB: null,
+  productoA: null,
+  categoriaA: null,
   turnosAbiertos: [],   // ids de turnos abiertos por la prueba
 };
 
@@ -81,13 +83,20 @@ async function createTempStaff(name, role, pin, sucursalId) {
 
 async function cleanup() {
   const staffIds = state.staff.map(u => u.id);
-  if (state.pedidos.length) await query('DELETE FROM pedidos WHERE id = ANY($1::uuid[])', [state.pedidos]);
+  if (state.pedidos.length) {
+    // Los movimientos de inventario apuntan a los ítems: van primero.
+    await query(`DELETE FROM movimientos_inventario WHERE pedido_item_id IN
+                   (SELECT id FROM pedido_items WHERE pedido_id = ANY($1::uuid[]))`, [state.pedidos]);
+    await query('DELETE FROM pedidos WHERE id = ANY($1::uuid[])', [state.pedidos]);
+  }
   await query('DELETE FROM lotes_sincronizacion WHERE dispositivo = $1', [marker]);
   // Cierra y borra los turnos que la prueba abrió.
   if (staffIds.length) await query('DELETE FROM turnos WHERE abierto_por = ANY($1::uuid[])', [staffIds]);
   if (state.clientes.length) await query('DELETE FROM clientes WHERE id = ANY($1::uuid[])', [state.clientes]);
   if (state.productoB) await query('DELETE FROM productos WHERE id = $1', [state.productoB]);
+  if (state.productoA) await query('DELETE FROM productos WHERE id = $1', [state.productoA]);
   if (state.categoriaB) await query('DELETE FROM categorias_producto WHERE id = $1', [state.categoriaB]);
+  if (state.categoriaA) await query('DELETE FROM categorias_producto WHERE id = $1', [state.categoriaA]);
   if (staffIds.length) await query('DELETE FROM usuarios WHERE id = ANY($1::uuid[])', [staffIds]);
   if (state.sedeB) {
     await query('DELETE FROM configuracion WHERE sucursal_id = $1', [state.sedeB.id]);
@@ -143,11 +152,18 @@ async function main() {
      VALUES ($1, $2, 'snack', 30, false, false, false, false, $3) RETURNING id`,
     [`${marker}-galleta`, state.categoriaB, B]
   )).rows[0].id;
-  // Un producto snack existente de la sede A para los pedidos de A.
+  // Producto propio de la sede A: de BARRA, para que pase por la cola del
+  // barista (los de estación "caja" se entregan al cobrar y nunca llegan ahí).
+  state.categoriaA = (await query(
+    'INSERT INTO categorias_producto (nombre, orden, sucursal_id) VALUES ($1, 99, $2) RETURNING id',
+    [`${marker}-catA`, A]
+  )).rows[0].id;
   const productoA = (await query(
-    "SELECT id FROM productos WHERE sucursal_id = $1 AND tipo = 'snack' AND activo LIMIT 1", [A]
+    `INSERT INTO productos (nombre, categoria_id, tipo, precio_base, permite_tamanos, permite_leche, permite_tipo_cafe, permite_extras, sucursal_id, estacion)
+     VALUES ($1, $2, 'snack', 30, false, false, false, false, $3, 'barra') RETURNING id`,
+    [`${marker}-snackA`, state.categoriaA, A]
   )).rows[0];
-  assert(productoA, 'Se necesita al menos un snack activo en la primera sucursal (seed de desarrollo).');
+  state.productoA = productoA.id;
 
   // ---------- 4. Login por sede: el PIN solo vale en la sede del empleado ----------
   const loginOk = await request('/auth/login', { body: { pin: '7535', sucursalId: A } });

@@ -65,9 +65,10 @@ ya_tiene() {
     28) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'vw_stock_bajo' AND column_name = 'a_pedir'" ;;
     29) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'materias_primas' AND column_name = 'presentacion_cantidad'" ;;
     30) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'opciones_extra' AND column_name = 'aplica_a'" ;;
-    31) q "SELECT 1 FROM pg_proc WHERE proname = 'fn_revision_precio' AND prosrc LIKE '%indirecto%'" ;;
+    31) q "SELECT 1 FROM pg_proc WHERE proname = 'fn_revision_precio' AND (prosrc LIKE '%indirecto%' OR prosrc LIKE '%piso%')" ;;
     32) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'egresos'" ;;
     33) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'cancelacion_estado'" ;;
+    34) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'pesos_estacion'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

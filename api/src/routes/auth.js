@@ -38,7 +38,11 @@ router.get('/yo', requireAuth, asyncHandler(async (req, res) => {
 // El PIN es de solo 4 dígitos — sin límite de intentos, alguien podría
 // probarlos todos en minutos. 10 intentos por 15 minutos por IP es generoso
 // para un uso normal y bloquea un ataque de fuerza bruta.
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+// 10 intentos por IP cada 15 minutos. Se puede subir SOLO en desarrollo
+// (LOGIN_RATE_LIMIT_MAX) para poder correr las pruebas vivas en serie; en
+// producción el valor fijo es el que protege contra el barrido de PINes.
+const LOGIN_MAX = process.env.NODE_ENV === 'production' ? 10 : Number(process.env.LOGIN_RATE_LIMIT_MAX || 10);
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: LOGIN_MAX, standardHeaders: true, legacyHeaders: false });
 
 // POST /api/auth/login  { pin, sucursalId }  -> login de personal
 // La pantalla de login pide primero la sede (GET /api/sucursales) y luego el

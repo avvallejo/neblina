@@ -333,6 +333,22 @@ de egreso de ese mes devuelve 409. `scripts/configurar-contabilidad.js <sede>
 [--apply]` deja la sede lista. `test/live-contabilidad.js`
 (`npm run test:contabilidad:live`).
 
+### Costeo por margen de contribución
+
+`GET/PUT /promociones/margen` (margen de contribución general de la sede, < 100,
+y redondeo), `GET/PUT /promociones/pesos-estacion` (peso de cada estación más
+los gastos fijos del mes y cuánto de ellos es costo del producto),
+`PATCH /productos/categorias/:id { margenContribucion }` y
+`PATCH /productos/:id { margenPorcentaje }` (margen propio del producto; ahora
+es de contribución). `PATCH /contabilidad/cuentas/:id { entraAlCosto }` decide
+si los gastos de esa cuenta forman parte del costo de los productos.
+`GET /productos/:id/precio-sugerido` explica el sugerido: insumo, su parte de
+los gastos fijos, piso, margen aplicado con su origen (`producto` / `categoria`
+/ `sede`), el margen que deja hoy el precio y si `piso_manda`.
+`GET /promociones/punto-equilibrio` da la venta y la contribución de los últimos
+30 días contra los gastos fijos. `test/live-margen-contribucion.js`
+(`npm run test:margen:live`).
+
 ### Cancelación de tickets
 
 `PATCH /pedidos/:id/cancelar { motivo }` (Caja, barra, admin y el cliente con

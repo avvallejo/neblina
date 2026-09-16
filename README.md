@@ -246,6 +246,45 @@ ensaya; es idempotente (lo que ya existe se conserva). Precios y cantidades
 son de referencia: se ajustan en Admin, y las existencias reales se cargan
 con Inventario → Registrar compra.
 
+## Cómo se fija el precio: margen de contribución
+
+Antes, el precio sugerido era `(insumos + gastos fijos ÷ unidades) × (1 + margen)`.
+Ese reparto le cargaba **el mismo importe de renta a todos los productos**: con
+$27,650 de gastos fijos y 1,200 unidades al mes, cada producto cargaba $23.04.
+Para una jamaica embotellada (insumo $14) eso era un +164 % y el sistema sugería
+$60 por algo que se vende en $25; para una hamburguesa (insumo $38) era apenas
++57 %. Y como el margen se aplicaba también sobre esos $23.04, se estaba pidiendo
+utilidad sobre la renta.
+
+Ahora son **tres decisiones separadas**, todas en **Admin → Costos**:
+
+1. **Qué gastos fijos son costo del producto.** Cada cuenta contable se puede
+   meter o sacar del costo. El **pago del préstamo** y el **sueldo del dueño**
+   quedan fuera por omisión: son financiamiento y retiro, no costo de hacer un
+   café. Se siguen pagando y siguen bajando la utilidad y el diezmo — solo que
+   no se le cobran al cliente con margen encima.
+2. **Cómo se reparten** (solo para el piso): por **estación**, con pesos
+   editables — barra 1, parrilla 1.5, refrigerador 0.25 — aplicados sobre la
+   mezcla **real** de los últimos 30 días. Una bebida que sale del refrigerador
+   no puede cargar lo mismo que una hamburguesa. Mientras la sede no tenga 30
+   días de ventas se usa el volumen estimado con el peso promedio del catálogo.
+3. **Cómo se vuelve precio**: `precio = insumo ÷ (1 − margen de contribución)`.
+   El margen es el del producto; si no tiene, el de su **categoría**; si no, el
+   **general de la sede**. Los gastos fijos ya no se suman al costo: sirven de
+   **piso** (nunca sugerir por debajo de insumo + su parte de fijos) y se cubren
+   con la contribución de todo el mes.
+
+En Costos se ve el resultado de un vistazo: gastos fijos del mes, cuánto de eso
+es costo del producto, el **margen de contribución real** de los últimos 30 días
+y **cuánto hay que vender** para cubrir los fijos. En "Costo y precio" de cada
+producto el sugerido viene explicado: el insumo, el margen que se aplicó y de
+dónde salió, y si mandó el piso.
+
+Al aplicar la migración **ningún precio se mueve**: el margen de cada producto
+se siembra con el que hoy deja su precio de lista y el de cada categoría con la
+mediana de sus productos (el que heredan los productos nuevos). Migración
+`db/34_margen_contribucion.sql`.
+
 ## Contabilidad y mayordomía (diezmo y ofrenda)
 
 **Admin → Contabilidad** convierte las ventas y el inventario en una

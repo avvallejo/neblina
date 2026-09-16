@@ -344,6 +344,8 @@ export function actualizarCategoriaMateria(id, nombre) { return request(`/materi
 export function eliminarCategoriaMateria(id) { return request(`/materias-primas/categorias/${id}`, { method: 'DELETE' }); }
 export function crearCategoriaProducto(nombre) { return request('/productos/categorias', { method: 'POST', body: { nombre } }); }
 export function actualizarCategoriaProducto(id, nombre) { return request(`/productos/categorias/${id}`, { method: 'PATCH', body: { nombre } }); }
+// Margen de CONTRIBUCIÓN objetivo de la categoría (%): precio = insumo / (1 - margen).
+export function actualizarMargenCategoria(id, margenContribucion) { return request(`/productos/categorias/${id}`, { method: 'PATCH', body: { margenContribucion } }); }
 export function eliminarCategoriaProducto(id) { return request(`/productos/categorias/${id}`, { method: 'DELETE' }); }
 export function ordenarCategoriasProducto(ids) { return request('/productos/categorias/orden', { method: 'PUT', body: { ids } }); }
 export async function getMateriasCategorias() {
@@ -495,6 +497,10 @@ export function guardarMargen({ porcentajeGananciaNormal, redondeo, unidadesEsti
   return request('/promociones/margen', { method: 'PUT', body: { porcentajeGananciaNormal, redondeo, unidadesEstimadasMes } });
 }
 export function getPuntoEquilibrio() { return request('/promociones/punto-equilibrio'); }
+// Peso de cada estación: reparte los gastos fijos costeables para calcular el
+// PISO de cada precio (barra 1, parrilla 1.5, refrigerador 0.25).
+export function getPesosEstacion() { return request('/promociones/pesos-estacion'); }
+export function guardarPesosEstacion(pesos) { return request('/promociones/pesos-estacion', { method: 'PUT', body: { pesos } }); }
 
 // Opciones de personalización (tamaños, leches, cafés, extras) con su costo
 // estimado y precio sugerido; el admin ajusta el "delta_precio" que ve el

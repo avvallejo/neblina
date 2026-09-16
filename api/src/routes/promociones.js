@@ -1,5 +1,5 @@
 const express = require('express');
-const { query } = require('../db');
+const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = require('../middleware/auth');
 
@@ -101,11 +101,52 @@ router.get('/margen', requireAuth, requireRole('admin'), resolveSucursal, asyncH
 
 router.put('/margen', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {
   const { porcentajeGananciaNormal, redondeo, unidadesEstimadasMes } = req.body;
+  // Es margen de CONTRIBUCIÓN: precio = insumo / (1 - margen), así que 100 no
+  // existe (sería dividir entre cero) y 0 significaría vender al costo.
+  const margen = porcentajeGananciaNormal === undefined || porcentajeGananciaNormal === null || porcentajeGananciaNormal === ''
+    ? 60 : Number(porcentajeGananciaNormal);
+  if (!Number.isFinite(margen) || margen <= 0 || margen >= 100) {
+    throw new ApiError(400, 'El margen de contribución general debe ser un porcentaje mayor que 0 y menor que 100.');
+  }
   const { rows } = await query(
     'INSERT INTO configuracion_margen (porcentaje_ganancia_normal, redondeo, unidades_estimadas_mes, actualizado_por, sucursal_id) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-    [porcentajeGananciaNormal ?? 60, redondeo ?? 1, unidadesEstimadasMes || null, req.auth.id, req.sucursalId]
+    [Math.round(margen * 100) / 100, redondeo ?? 1, unidadesEstimadasMes || null, req.auth.id, req.sucursalId]
   );
   res.json(rows[0]);
+}));
+
+// PESOS POR ESTACIÓN: cuánto del local y del tiempo consume un producto según
+// dónde se prepara. Solo reparte los gastos fijos costeables para calcular el
+// PISO de cada precio; no se cobra al cliente.
+router.get('/pesos-estacion', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {
+  const { rows } = await query(
+    `SELECT pe.estacion, pe.peso,
+            (SELECT COUNT(*)::int FROM productos p WHERE p.sucursal_id = pe.sucursal_id AND p.activo AND COALESCE(p.estacion,'barra') = pe.estacion) AS productos
+       FROM pesos_estacion pe WHERE pe.sucursal_id = $1 ORDER BY pe.estacion`, [req.sucursalId]);
+  const { rows: [fijos] } = await query(
+    'SELECT fn_gastos_fijos_totales_mes($1) AS totales, fn_gastos_fijos_costeables_mes($1) AS costeables', [req.sucursalId]);
+  res.json({ pesos: rows, gastosFijosMes: Number(fijos.totales), gastosFijosCosteablesMes: Number(fijos.costeables) });
+}));
+
+router.put('/pesos-estacion', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler(async (req, res) => {
+  const pesos = Array.isArray(req.body.pesos) ? req.body.pesos : [];
+  if (!pesos.length) throw new ApiError(400, 'Envía los pesos por estación.');
+  for (const p of pesos) {
+    const n = Number(p.peso);
+    if (!p.estacion || typeof p.estacion !== 'string') throw new ApiError(400, 'Cada peso necesita su estación.');
+    if (!Number.isFinite(n) || n < 0 || n > 20) throw new ApiError(400, 'El peso de una estación debe ir de 0 a 20 (1 = una unidad normal).');
+  }
+  await withTransaction(async client => {
+    for (const p of pesos) {
+      // eslint-disable-next-line no-await-in-loop
+      await client.query(
+        `INSERT INTO pesos_estacion (sucursal_id, estacion, peso, actualizado_en) VALUES ($1,$2,$3,now())
+         ON CONFLICT (sucursal_id, estacion) DO UPDATE SET peso = EXCLUDED.peso, actualizado_en = now()`,
+        [req.sucursalId, String(p.estacion).trim().toLowerCase(), Math.round(Number(p.peso) * 100) / 100]);
+    }
+  });
+  const { rows } = await query('SELECT estacion, peso FROM pesos_estacion WHERE sucursal_id = $1 ORDER BY estacion', [req.sucursalId]);
+  res.json(rows);
 }));
 
 // Punto de equilibrio DE ESTA SEDE: cuántas bebidas hay que vender al mes/día

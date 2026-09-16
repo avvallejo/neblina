@@ -43,7 +43,8 @@ router.put('/config', asyncHandler(async (req, res) => {
 router.get('/cuentas', asyncHandler(async (req, res) => {
   const { rows } = await query(
     `SELECT c.*, fn_grupo_afecta_utilidad(c.grupo) AS afecta_utilidad,
-            (SELECT COUNT(*) FROM egresos e WHERE e.cuenta_contable_id = c.id AND NOT e.anulado) AS movimientos
+            (SELECT COUNT(*) FROM egresos e WHERE e.cuenta_contable_id = c.id AND NOT e.anulado) AS movimientos,
+            (SELECT COALESCE(SUM(g.monto_mensual),0) FROM gastos_fijos g WHERE g.cuenta_contable_id = c.id AND g.activo) AS gasto_fijo_mes
      FROM cuentas_contables c WHERE c.sucursal_id = $1 ORDER BY c.orden, c.nombre`, [req.sucursalId]);
   res.json(rows);
 }));
@@ -52,7 +53,12 @@ router.post('/cuentas', asyncHandler(async (req, res) => {
   if (!A.GRUPOS.includes(req.body.grupo)) throw new ApiError(400, 'Elige el grupo de la cuenta.');
   const { rows: [max] } = await query('SELECT COALESCE(MAX(orden),0) AS m FROM cuentas_contables WHERE sucursal_id = $1 AND grupo = $2', [req.sucursalId, req.body.grupo]);
   try {
-    const { rows } = await query('INSERT INTO cuentas_contables (sucursal_id, nombre, grupo, orden) VALUES ($1,$2,$3,$4) RETURNING *', [req.sucursalId, nombre, req.body.grupo, Number(max.m) + 1]);
+    // entra_al_costo: si no se indica, el trigger de la base pone lo sensato
+    // según el grupo (los gastos de operación sí; el resto no).
+    const { rows } = await query(
+      'INSERT INTO cuentas_contables (sucursal_id, nombre, grupo, orden, entra_al_costo) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [req.sucursalId, nombre, req.body.grupo, Number(max.m) + 1,
+        req.body.entraAlCosto === undefined ? null : !!req.body.entraAlCosto]);
     res.status(201).json(rows[0]);
   } catch (e) { if (e.code === '23505') throw new ApiError(409, 'Ya existe una cuenta con ese nombre.'); throw e; }
 }));
@@ -60,6 +66,9 @@ router.patch('/cuentas/:id', asyncHandler(async (req, res) => {
   const sets = []; const values = []; let i = 1;
   if (req.body.nombre !== undefined) { sets.push(`nombre = $${i++}`); values.push(cleanText(req.body.nombre, { required: true, field: 'el nombre de la cuenta', max: 80 })); }
   if (req.body.activo !== undefined) { sets.push(`activo = $${i++}`); values.push(!!req.body.activo); }
+  // ¿Los gastos de esta cuenta son costo del producto? (migración 34) Mueve el
+  // piso de los precios, nunca la utilidad ni el diezmo.
+  if (req.body.entraAlCosto !== undefined) { sets.push(`entra_al_costo = $${i++}`); values.push(!!req.body.entraAlCosto); }
   if (!sets.length) throw new ApiError(400, 'No se envió ningún campo para actualizar.');
   values.push(Number(req.params.id), req.sucursalId);
   try {

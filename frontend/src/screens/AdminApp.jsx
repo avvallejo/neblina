@@ -112,11 +112,15 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
       {revisiones && revisiones.length > 0 && (
         <div className="reprecio-banner">
           <div className="reprecio-head"><AlertTriangle size={15} /> {revisiones.length} precio(s) por revisar</div>
-          <div className="reprecio-sub">Revisa el precio sugerido o conserva el actual con "Mantener precio". Si lo mantienes, el aviso se oculta hasta que cambie la receta o el costo de sus insumos.</div>
+          <div className="reprecio-sub">El sugerido sale del margen de contribución que aplica a cada producto (propio, de su categoría o el general). Revísalo o conserva el actual con "Mantener precio": el aviso se oculta hasta que cambie la receta, el costo de sus insumos o ese margen.</div>
           {revisiones.map(r => (
             <div key={r.id} className="reprecio-row">
               <span>{r.icono} {r.nombre}</span>
-              <span className="reprecio-detalle">costo ${Number(r.costo_total).toFixed(2)} · margen {Number(r.margen_aplicado)}% · ${Number(r.precio_base).toFixed(2)} → ${Number(r.precio_sugerido).toFixed(2)}</span>
+              <span className="reprecio-detalle">
+                insumo ${Number(r.costo_directo).toFixed(2)} · margen {Number(r.margen_aplicado)}%
+                {r.margen_origen === 'producto' ? ' (propio)' : r.margen_origen === 'categoria' ? ` (${r.categoria_nombre})` : ' (sede)'}
+                {r.piso_manda ? ' · manda el piso' : ''} · ${Number(r.precio_base).toFixed(2)} → ${Number(r.precio_sugerido).toFixed(2)}
+              </span>
               <div className="reprecio-actions">
                 <button className="btn-secondary small" disabled={guardandoPrecio} onClick={() => decidirPrecio(r, onMantenerPrecio)}>Mantener precio</button>
                 <button className="btn-primary small" disabled={guardandoPrecio} onClick={() => decidirPrecio(r, onAplicarSugerido)}>Aplicar ${Number(r.precio_sugerido).toFixed(2)}</button>
@@ -558,25 +562,31 @@ function OpcionesSection({ addToast, onOpcionesChanged }) {
   );
 }
 
-/* ---------- Costos indirectos: gastos fijos + margen y volumen ---------- */
+/* ---------- Costos y precios: margen de contribución, gastos fijos, pesos ---------- */
 
-// Los gastos fijos de la sede (renta, sueldos, luz…) se reparten entre las
-// unidades estimadas al mes: ese cociente es el "costo indirecto" que aparece
-// en "Costo y precio" de cada producto. Cualquier cambio aquí mueve el costo
-// total de TODO el catálogo, por eso al guardar se recargan los "precios por
-// revisar" (onCostosChanged).
+// El precio sugerido sale del MARGEN DE CONTRIBUCIÓN (producto → categoría →
+// sede): precio = insumo / (1 - margen). Los gastos fijos que son costo de
+// operar se reparten por peso de estación solo para marcar el PISO de cada
+// precio, y se cubren con la contribución del mes (punto de equilibrio).
+// Cualquier cambio aquí mueve los "precios por revisar" (onCostosChanged).
 function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
   const [gastos, setGastos] = useState(null);
   const [margen, setMargen] = useState(null);
   const [equilibrio, setEquilibrio] = useState(null);
+  const [categorias, setCategorias] = useState(null);
+  const [pesos, setPesos] = useState(null);
+  const [cuentas, setCuentas] = useState(null);
   const [editingGasto, setEditingGasto] = useState(null);
   const [margenOpen, setMargenOpen] = useState(false);
   const [verInactivos, setVerInactivos] = useState(false);
 
   const cargar = React.useCallback(async () => {
     try {
-      const [g, m, e] = await Promise.all([api.getGastosFijos(), api.getMargen(), api.getPuntoEquilibrio()]);
-      setGastos(g); setMargen(m); setEquilibrio(e);
+      const [g, m, e, cats, pe, cc] = await Promise.all([
+        api.getGastosFijos(), api.getMargen(), api.getPuntoEquilibrio(),
+        api.getCategoriasProducto(), api.getPesosEstacion(), api.getCuentasContables(),
+      ]);
+      setGastos(g); setMargen(m); setEquilibrio(e); setCategorias(cats); setPesos(pe); setCuentas(cc);
     } catch (e) { addToast(e.message, 'warn'); }
   }, [addToast]);
   useEffect(() => { cargar(); }, [cargar]);
@@ -591,96 +601,164 @@ function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
     try {
       if (payload.id) await api.actualizarGastoFijo(payload.id, { concepto: payload.concepto, categoria: payload.categoria, montoMensual: payload.montoMensual, cuentaContableId: payload.cuentaContableId, cuentaDineroId: payload.cuentaDineroId, diaPago: payload.diaPago });
       else await api.crearGastoFijo(payload);
-      await despuesDeCambiar(payload.id ? 'Gasto actualizado; revisa los precios sugeridos' : 'Gasto agregado; revisa los precios sugeridos');
+      await despuesDeCambiar(payload.id ? 'Gasto actualizado' : 'Gasto agregado');
       return true;
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };
   const toggleGasto = async g => {
     try {
       await api.actualizarGastoFijo(g.id, { activo: !g.activo });
-      await despuesDeCambiar(g.activo ? 'Gasto en pausa (no se prorratea mientras tanto)' : 'Gasto reactivado');
+      await despuesDeCambiar(g.activo ? 'Gasto en pausa' : 'Gasto reactivado');
     } catch (e) { addToast(e.message, 'warn'); }
   };
   const eliminarGasto = async g => {
     if (!window.confirm(`¿Eliminar "${g.concepto}" (${money(g.monto_mensual)} al mes)? Se quita definitivamente del cálculo de costos.`)) return;
     try {
       await api.eliminarGastoFijo(g.id);
-      await despuesDeCambiar('Gasto eliminado; revisa los precios sugeridos');
+      await despuesDeCambiar('Gasto eliminado');
     } catch (e) { addToast(e.message, 'warn'); }
   };
   const guardarMargen = async payload => {
     try {
       await api.guardarMargen(payload);
-      await despuesDeCambiar('Margen y volumen guardados; revisa los precios sugeridos');
+      await despuesDeCambiar('Margen general guardado; revisa los precios sugeridos');
       return true;
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };
+  const guardarMargenCategoria = async (cat, valor) => {
+    try {
+      await api.actualizarMargenCategoria(cat.id, valor === '' || valor === null ? null : Number(valor));
+      await despuesDeCambiar(`Margen de ${cat.nombre} guardado; revisa los precios sugeridos`);
+      return true;
+    } catch (e) { addToast(e.message, 'warn'); return false; }
+  };
+  const guardarPesos = async lista => {
+    try {
+      await api.guardarPesosEstacion(lista);
+      await despuesDeCambiar('Pesos por estación guardados');
+      return true;
+    } catch (e) { addToast(e.message, 'warn'); return false; }
+  };
+  const toggleCuentaCosto = async c => {
+    try {
+      await api.actualizarCuentaContable(c.id, { entraAlCosto: !c.entra_al_costo });
+      await despuesDeCambiar(`${c.nombre}: ${c.entra_al_costo ? 'fuera del' : 'dentro del'} costo de los productos`);
+    } catch (e) { addToast(e.message, 'warn'); }
+  };
 
-  if (!gastos || !margen) return <EmptyState icon={DollarSign} title="Cargando costos…" />;
+  if (!gastos || !margen || !pesos) return <EmptyState icon={DollarSign} title="Cargando costos…" />;
 
   const activos = gastos.filter(g => g.activo);
   const inactivos = gastos.filter(g => !g.activo);
   const totalMes = activos.reduce((acc, g) => acc + Number(g.monto_mensual || 0), 0);
-  const unidades = margen.unidades_estimadas_mes ? Number(margen.unidades_estimadas_mes) : null;
-  const indirecto = unidades ? totalMes / unidades : null;
+  const costeables = Number(pesos.gastosFijosCosteablesMes || 0);
+  const fueraDelCosto = totalMes - costeables;
+  const margenSede = Number(margen.porcentaje_ganancia_normal ?? 60);
   const real = margen.ventas_reales_promedio_mes;
   const porCategoria = GASTO_CATEGORIAS
     .map(c => ({ categoria: c, items: activos.filter(g => g.categoria === c) }))
     .filter(x => x.items.length > 0);
+  // Cuentas que pueden ser costo de operar: las de gasto. El resto (préstamo,
+  // impuestos, inversión, retiros, diezmo) nunca entra al precio.
+  const cuentasCosteables = (cuentas || []).filter(c => c.grupo === 'gasto_operacion' || c.grupo === 'gasto_financiero');
+  const margenReal = equilibrio && equilibrio.margen_contribucion_real !== null && equilibrio.margen_contribucion_real !== undefined
+    ? Number(equilibrio.margen_contribucion_real) : null;
 
   return (
     <>
       <div className="promo-summary-card">
-        <strong>Así se calcula el costo indirecto de cada bebida{sedeNombre ? ` en ${sedeNombre}` : ''}:</strong> gastos fijos del mes ÷ unidades que esperas vender al mes.
-        {' '}Hoy: {money(totalMes)} ÷ {unidades ? `${unidades} unidades` : '— (sin definir)'} = <strong>{indirecto === null ? 'sin prorratear' : `${money(indirecto)} por unidad`}</strong>.
-        Ese monto se suma al costo de la receta en "Costo y precio" de cada producto.
+        <strong>Así se fija el precio{sedeNombre ? ` en ${sedeNombre}` : ''}:</strong> cada producto tiene un <strong>margen de contribución</strong> —
+        de cada peso vendido, cuánto queda después de pagar sus insumos— y de ahí sale el precio sugerido:
+        {' '}<code>precio = insumo ÷ (1 − margen)</code>. Los gastos fijos ya no se le suman a cada producto con margen encima;
+        sirven de <strong>piso</strong> (nunca sugerir por debajo del costo con su parte de gastos) y se cubren con la contribución de todo el mes.
       </div>
 
       <div className="kpi-grid">
         <div className="kpi-card"><span className="kpi-label">Gastos fijos al mes</span><span className="kpi-value">{money(totalMes)}</span></div>
-        <div className="kpi-card"><span className="kpi-label">Unidades estimadas / mes</span><span className="kpi-value">{unidades ?? '—'}</span></div>
-        <div className="kpi-card"><span className="kpi-label">Costo indirecto por unidad</span><span className="kpi-value brand">{indirecto === null ? '—' : money(indirecto)}</span></div>
         <div className="kpi-card">
-          <span className="kpi-label">Punto de equilibrio</span>
-          <span className="kpi-value">{equilibrio && equilibrio.unidades_punto_equilibrio_dia ? `${Number(equilibrio.unidades_punto_equilibrio_dia)}/día` : '—'}</span>
-          {equilibrio && equilibrio.unidades_punto_equilibrio_mes && <span className="kpi-label" style={{ marginTop: 6, marginBottom: 0, textTransform: 'none', letterSpacing: 0 }}>{Number(equilibrio.unidades_punto_equilibrio_mes)} bebidas al mes para cubrir gastos</span>}
+          <span className="kpi-label">De ellos, costo del producto</span>
+          <span className="kpi-value brand">{money(costeables)}</span>
+          {fueraDelCosto > 0 && <span className="kpi-label" style={{ marginTop: 6, marginBottom: 0, textTransform: 'none', letterSpacing: 0 }}>{money(fueraDelCosto)} se pagan con la utilidad</span>}
+        </div>
+        <div className="kpi-card">
+          <span className="kpi-label">Margen de contribución real</span>
+          <span className="kpi-value">{margenReal === null ? '—' : `${margenReal}%`}</span>
+          <span className="kpi-label" style={{ marginTop: 6, marginBottom: 0, textTransform: 'none', letterSpacing: 0 }}>últimos 30 días</span>
+        </div>
+        <div className="kpi-card">
+          <span className="kpi-label">Venta para cubrir los fijos</span>
+          <span className="kpi-value">{equilibrio && equilibrio.venta_equilibrio_mes ? money(equilibrio.venta_equilibrio_mes) : '—'}</span>
+          {equilibrio && equilibrio.venta_30_dias !== undefined && <span className="kpi-label" style={{ marginTop: 6, marginBottom: 0, textTransform: 'none', letterSpacing: 0 }}>vendiste {money(equilibrio.venta_30_dias)}</span>}
         </div>
       </div>
 
-      {!unidades && (
+      {equilibrio && equilibrio.venta_equilibrio_mes && Number(equilibrio.utilidad_estimada_mes) < 0 && (
         <div className="reprecio-banner">
-          <div className="reprecio-head"><AlertTriangle size={15} /> Falta el volumen estimado</div>
-          <div className="reprecio-sub">Sin "unidades estimadas al mes" los gastos fijos no se reparten y el precio sugerido solo cubre los insumos. Defínelo en "Margen y volumen".</div>
+          <div className="reprecio-head"><AlertTriangle size={15} /> Con esta venta no alcanzas a cubrir los gastos fijos</div>
+          <div className="reprecio-sub">
+            En 30 días vendiste {money(equilibrio.venta_30_dias)} y tu contribución fue {money(equilibrio.contribucion_30_dias)},
+            contra {money(equilibrio.gastos_fijos_mes)} de gastos fijos. Necesitas vender {money(equilibrio.venta_equilibrio_mes)} al mes
+            (o subir márgenes, o bajar gastos) para quedar en cero.
+          </div>
         </div>
       )}
 
       <div className="admin-columns">
         <div>
-          <div className="section-title"><Percent size={15} /> Margen y volumen</div>
+          <div className="section-title"><Percent size={15} /> Margen de contribución por categoría</div>
+          <p className="field-hint" style={{ marginBottom: 10 }}>
+            Es el que heredan los productos de esa categoría cuando no tienen uno propio. Un producto con margen propio no se mueve de aquí.
+          </p>
           <div className="spec-table" style={{ marginBottom: 10 }}>
-            <div className="spec-row"><span className="spec-label">Margen general de la sucursal</span><span className="spec-value">{Number(margen.porcentaje_ganancia_normal ?? 60)}%</span></div>
-            <div className="spec-row"><span className="spec-label">Redondeo de precios</span><span className="spec-value">${Number(margen.redondeo ?? 1)}</span></div>
-            <div className="spec-row"><span className="spec-label">Unidades estimadas al mes</span><span className="spec-value">{unidades ?? '—'}</span></div>
-            <div className="spec-row"><span className="spec-label">Venta real promedio al mes</span><span className="spec-value">{real && Number(real.unidades_promedio_mes) > 0 ? `${Number(real.unidades_promedio_mes)} (${real.meses_de_historia} mes(es))` : 'Sin historial aún'}</span></div>
-          </div>
-          <button className="btn-secondary full" onClick={() => setMargenOpen(true)}><Pencil size={15} /> Editar margen y volumen</button>
-
-          {equilibrio && equilibrio.margen_contribucion_promedio !== null && equilibrio.margen_contribucion_promedio !== undefined && (
-            <>
-              <div className="section-title"><Scale size={15} /> Punto de equilibrio</div>
-              <div className="promo-summary-card">
-                Cada bebida deja en promedio <strong>{money(equilibrio.margen_contribucion_promedio)}</strong> después de pagar sus insumos.
-                {equilibrio.unidades_punto_equilibrio_mes
-                  ? <> Para cubrir {money(equilibrio.gastos_fijos_mes)} de gastos fijos necesitas vender <strong>{Number(equilibrio.unidades_punto_equilibrio_mes)} bebidas al mes</strong> (≈ {Number(equilibrio.unidades_punto_equilibrio_dia)} al día). A partir de ahí, todo es utilidad.</>
-                  : <> Con los precios actuales el catálogo no deja margen sobre los insumos: revisa los precios antes de confiar en el punto de equilibrio.</>}
+            {(categorias || []).map(c => (
+              <div className="spec-row" key={c.id}>
+                <span className="spec-label">{c.nombre}</span>
+                <span className="spec-value">
+                  <input
+                    className="text-input inline-number" type="number" min="1" max="99" step="0.5"
+                    aria-label={`Margen de ${c.nombre}`}
+                    defaultValue={c.margen_contribucion === null || c.margen_contribucion === undefined ? '' : Number(c.margen_contribucion)}
+                    placeholder={`${margenSede} (sede)`}
+                    onBlur={e => {
+                      const anterior = c.margen_contribucion === null || c.margen_contribucion === undefined ? '' : String(Number(c.margen_contribucion));
+                      if (String(e.target.value) !== anterior) guardarMargenCategoria(c, e.target.value);
+                    }}
+                  /> %
+                </span>
               </div>
-            </>
-          )}
+            ))}
+            <div className="spec-row"><span className="spec-label">Margen general de la sede</span><span className="spec-value">{margenSede}%</span></div>
+            <div className="spec-row"><span className="spec-label">Redondeo de precios</span><span className="spec-value">${Number(margen.redondeo ?? 1)}</span></div>
+            <div className="spec-row"><span className="spec-label">Venta real promedio al mes</span><span className="spec-value">{real && Number(real.unidades_promedio_mes) > 0 ? `${Number(real.unidades_promedio_mes)} unidades (${real.meses_de_historia} mes(es))` : 'Sin historial aún'}</span></div>
+          </div>
+          <button className="btn-secondary full" onClick={() => setMargenOpen(true)}><Pencil size={15} /> Editar margen general y redondeo</button>
+
+          <div className="section-title"><Scale size={15} /> Qué gastos entran al precio</div>
+          <p className="field-hint" style={{ marginBottom: 10 }}>
+            Solo mueve el <strong>piso</strong> de los precios. Lo que dejes fuera se sigue pagando y sigue bajando la utilidad y el diezmo:
+            simplemente no se le cobra al cliente con margen encima.
+          </p>
+          {cuentasCosteables.map(c => (
+            <div key={c.id} className="list-row">
+              <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
+                <div className="list-row-title">{c.nombre}</div>
+                <div className="list-row-sub">
+                  {Number(c.gasto_fijo_mes) > 0 ? `${money(c.gasto_fijo_mes)} al mes en gastos fijos` : 'Sin gasto fijo ligado'}
+                  {' · '}{c.entra_al_costo ? 'es costo del producto' : 'se paga con la utilidad'}
+                </div>
+              </div>
+              <div className="list-row-actions">
+                <button className={c.entra_al_costo ? 'link-toggle' : 'btn-secondary small'} onClick={() => toggleCuentaCosto(c)}>
+                  {c.entra_al_costo ? 'Sacar del costo' : 'Meter al costo'}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div>
           <div className="section-title"><Wallet size={15} /> Gastos fijos mensuales</div>
-          {activos.length === 0 && <EmptyState icon={Wallet} title="Sin gastos fijos registrados" subtitle="Agrega renta, sueldos, servicios… para que el precio sugerido los cubra." />}
+          {activos.length === 0 && <EmptyState icon={Wallet} title="Sin gastos fijos registrados" subtitle="Agrega renta, sueldos, servicios… para saber cuánto tienes que vender." />}
           {porCategoria.map(grupo => (
             <div key={grupo.categoria} style={{ marginBottom: 6 }}>
               <div className="list-row-sub" style={{ margin: '8px 0 6px', fontWeight: 800 }}>{grupo.categoria} · {money(grupo.items.reduce((a, g) => a + Number(g.monto_mensual || 0), 0))}</div>
@@ -688,7 +766,7 @@ function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
                 <div key={g.id} className="list-row">
                   <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
                     <div className="list-row-title">{g.concepto}</div>
-                    <div className="list-row-sub">{money(g.monto_mensual)} al mes{unidades ? ` · ${money(Number(g.monto_mensual) / unidades)} por unidad` : ''}</div>
+                    <div className="list-row-sub">{money(g.monto_mensual)} al mes{g.cuenta_nombre ? ` · ${g.cuenta_nombre}` : ''}</div>
                   </div>
                   <div className="list-row-actions">
                     <button className="icon-btn small" onClick={() => setEditingGasto(g)} aria-label="Editar gasto"><Pencil size={14} /></button>
@@ -710,7 +788,7 @@ function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
                 <div key={g.id} className="list-row" style={{ opacity: .7 }}>
                   <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
                     <div className="list-row-title">{g.concepto} • En pausa</div>
-                    <div className="list-row-sub">{g.categoria} · {money(g.monto_mensual)} al mes (no se prorratea)</div>
+                    <div className="list-row-sub">{g.categoria} · {money(g.monto_mensual)} al mes (no cuenta)</div>
                   </div>
                   <div className="list-row-actions">
                     <button className="icon-btn small" onClick={() => setEditingGasto(g)} aria-label="Editar gasto"><Pencil size={14} /></button>
@@ -721,6 +799,26 @@ function CostosSection({ addToast, onCostosChanged, sedeNombre }) {
               ))}
             </>
           )}
+
+          <div className="section-title"><SlidersHorizontal size={15} /> Peso de cada estación</div>
+          <p className="field-hint" style={{ marginBottom: 10 }}>
+            Cuánto del local y del tiempo consume un producto según dónde se prepara. Reparte los {money(costeables)} costeables
+            para calcular el piso de cada precio: una bebida embotellada que sale del refrigerador no puede cargar lo mismo que una hamburguesa.
+          </p>
+          <div className="spec-table">
+            {(pesos.pesos || []).map(p => (
+              <div className="spec-row" key={p.estacion}>
+                <span className="spec-label">{ESTACION_LABELS[p.estacion] || p.estacion} · {p.productos} producto(s)</span>
+                <span className="spec-value">
+                  <input
+                    className="text-input inline-number" type="number" min="0" max="20" step="0.05"
+                    aria-label={`Peso de ${p.estacion}`} defaultValue={Number(p.peso)}
+                    onBlur={e => { if (Number(e.target.value) !== Number(p.peso)) guardarPesos([{ estacion: p.estacion, peso: Number(e.target.value) }]); }}
+                  />
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -984,7 +1082,7 @@ export default function AdminApp(props) {
     proveedores: ['Proveedores', `${proveedores.length} proveedor(es)`],
     productos: ['Catálogo de productos', `${productosAdmin.length} producto(s)`],
     recetas: ['Recetas', 'Vista estándar por producto'],
-    costos: ['Costos indirectos', 'Gastos fijos, margen y punto de equilibrio'],
+    costos: ['Costos y precios', 'Margen de contribución, gastos fijos y punto de equilibrio'],
     contabilidad: ['Contabilidad', 'Egresos, estado de resultados, mayordomía y cuentas'],
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
     reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],

@@ -93,7 +93,13 @@ const { drawerSql } = require('../src/services/cashDrawer');
     assert.equal(r3.cancelacion_estado, 'autorizada'); assert.equal(r3.cancelado, true); assert.equal(r3.insumosDevueltos, 1);
     assert.equal(await ventasDia(), 0); assert.equal(await efectivoTurno(), 0);
     assert.equal(await stock(), 50); assert.equal(await disponible(), 50);
-    const { rows: [rev] } = await q("SELECT tipo, cantidad, revierte_movimiento_id, motivo FROM movimientos_inventario WHERE tipo = 'ajuste' AND revierte_movimiento_id IS NOT NULL");
+    // Solo la reversa DE ESTE pedido: la base puede traer cancelaciones previas.
+    const { rows: [rev] } = await q(
+      `SELECT mi.tipo, mi.cantidad, mi.revierte_movimiento_id, mi.motivo
+         FROM movimientos_inventario mi
+         JOIN movimientos_inventario orig ON orig.id = mi.revierte_movimiento_id
+         JOIN pedido_items pi ON pi.id = orig.pedido_item_id
+        WHERE mi.tipo = 'ajuste' AND pi.pedido_id = $1`, [t1.ped.id]);
     assert.equal(Number(rev.cantidad), 2); assert.match(rev.motivo, /duplicado/);
     assert.equal((await q("SELECT COUNT(*) AS n FROM pedido_items WHERE pedido_id = $1 AND estado = 'cancelado'", [t1.ped.id])).rows[0].n, '1');
     // Resolver dos veces no repite nada.

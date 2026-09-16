@@ -1174,7 +1174,7 @@ export function PrecioCostoSheet({ producto, onClose, onAplicar }) {
         setData(d);
         const propio = d.margen_producto !== null && d.margen_producto !== undefined;
         setMargenPropio(propio);
-        setMargen(String(Number(propio ? d.margen_producto : (d.margen_sucursal ?? 60))));
+        setMargen(String(Number(propio ? d.margen_producto : (d.margen_aplicado ?? d.margen_sucursal ?? 60))));
       })
       .catch(e => vivo && setErrorCarga(e.message));
     return () => { vivo = false; };
@@ -1195,19 +1195,25 @@ export function PrecioCostoSheet({ producto, onClose, onAplicar }) {
     );
   }
 
+  // Margen de CONTRIBUCIÓN: precio = insumo / (1 - margen), nunca por debajo
+  // del piso (insumo + su parte de gastos fijos costeables).
+  const costoDirecto = Number(data.costo_directo || 0);
   const costoTotal = Number(data.costo_total || 0);
   const redondeo = Number(data.redondeo || 1);
   const margenNum = Number(margen);
-  const margenValido = Number.isFinite(margenNum) && margenNum > 0 && margenNum <= 1000;
-  const precioCalc = margenValido ? Math.ceil((costoTotal * (1 + margenNum / 100)) / redondeo) * redondeo : null;
+  const margenValido = Number.isFinite(margenNum) && margenNum > 0 && margenNum < 100;
+  const precioPorMargen = margenValido ? costoDirecto / (1 - margenNum / 100) : null;
+  const precioCalc = precioPorMargen === null ? null : Math.ceil(Math.max(precioPorMargen, costoTotal) / redondeo) * redondeo;
+  const pisoManda = precioPorMargen !== null && costoTotal > precioPorMargen;
   const sinIndirecto = data.costo_indirecto_unitario === null || data.costo_indirecto_unitario === undefined;
+  const ORIGEN = { producto: 'propio de este producto', categoria: `de la categoría ${data.categoria_nombre || ''}`.trim(), sede: 'general de la sede' };
 
   const filas = [
-    ['Costo directo (receta)', data.costo_directo],
-    ['Costo indirecto (renta, sueldos…)', sinIndirecto ? null : data.costo_indirecto_unitario],
-    ['Costo total por unidad', costoTotal],
-    ['Precio de equilibrio (no perder)', data.precio_punto_equilibrio],
+    ['Costo de los insumos', data.costo_directo],
+    ['Su parte de los gastos fijos', sinIndirecto ? null : data.costo_indirecto_unitario],
+    ['Piso: por debajo de esto, pierdes', data.precio_punto_equilibrio],
     ['Precio actual en el menú', data.precio_base],
+    ['Margen que deja hoy ese precio', data.margen_actual === null || data.margen_actual === undefined ? null : `${Number(data.margen_actual).toFixed(1)}%`, 'texto'],
   ];
 
   const aplicar = async () => {
@@ -1223,38 +1229,47 @@ export function PrecioCostoSheet({ producto, onClose, onAplicar }) {
   return (
     <Sheet title={`Costo y precio: ${producto.name}`} onClose={onClose}>
       <div className="spec-table" style={{ marginBottom: 16 }}>
-        {filas.map(([etiqueta, valor]) => (
+        {filas.map(([etiqueta, valor, formato]) => (
           <div key={etiqueta} className="spec-row">
             <span className="spec-label">{etiqueta}</span>
-            <span className="spec-value">{valor === null || valor === undefined ? '—' : `$${Number(valor).toFixed(2)}`}</span>
+            <span className="spec-value">{valor === null || valor === undefined ? '—' : formato === 'texto' ? valor : `$${Number(valor).toFixed(2)}`}</span>
           </div>
         ))}
       </div>
       {sinIndirecto && (
         <div className="field-hint" style={{ marginBottom: 12 }}>
-          Aún no se prorratea el gasto fijo: define las "unidades estimadas al mes" en la sección Costos (Margen y volumen) para que el costo total incluya renta, sueldos, etc.
+          Todavía no se puede calcular el piso: hacen falta ventas de los últimos 30 días o las "unidades estimadas al mes" en Costos.
         </div>
       )}
 
       <div className="option-group">
-        <div className="option-label">Margen de ganancia</div>
+        <div className="option-label">Margen de contribución</div>
+        <div className="field-hint" style={{ marginBottom: 8 }}>
+          De cada peso vendido, cuánto queda después de pagar los insumos. Ahora mismo se aplica el {ORIGEN[data.margen_origen] || 'general'}.
+        </div>
         <div className="option-row" style={{ marginBottom: 8 }}>
           <button className={`option-chip ${!margenPropio ? 'selected' : ''}`}
-                  onClick={() => { setMargenPropio(false); setMargen(String(Number(data.margen_sucursal ?? 60))); }}>
-            De la sucursal ({Number(data.margen_sucursal ?? 60)}%)
+                  onClick={() => { setMargenPropio(false); setMargen(String(Number(data.margen_categoria ?? data.margen_sucursal ?? 60))); }}>
+            {data.margen_categoria !== null && data.margen_categoria !== undefined
+              ? `De ${data.categoria_nombre || 'su categoría'} (${Number(data.margen_categoria)}%)`
+              : `De la sucursal (${Number(data.margen_sucursal ?? 60)}%)`}
           </button>
           <button className={`option-chip ${margenPropio ? 'selected' : ''}`} onClick={() => setMargenPropio(true)}>
             Propio de este producto
           </button>
         </div>
-        <input className="text-input" type="number" min="1" max="1000" step="1" value={margen}
+        <input className="text-input" type="number" min="1" max="99" step="1" value={margen}
                disabled={!margenPropio}
                onChange={e => setMargen(e.target.value)} placeholder="%" />
-        {!margenValido && margen !== '' && <FormError>El margen debe ser un porcentaje entre 1 y 1000.</FormError>}
+        {!margenValido && margen !== '' && <FormError>El margen de contribución debe ser mayor que 0 y menor que 100.</FormError>}
       </div>
 
       <div className="precio-sugerido-card">
-        <span className="footer-label">Precio sugerido (costo + {margenValido ? margenNum : '—'}%)</span>
+        <span className="footer-label">
+          {pisoManda
+            ? 'Precio sugerido (manda el piso: con ese margen no pagas tus gastos fijos)'
+            : `Precio sugerido = ${money(costoDirecto)} ÷ (1 − ${margenValido ? margenNum : '—'}%)`}
+        </span>
         <span className="price-total big">{precioCalc === null ? '—' : `$${precioCalc.toFixed(2)}`}</span>
       </div>
 
@@ -1565,7 +1580,7 @@ export function MargenConfigSheet({ config, onClose, onSave }) {
 
   const submit = async () => {
     const m = Number(margen); const r = Number(redondeo); const u = unidades === '' ? null : Number(unidades);
-    if (!Number.isFinite(m) || m <= 0 || m > 1000) { setError('El margen debe ser un porcentaje entre 1 y 1000.'); return; }
+    if (!Number.isFinite(m) || m <= 0 || m >= 100) { setError('El margen de contribución debe ser mayor que 0 y menor que 100.'); return; }
     if (![0.5, 1, 5, 10].includes(r)) { setError('Elige un redondeo.'); return; }
     if (u !== null && (!Number.isInteger(u) || u < 1)) { setError('Las unidades estimadas al mes deben ser un número entero mayor a 0 (o déjalo vacío).'); return; }
     setError('');
@@ -1576,11 +1591,14 @@ export function MargenConfigSheet({ config, onClose, onSave }) {
   };
 
   return (
-    <Sheet title="Margen y volumen de la sucursal" onClose={onClose}>
+    <Sheet title="Margen general y redondeo" onClose={onClose}>
       <div className="option-group">
-        <div className="option-label">Margen de ganancia general (%)</div>
-        <input className="text-input" type="number" min="1" max="1000" step="1" inputMode="numeric" value={margen} onChange={e => setMargen(e.target.value)} />
-        <div className="field-hint">Se aplica sobre el costo total (receta + indirecto) a todos los productos que no tengan margen propio.</div>
+        <div className="option-label">Margen de contribución general (%)</div>
+        <input className="text-input" type="number" min="1" max="99" step="1" inputMode="numeric" value={margen} onChange={e => setMargen(e.target.value)} />
+        <div className="field-hint">
+          De cada peso vendido, cuánto queda después de pagar los insumos: <code>precio = insumo ÷ (1 − margen)</code>.
+          Con 60 %, un producto de $10 de insumo se sugiere en $25. Solo se usa cuando el producto y su categoría no tienen margen propio.
+        </div>
       </div>
       <div className="option-group">
         <div className="option-label">Redondear precios a</div>
@@ -1594,7 +1612,7 @@ export function MargenConfigSheet({ config, onClose, onSave }) {
         <div className="option-label">Unidades que esperas vender al mes</div>
         <input className="text-input" type="number" min="1" step="1" inputMode="numeric" value={unidades} onChange={e => setUnidades(e.target.value)} placeholder="Ej. 1200" />
         <div className="field-hint">
-          Con este número se reparten los gastos fijos entre cada bebida. Si lo pones muy alto, el costo indirecto se ve chico y podrías cobrar de menos; si lo pones bajo, tus precios serán conservadores.
+          Solo se usa mientras la sede no tiene 30 días de ventas: sirve para estimar el piso de los precios. En cuanto haya historia, el reparto se hace con lo que realmente vendiste.
           {real && Number(real.unidades_promedio_mes) > 0 && (
             <> Tu venta real promedio es de <strong>{Number(real.unidades_promedio_mes)} unidades/mes</strong> ({real.meses_de_historia} mes(es) de historia).</>
           )}

@@ -1,3 +1,4 @@
+import ProductImage from '../components/ProductImage.jsx';
 // PANEL ADMINISTRATIVO. Barra lateral con secciones; el ADMIN GENERAL además
 // tiene el switcher de sucursal, la administración de sucursales y el
 // comparativo entre sedes.
@@ -205,7 +206,7 @@ function ProductosSection({ productos, onEdit, onAdd, onToggleActivo, onDelete, 
         {lista.map(p => (
           <div key={p.id} className="list-row">
             <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
-              <div className="list-row-title">{p.icon} {p.name}{p.activo === false ? ' • Inactivo' : ''}</div>
+              <div className="list-row-title"><ProductImage product={p} size={32}/> {p.name}{p.activo === false ? ' • Inactivo' : ''}</div>
               <div className="list-row-sub">{p.cat} • {p.sizes ? `desde ${money(precioDesde(p))}` : money(p.price)} <span className={`estacion-tag ${p.estacion || 'barra'}`}>{ESTACION_LABELS[p.estacion || 'barra']}</span>{(p.tipo === 'alimento' || p.tipo === 'snack') && <span className="tipo-tag">{TIPO_PRODUCTO_LABELS[p.tipo]}</span>}
                 {p.reventa && (
                   <span className={`existencias-tag ${p.agotado ? 'agotado' : p.reventa.stock < p.reventa.stockMinimo ? 'bajo' : ''}`}>
@@ -237,7 +238,7 @@ function RecetasSection({ productos, onView, recetaOverrides }) {
         {productos.filter(p => p.tipo !== 'snack').map(p => (
           <button key={p.id} className="product-card" onClick={() => onView(p)}>
             {recetaOverrides[p.id] && recetaOverrides[p.id].esPersonalizada && <span className="custom-badge"><Pencil size={11} /></span>}
-            <span className="product-icon">{p.icon}</span>
+            <span className="product-icon"><ProductImage product={p}/></span>
             <span className="product-name">{p.name}</span>
             {p.activo === false && <span className="field-hint">Inactivo</span>}
           </button>

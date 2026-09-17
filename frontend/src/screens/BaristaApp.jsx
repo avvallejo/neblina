@@ -1,3 +1,4 @@
+import ProductImage from '../components/ProductImage.jsx';
 // BARRA DE PREPARACIÓN (Barista). Los tickets se muestran en una cuadrícula
 // que aprovecha pantallas grandes (varias columnas) y una columna en móvil.
 import React, { useState } from 'react';
@@ -35,7 +36,7 @@ function TicketCard({ ticket, now, onVerReceta, onIniciar, onTerminar, onMerma, 
       )}
 
       <div className="ticket-product">
-        <span className="ticket-product-icon">{product?.icon || '☕'}</span>
+        <span className="ticket-product-icon"><ProductImage product={product}/></span>
         <div>
           <div className="ticket-product-name">{product?.name} {ticket.qty > 1 && `x${ticket.qty}`}</div>
           <div className="ticket-product-sub">{customizationSummary(ticket) || 'Sin personalización'}</div>

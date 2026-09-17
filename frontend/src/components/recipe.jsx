@@ -1,3 +1,4 @@
+import ProductImage from './ProductImage.jsx';
 // Modal de receta (barista/cliente/admin) y modal de merma.
 import React, { useState, useEffect } from 'react';
 import {
@@ -50,7 +51,7 @@ export function RecipeModal({ ticket, product: selectedProduct, onClose, onFinis
         </div>
 
         <div className="recipe-hero">
-          <span className="recipe-hero-icon">{product?.icon}</span>
+          <span className="recipe-hero-icon"><ProductImage product={product}/></span>
           <h2>{product?.name}</h2>
           <span className="recipe-hero-sub">{customizationSummary(ticket) || 'Estándar'}</span>
         </div>

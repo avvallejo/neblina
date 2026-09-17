@@ -10,7 +10,8 @@ const recargo = n => Number(n) === 0 ? 'Incluido' : `${n > 0 ? '+' : '−'}${din
 function FotoBebida({ p }) {
   const clipId = useId();
   const asset = menuIllustration(p);
-  if (!asset) return p.imagen ? <img className="cm-photo cm-uploaded" src={p.imagen} alt={p.name}/> : <span className="cm-drink-icon">{p.icon || '☕'}</span>;
+  if (p.imagen) return <img className="cm-photo cm-uploaded" src={p.imagen} alt={p.name}/>;
+  if (!asset) return <span className="cm-drink-icon">{p.icon || '☕'}</span>;
   const [x, y, width, height] = asset.viewBox.split(' ').map(Number);
   return <svg className="cm-photo" role="img" aria-label={p.name} viewBox={asset.viewBox} preserveAspectRatio="xMidYMid meet">
     <defs><clipPath id={clipId}><rect x={x} y={y} width={width} height={height}/></clipPath></defs>

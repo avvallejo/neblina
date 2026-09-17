@@ -1,3 +1,4 @@
+import ProductImage from './ProductImage.jsx';
 // Piezas del menú/POS compartidas por Caja y Cliente.
 import React, { useState } from 'react';
 import { Coffee, ShoppingCart, Snowflake, Trash2, ClipboardList, AlertTriangle, Banknote, CreditCard, ArrowLeftRight, Wallet, Gift } from 'lucide-react';
@@ -213,7 +214,7 @@ export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDis
           const product = getProduct(item.productId);
           return (
             <div key={item.uid} className="cart-item">
-              <span className="cart-item-icon">{product?.icon || '☕'}</span>
+              <span className="cart-item-icon"><ProductImage product={product}/></span>
               <div className="cart-item-info">
                 <div className="cart-item-name">{product?.name}{item.isReward ? ' 🎁' : ''}</div>
                 <div className="cart-item-sub">{customizationSummary(item) || 'Sin personalización'}</div>

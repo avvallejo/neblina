@@ -1,3 +1,4 @@
+import ProductImage from '../components/ProductImage.jsx';
 // PANTALLA DEL NEGOCIO — menú para una TV o monitor en el local.
 // Se abre con una URL fija (ej. http://<host>:5175/?pantalla=menu&sucursal=<id>)
 // y se actualiza sola cada 10 segundos: al cambiar un precio o activar/desactivar
@@ -134,7 +135,7 @@ export default function MenuBoard({ sucursalId }) {
               <h2>{cat}</h2>
               {lista.map(p => (
                 <div key={p.id} className="menuboard-item">
-                  <span className="menuboard-item-icon">{p.icon}</span>
+                  <span className="menuboard-item-icon"><ProductImage product={p}/></span>
                   <span className="menuboard-item-name">{p.name}</span>
                   <span className="menuboard-dots" />
                   <span className="menuboard-item-price">{p.sizes ? `desde $${(p.price + minDelta).toFixed(0)}` : `$${p.price.toFixed(0)}`}</span>
@@ -282,7 +283,7 @@ function Pizarra({ brand, sedeNombre, cfg, categorias, productos, abierto, hora,
               const promo = p.precioBase > p.price;
               return (
                 <div key={p.id} className="pz-item">
-                  <span className="pz-icon">{p.icon}</span>
+                  <span className="pz-icon"><ProductImage product={p}/></span>
                   <div className="pz-item-body">
                     <div className="pz-item-line">
                       <span className="pz-item-name">{p.name}</span>

@@ -1146,7 +1146,7 @@ export function BrandingEditor({ nombreNegocio, logo, lema: lemaProp, onSave }) 
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={elegirLogo} />
         </div>
       </div>
-      <div className="branding-hint">El logo se ajusta solo a 256 px. Aparece en la pantalla de inicio; el título de la pestaña usa el nombre.</div>
+      <div className="branding-hint">El logo se ajusta solo a 256 px. En el menú de TV reemplaza al ícono y al nombre para no repetirlos. Si quitas el logo, vuelve la taza de café con el nombre del negocio.</div>
       <button className="btn-primary full" style={{ marginTop: 12 }} disabled={!cambiado || guardando} onClick={guardar}>
         {guardando ? 'Guardando…' : 'Guardar identidad'}
       </button>

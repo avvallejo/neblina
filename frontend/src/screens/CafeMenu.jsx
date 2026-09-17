@@ -66,7 +66,7 @@ export default function CafeMenu({ brand, sedeNombre, productos, opciones, cfg, 
   const changePage = delta => setPage(p => ((p % total) + delta + total) % total);
   const active = pages[current];
   const isNeblina = /neblina/i.test(brand.nombre);
-  const logo = brand.logo || (isNeblina ? '/images/neblina-logo-original.png' : '');
+  const logo = brand.logo || '';
   const CategoryIcon = iconoCategoria(active?.title || '');
   const tone = /frío|frapp/i.test(active?.title) ? 'cool' : /parrilla|cocina/i.test(active?.title) ? 'warm' : '';
   useEffect(() => {
@@ -84,7 +84,12 @@ export default function CafeMenu({ brand, sedeNombre, productos, opciones, cfg, 
     {isNeblina && <div className="cm-mountain-art" aria-hidden="true"><img src="/images/neblina-logo-original.png" alt=""/></div>}
     <div className="cm-mist" aria-hidden="true"/>
     <header className="cm-header">
-      <div className="cm-brand">{logo ? <img className="cm-brand-logo" src={logo} alt=""/> : <Coffee/>}<div><h1>{brand.nombre}</h1><span>{isNeblina ? 'ENTRE MONTAÑAS Y CAFÉ' : sedeNombre + ' · CAFÉ HECHO AL MOMENTO'}</span></div></div>
+      <div className="cm-brand">
+        {logo ? <img className="cm-brand-logo" src={logo} alt={brand.nombre}/> : <>
+          <Coffee aria-hidden="true"/>
+          <div><h1>{brand.nombre}</h1><span>{isNeblina ? 'ENTRE MONTAÑAS Y CAFÉ' : sedeNombre + ' · CAFÉ HECHO AL MOMENTO'}</span></div>
+        </>}
+      </div>
       <div className="cm-header-message"><span>Una pausa. Un buen café.</span><small>{cfg.lema || 'Hecho al momento, para disfrutar sin prisa'}</small></div>
       <div className="cm-status"><span className={abierto ? 'open' : ''}>{abierto ? '● Abierto' : 'Menú de la casa'}</span><small>PRECIOS EN MXN</small></div>
     </header>

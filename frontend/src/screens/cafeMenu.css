@@ -10,7 +10,7 @@
 .cm-mist{position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.4;background:radial-gradient(ellipse at 70% 100%,#c4b29023,transparent 50%),radial-gradient(ellipse at 5% 70%,#be9b6a18,transparent 60%);animation:cm-mist 24s ease-in-out infinite alternate}
 .cm-header{display:flex;align-items:center;justify-content:space-between;gap:2vw;border-bottom:1px solid #ba985b3b;padding-bottom:1vh}
 .cm-brand{display:flex;align-items:center;gap:1.2vw;min-width:0}
-.cm-brand>.cm-brand-logo{width:clamp(100px,12vw,230px);height:clamp(55px,6vw,116px);object-fit:contain;mix-blend-mode:screen;filter:brightness(1.7)}
+.cm-brand>.cm-brand-logo{width:clamp(100px,12vw,230px);height:clamp(55px,6vw,116px);object-fit:contain}
 .cm-brand>svg{width:3.5vw;height:3.5vw;color:var(--gold)}
 .cm-brand h1{font:600 clamp(26px,3vw,58px)/1.05 var(--font-display);letter-spacing:.07em;color:#f5ead7}
 .cm-brand span{display:block;font-size:clamp(8px,.72vw,14px);letter-spacing:.22em;color:var(--gold);margin-top:.6vh}

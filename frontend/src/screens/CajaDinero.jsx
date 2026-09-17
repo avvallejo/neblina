@@ -1,8 +1,9 @@
 import React,{useEffect,useState} from 'react';
 import {Sheet} from '../components/ui';
+import {Wallet, Receipt, CalendarDays, ArrowDownLeft, Gift} from 'lucide-react';
 import {money} from '../lib/helpers';
 import * as api from '../api/client';
-export default function CajaDinero({open,onClose,turnoAbierto,onToggleTurno,addToast}){
+export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTurno,addToast}){
  const [data,setData]=useState(null),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[fund,setFund]=useState(''),[busy,setBusy]=useState(false);
  const [plan,setPlan]=useState(null); // cupo de cortesías del mes (compartido por la sucursal)
  // Salidas de caja del turno (pagar al proveedor, hielo, un mandado): bajan el
@@ -17,15 +18,65 @@ export default function CajaDinero({open,onClose,turnoAbierto,onToggleTurno,addT
  const missing=data?.fondo_inicial===null;
  const unknown=Number(data?.pagos_sin_desglose||0)>0;
  const expected=data&&!missing&&!unknown?Number(data.fondo_inicial)+Number(data.ventas_efectivo)-Number(data.salidas_turno||0):null;
- const metrics=data&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:16,padding:16,border:'1px solid var(--border)',borderRadius:14,background:'var(--surface,#fff)',marginBottom:16}}>
-  <div><div className="footer-label">Ventas del día · todos los medios</div><strong>{money(data.ventas_dia)}</strong></div>
-  <div><div className="footer-label">Fondo inicial</div><strong>{missing?'Por registrar':money(data.fondo_inicial)}</strong></div>
-  <div><div className="footer-label">Ventas en efectivo del turno</div><strong>{money(data.ventas_efectivo)}</strong></div>
-  <div><div className="footer-label">Otros medios del turno</div><strong>{money(data.ventas_no_efectivo)}</strong></div>
-  <div><div className="footer-label">Salidas de caja del turno</div><strong>{Number(data.salidas_turno||0)>0?`− ${money(data.salidas_turno)}`:money(0)}</strong>{Number(data.num_salidas_turno||0)>0&&<div className="field-hint">{data.num_salidas_turno} salida(s)</div>}</div>
-  <div><div className="footer-label">Efectivo esperado en caja</div><strong style={{color:'var(--brand)',fontSize:22}}>{expected===null?'Pendiente':money(expected)}</strong></div>
-  <div><div className="footer-label">Cortesías del turno</div><strong>{Number(data.cortesias_turno||0)} · {money(data.cortesias_valor_turno||0)}</strong>{Number(data.cortesias_pendientes_turno||0)>0&&<div className="field-hint" style={{color:'var(--danger)'}}>{data.cortesias_pendientes_turno} pendiente(s) de autorización</div>}</div>
- </div>;
+ const abiertoTexto=data&&new Date(data.abierto_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City',weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit'});
+ const salidas_=Number(data?.salidas_turno||0), cortesias_=Number(data?.cortesias_turno||0);
+ // Resumen del turno: primero el dato que el cajero necesita (cuánto efectivo
+ // debe haber en el cajón) y con qué cuentas sale; lo demás, en fichas.
+ const metrics=data?<section className="caja-resumen">
+  <header className="caja-resumen-head">
+   <span className="caja-estado abierto"><span className="caja-estado-punto"/>Turno abierto</span>
+   <span className="field-hint">Desde el {abiertoTexto}</span>
+  </header>
+  <div className="caja-hero">
+   <span className="caja-hero-icono"><Wallet size={19}/></span>
+   <div>
+    <span className="footer-label">Efectivo esperado en caja</span>
+    <strong className="caja-hero-monto">{expected===null?'Pendiente':money(expected)}</strong>
+    <span className="caja-hero-cuenta">
+     {missing?'Falta registrar el fondo inicial de este turno.'
+      :unknown?`${data.pagos_sin_desglose} pago(s) mixto(s) sin desglose: el cálculo queda pendiente.`
+      :`Fondo ${money(data.fondo_inicial)} + efectivo ${money(data.ventas_efectivo)}${salidas_>0?` − salidas ${money(salidas_)}`:''}`}
+    </span>
+   </div>
+  </div>
+  <div className="caja-fichas">
+   <div className="caja-ficha">
+    <span className="caja-ficha-icono"><Receipt size={15}/></span>
+    <span className="footer-label">Ventas del turno</span>
+    <strong>{money(data.ventas_turno)}</strong>
+    <span className="field-hint">Efectivo {money(data.ventas_efectivo)} · otros {money(data.ventas_no_efectivo)}</span>
+   </div>
+   <div className="caja-ficha">
+    <span className="caja-ficha-icono"><CalendarDays size={15}/></span>
+    <span className="footer-label">Ventas del día</span>
+    <strong>{money(data.ventas_dia)}</strong>
+    <span className="field-hint">Todos los medios del día</span>
+   </div>
+   <div className="caja-ficha">
+    <span className="caja-ficha-icono"><ArrowDownLeft size={15}/></span>
+    <span className="footer-label">Salidas de caja</span>
+    <strong className={salidas_>0?'caja-ficha-resta':''}>{salidas_>0?`− ${money(salidas_)}`:money(0)}</strong>
+    <span className="field-hint">{Number(data.num_salidas_turno||0)>0?`${data.num_salidas_turno} salida(s) del turno`:'Sin salidas en este turno'}</span>
+   </div>
+   <div className="caja-ficha">
+    <span className="caja-ficha-icono"><Gift size={15}/></span>
+    <span className="footer-label">Cortesías</span>
+    <strong>{cortesias_} · {money(data.cortesias_valor_turno||0)}</strong>
+    {Number(data.cortesias_pendientes_turno||0)>0
+     ?<span className="field-hint caja-ficha-alerta">{data.cortesias_pendientes_turno} pendiente(s) de autorización</span>
+     :<span className="field-hint">No suman a las ventas</span>}
+   </div>
+  </div>
+ </section>:null;
+ // Sin turno abierto no hay efectivo que arquear: en vez de no mostrar nada,
+ // se dice por qué y se ofrece abrirlo.
+ const resumenCerrado=!data&&loaded&&<section className="caja-resumen cerrado">
+  <div className="caja-resumen-head">
+   <span className="caja-estado"><span className="caja-estado-punto"/>Turno cerrado</span>
+   <span className="field-hint">El resumen del efectivo aparece cuando hay un turno abierto. Ábrelo para registrar el fondo inicial y empezar a cobrar.</span>
+  </div>
+  {onOpen&&<button className="btn-secondary" onClick={onOpen}>Abrir turno</button>}
+ </section>;
  const planCortesias=plan&&<p className="field-hint">Cortesías de {plan.mesNombre} (cupo de la sucursal): {plan.usadas} de {plan.limite} usadas{plan.restantes>0?` · quedan ${plan.restantes}`:' · cupo agotado: las siguientes requieren autorización'}{plan.pendientes>0?` · ${plan.pendientes} pendiente(s) de autorizar`:''}.</p>;
  async function save(){setBusy(true);setError('');try{
   if(data){await api.registrarFondoTurno(data.id,Number(fund));addToast('Fondo inicial registrado, separado de las ventas','success');}
@@ -34,8 +85,8 @@ export default function CajaDinero({open,onClose,turnoAbierto,onToggleTurno,addT
  }catch(e){setError(e.message);}finally{setBusy(false);}}
  async function closeShift(){if(!window.confirm('¿Cerrar este turno? El fondo inicial y sus ventas quedarán guardados.'))return;setBusy(true);try{if(await onToggleTurno()!==false){await refresh();onClose();}}finally{setBusy(false);}}
  return <>
- {metrics}
- {error&&!open&&<p role="alert">No se pudo actualizar Caja: {error}</p>}
+ {!open&&(metrics||resumenCerrado)}
+ {error&&!open&&<p role="alert" className="form-error">No se pudo actualizar Caja: {error}</p>}
  {open&&<Sheet title={data?'Caja del turno':'Abrir turno'} onClose={onClose}>
   {metrics}
   {data&&<p className="field-hint">Turno abierto el {new Date(data.abierto_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}. Ventas totales del turno: {money(data.ventas_turno)} (las cortesías no suman).</p>}

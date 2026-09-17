@@ -355,7 +355,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         Agregando productos al ticket <strong>{addingToOrder.folio}</strong> · {destinoLabel(adaptPedido(addingToOrder))}.
         <button className="link-toggle" disabled={enviando} onClick={cancelarAgregado}>Cancelar selección</button>
       </div>}
-      <CajaDinero open={drawerOpen} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>
+      <CajaDinero open={drawerOpen} onOpen={()=>setDrawerOpen(true)} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>
       {screen === 'menu' && (
         <div className="pos-layout">
           <div>

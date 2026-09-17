@@ -10,6 +10,7 @@ const {
 } = require('../utils/catalogValidation');
 
 const { normalizarPresentacion, registrarCompra } = require('../services/purchases');
+const { guardarCategoriasUso } = require('../services/ingredientCategories');
 const { eliminarMateria } = require('../services/deleteMateria');
 const { ajustarStock } = require('../services/adjustStock');
 
@@ -31,7 +32,8 @@ router.get('/', asyncHandler(async (req, res) => {
   if (categoria) { values.push(categoria); condiciones.push(`cm.nombre = $${values.length}`); }
   const where = `WHERE ${condiciones.join(' AND ')}`;
   const { rows } = await query(
-    `SELECT m.*, cm.nombre AS categoria, p.nombre AS proveedor
+    `SELECT m.*, cm.nombre AS categoria, p.nombre AS proveedor,
+            ARRAY(SELECT u.categoria_id FROM materia_categorias_uso u WHERE u.materia_prima_id=m.id ORDER BY u.categoria_id) AS categorias_uso
      FROM materias_primas m
      JOIN categorias_materia_prima cm ON cm.id = m.categoria_id
      LEFT JOIN proveedores p ON p.id = m.proveedor_id
@@ -125,6 +127,7 @@ router.post('/', asyncHandler(async (req, res) => {
         presentacion ? presentacion.nombre : null,
       ]
     );
+    await guardarCategoriasUso(client, rows[0].id, req.sucursalId, req.body.categoriasUso);
     if (primeraCompra) {
       await registrarCompra(client, { materiaId: rows[0].id, sucursalId: req.sucursalId, usuarioId: req.auth.id, body: { ...primeraCompra, proveedorId: primeraCompra.proveedorId ?? proveedorId ?? null } });
       const { rows: [actual] } = await client.query('SELECT * FROM materias_primas WHERE id = $1', [rows[0].id]);
@@ -225,6 +228,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       addConversion('stock_actual', 'stock_actual');
     }
 
+    if (req.body.categoriasUso !== undefined) {
+      await guardarCategoriasUso(client, current.id, req.sucursalId, req.body.categoriasUso);
+      if (!sets.length) addValue('nombre', current.nombre);
+    }
     if (sets.length === 0) throw new ApiError(400, 'No se envió ningún campo para actualizar.');
 
     values.push(req.params.id);

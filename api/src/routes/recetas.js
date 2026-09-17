@@ -93,6 +93,17 @@ router.put('/:productoId', requireRole('admin'), asyncHandler(async (req, res) =
 
     if (insumosFijos !== undefined) {
       if (insumosFijos.length > 30) throw new ApiError(400, 'Una receta no puede tener más de 30 ingredientes fijos.');
+      // Conservar ingredientes existentes aunque se reclasifiquen; los nuevos
+      // deben estar activos y asignados a la categoría del producto.
+      for (const ins of insumosFijos) {
+        const permitido = await client.query(`SELECT m.id FROM materias_primas m
+          JOIN productos p ON p.id=$1 AND p.sucursal_id=m.sucursal_id
+          WHERE m.id=$2 AND m.sucursal_id=$3 AND (
+            EXISTS (SELECT 1 FROM receta_insumos_fijos r WHERE r.producto_id=p.id AND r.materia_prima_id=m.id)
+            OR (m.activo AND EXISTS (SELECT 1 FROM materia_categorias_uso u WHERE u.materia_prima_id=m.id AND u.categoria_id=p.categoria_id)))`,
+          [req.params.productoId, ins.materiaPrimaId, req.sucursalId]);
+        if (!permitido.rows.length) throw new ApiError(400, 'El ingrediente no está disponible para esta categoría. Asigna «Se utiliza en» desde Inventario.');
+      }
       await client.query('DELETE FROM receta_insumos_fijos WHERE producto_id = $1', [req.params.productoId]);
       for (const ins of insumosFijos) {
         const cantidad = Number(ins.cantidad);

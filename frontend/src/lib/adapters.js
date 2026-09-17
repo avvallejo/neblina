@@ -89,6 +89,7 @@ export function adaptMateria(m) {
     id: m.id,
     nombre: m.nombre,
     categoria: m.categoria,
+    categoriasUso: m.categorias_uso || [],
     unidad: normalizeUnidad(m.unidad),
     stockActual: Number(m.stock_actual),
     stockMinimo: Number(m.stock_minimo),

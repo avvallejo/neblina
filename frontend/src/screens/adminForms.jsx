@@ -296,6 +296,15 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
   const isNew = !item || !item.id;
   const [nombre, setNombre] = useState(item ? item.nombre || '' : '');
   const [categoria, setCategoria] = useState(item ? item.categoria || MATERIA_CATEGORIAS[0] : MATERIA_CATEGORIAS[0]);
+  const [categoriasUso, setCategoriasUso] = useState(item?.categoriasUso || []);
+  const [categoriasMenu, setCategoriasMenu] = useState([]);
+  const [errorCategorias, setErrorCategorias] = useState('');
+  useEffect(() => {
+    let alive = true;
+    api.getCategoriasProducto().then(rows => { if (alive) setCategoriasMenu(rows); })
+      .catch(e => { if (alive) setErrorCategorias(e.message); });
+    return () => { alive = false; };
+  }, []);
   const [catsInsumo, setCatsInsumo] = useState([...MATERIA_CATEGORIAS]);
   const crearCategoriaInsumo = async n => {
     const c = await api.crearCategoriaMateria(n);
@@ -378,7 +387,7 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
     const presPayload = presentacion ? { nombre: presentacion.nombre, cantidad: parseFloat(presentacion.cantidad), unidad: presentacion.unidad } : null;
 
     const payload = {
-      id: isNew ? undefined : item.id, nombre: nombre.trim(), categoria, unidad,
+      id: isNew ? undefined : item.id, nombre: nombre.trim(), categoria, categoriasUso, unidad,
       stockMinimo: minimoNum, stockMaximo: maximoNum, proveedorId: proveedorId || null,
       presentacion: presPayload,
       activo: isNew ? true : item.activo,
@@ -423,6 +432,14 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
       <div className="option-group">
         <div className="option-label">Categoría</div>
         <CategoriaChips opciones={catsInsumo} value={categoria} onChange={setCategoria} onCrear={crearCategoriaInsumo} placeholder="Ej. Panadería, Limpieza…" />
+      </div>
+      <div className="option-group">
+        <div className="option-label">Se utiliza en (elige una o varias)</div>
+        {errorCategorias && <FormError>{errorCategorias}</FormError>}
+        <div className="option-row">
+          {categoriasMenu.map(c => <button key={c.id} type="button" aria-pressed={categoriasUso.includes(c.id)} className={`option-chip ${categoriasUso.includes(c.id) ? 'selected' : ''}`} onClick={() => setCategoriasUso(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])}>{c.nombre}</button>)}
+        </div>
+        <div className="field-hint">Aparecerá al agregar ingredientes a recetas de estas categorías. Sin selección, no aparecerá como ingrediente nuevo. Mantiene una sola existencia compartida.</div>
       </div>
       <div className="option-group">
         <div className="option-label">¿En qué unidad lo cuentas?</div>
@@ -877,15 +894,21 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
   // inventario al preparar y suma su costo al precio sugerido.
   const [materias, setMaterias] = useState([]);
   const [insumos, setInsumos] = useState(null); // null = cargando
+  const [categoriaReceta, setCategoriaReceta] = useState(null);
+  const [errorCarga, setErrorCarga] = useState('');
 
   useEffect(() => {
     let vivo = true;
     Promise.all([
-      api.getMaterias().catch(() => []),
-      api.getReceta(product.id).catch(() => null),
-    ]).then(([mats, det]) => {
+      api.getMaterias(),
+      api.getReceta(product.id),
+      api.getCategoriasProducto(),
+    ]).then(([mats, det, categorias]) => {
       if (!vivo) return;
-      setMaterias(mats.filter(m => m.activo !== false).map(m => ({
+      setCategoriaReceta(categorias.find(c => c.nombre === product.cat)?.id || null);
+      setMaterias(mats.map(m => ({
+        activo: m.activo !== false,
+        categoriasUso: m.categorias_uso || [],
         id: m.id,
         nombre: m.nombre,
         unidad: normalizeUnidad(m.unidad),
@@ -896,13 +919,14 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
         cantidad: String(Number(f.cantidad)),
         unidad: normalizeUnidad(f.unidad),
       })));
-    });
+    }).catch(e => { if (vivo) setErrorCarga(e.message); });
     return () => { vivo = false; };
   }, [product.id]);
 
+  const disponibles = materias.filter(m => m.activo && m.categoriasUso.includes(categoriaReceta));
   const materiaDe = id => materias.find(m => m.id === id);
   const agregarInsumo = () => {
-    const libre = materias.find(m => !(insumos || []).some(i => i.materiaPrimaId === m.id));
+    const libre = disponibles.find(m => !(insumos || []).some(i => i.materiaPrimaId === m.id));
     if (!libre) return;
     setInsumos(ins => [...(ins || []), { materiaPrimaId: libre.id, cantidad: '', unidad: unidadRecetaDefault(libre.unidad) }]);
   };
@@ -1006,6 +1030,9 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
 
       <div className="option-group">
         <div className="option-label">{isAlimento ? 'Ingredientes de la receta (del inventario)' : 'Ingredientes fijos de este producto (del inventario)'}</div>
+        <div className="field-hint">Ingredientes para {product.cat}. Para habilitar un insumo, marca esta categoría en Inventario → Se utiliza en.</div>
+        {errorCarga && <FormError>{errorCarga}</FormError>}
+        {insumos !== null && !disponibles.length && <p>No hay insumos clasificados para {product.cat}. Los ingredientes existentes se conservan.</p>}
         {insumos === null ? (
           <div className="field-hint">Cargando ingredientes…</div>
         ) : (
@@ -1016,7 +1043,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
               return (
                 <div key={idx} className="insumo-row">
                   <select className="text-input" value={i.materiaPrimaId} onChange={e => cambiarInsumo(idx, { materiaPrimaId: e.target.value })}>
-                    {materias.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                    {materias.filter(mp => mp.id === i.materiaPrimaId || disponibles.some(d => d.id === mp.id)).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}{!disponibles.some(d => d.id === mp.id) ? " (ya incluido en la receta)" : ""}</option>)}
                   </select>
                   <input className="text-input" type="number" min="0" step={unidadStep(i.unidad)} placeholder="Cant."
                          value={i.cantidad} onChange={e => cambiarInsumo(idx, { cantidad: e.target.value })} />
@@ -1028,7 +1055,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
               );
             })}
             <div className="insumo-foot">
-              <button className="btn-secondary" onClick={agregarInsumo} disabled={materias.length === 0}><Plus size={14} /> Agregar ingrediente</button>
+              <button className="btn-secondary" onClick={agregarInsumo} disabled={!disponibles.some(m => !(insumos || []).some(i => i.materiaPrimaId === m.id))}><Plus size={14} /> Agregar ingrediente</button>
               {insumos.length > 0 && <span className="insumo-costo">Costo de estos ingredientes: <strong>${costoInsumos.toFixed(2)}</strong></span>}
             </div>
             <div className="field-hint" style={{ marginTop: 8 }}>{isAlimento ? 'Cada venta descuenta estas cantidades del inventario (más los extras que elija el cliente). Al guardar, el costo del producto y su precio sugerido se actualizan solos.' : 'Jarabes, chocolate, toppings… todo lo que lleva esta bebida además de los ingredientes base. Al guardar, el costo del producto y su precio sugerido se actualizan solos.'}</div>
@@ -1106,7 +1133,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
       <FormError>{error}</FormError>
       <div className="sheet-footer">
         <button className="btn-ghost" onClick={() => { onSave(product.id, null); onClose(); }}>Restaurar predeterminada</button>
-        <button className="btn-primary" onClick={submit}>Guardar receta</button>
+        <button className="btn-primary" disabled={insumos === null || !!errorCarga} onClick={submit}>Guardar receta</button>
       </div>
     </Sheet>
   );

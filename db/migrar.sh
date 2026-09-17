@@ -69,6 +69,7 @@ ya_tiene() {
     32) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'egresos'" ;;
     33) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'cancelacion_estado'" ;;
     34) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'pesos_estacion'" ;;
+    35) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'materia_categorias_uso'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

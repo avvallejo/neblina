@@ -364,7 +364,7 @@ export function crearMateria(m) {
   return request('/materias-primas', {
     method: 'POST',
     body: {
-      nombre: m.nombre, categoriaId: matCatId[m.categoria], unidad: normalizeUnidadMedida(m.unidad),
+      nombre: m.nombre, categoriasUso: m.categoriasUso, categoriaId: matCatId[m.categoria], unidad: normalizeUnidadMedida(m.unidad),
       stockActual: m.stockActual, stockMinimo: m.stockMinimo, stockMaximo: m.stockMaximo, costoUnitario: m.costoUnitario,
       proveedorId: m.proveedorId || null,
       presentacion: presentacionToApi(m.presentacion),
@@ -375,6 +375,7 @@ export function crearMateria(m) {
 }
 export function actualizarMateria(id, m) {
   const body = {};
+  if (m.categoriasUso !== undefined) body.categoriasUso = m.categoriasUso;
   if (m.nombre !== undefined) body.nombre = m.nombre;
   if (m.categoria !== undefined) body.categoriaId = matCatId[m.categoria];
   if (m.unidad !== undefined) body.unidad = normalizeUnidadMedida(m.unidad);

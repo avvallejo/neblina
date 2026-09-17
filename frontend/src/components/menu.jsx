@@ -186,12 +186,12 @@ export function DestinoPicker({ mesas = 4, value, onChange }) {
           </button>
         ))}
       </div>
-      {!value && <div className="field-hint">Elige mesa, barra o para llevar para poder cobrar.</div>}
+      {!value && <div className="field-hint">Elige mesa, barra o para llevar para enviar el pedido.</div>}
     </div>
   );
 }
 
-export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheckout, allowDiscount = true, ctaLabel, footerExtra, compact, destino, onDestino, mesas }) {
+export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDiscount, onCheckout, allowDiscount = true, ctaLabel, footerExtra, compact, destino, onDestino, mesas }) {
   const [discountOpen, setDiscountOpen] = useState(false);
   const updateQty = (uid, qty) => {
     if (qty <= 0) { setCart(c => c.filter(i => i.uid !== uid)); return; }
@@ -207,7 +207,7 @@ export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheck
   }
 
   return (
-    <div className="cart-view">
+    <fieldset className="cart-view" disabled={busy} style={{border:0, padding:0, margin:0, minWidth:0}}>
       <div className="cart-list">
         {cart.map(item => {
           const product = getProduct(item.productId);
@@ -244,7 +244,7 @@ export function CartView({ cart, setCart, discount, onAuthorizeDiscount, onCheck
       </div>
 
       {allowDiscount && discountOpen && <DiscountSheet current={discount} onClose={() => setDiscountOpen(false)} onApply={onAuthorizeDiscount} />}
-    </div>
+    </fieldset>
   );
 }
 
@@ -312,6 +312,7 @@ export function CheckoutView({ amounts, onConfirm, onBack, allowCortesia = false
   const [mixCash, setMixCash] = useState('');
   const [mixCard, setMixCard] = useState('');
   const [cortesiaOpen, setCortesiaOpen] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   const cashGiven = parseFloat(cash) || 0;
   const change = cashGiven - total;
@@ -382,12 +383,17 @@ export function CheckoutView({ amounts, onConfirm, onBack, allowCortesia = false
         </div>
       )}
 
+      <FormError>{paymentError}</FormError>
       <div className="sheet-footer" style={{ marginTop: 16 }}>
         <button className="btn-ghost" onClick={onBack} disabled={cobrando}>Volver</button>
         <button
           className="btn-primary"
           disabled={!canConfirm || cobrando}
-          onClick={() => cobrar({ method, importeEfectivo:method==='mixto'?Number(mixCash):undefined, cashGiven: method === 'efectivo' ? cashGiven : null, change: method === 'efectivo' ? change : null })}
+          onClick={async () => {
+            setPaymentError('');
+            try { await cobrar({ method, importeEfectivo:method==='mixto'?Number(mixCash):undefined, cashGiven: method === 'efectivo' ? cashGiven : null, change: method === 'efectivo' ? change : null }); }
+            catch (e) { setPaymentError(e.message); }
+          }}
         >
           {cobrando ? 'Cobrando…' : 'Confirmar pago'}
         </button>

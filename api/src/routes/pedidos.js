@@ -12,6 +12,7 @@ const { resolverDestino, entregarItemsDeCaja } = require('../services/stations')
 const { solicitarCancelacion } = require('../services/cancellations');
 
 const {cashPart}=require('../services/cashDrawer');
+const { addOrderItems, changeOrderItem } = require('../services/openOrders');
 const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'mixto', 'cortesia'];
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // personal y cliente operan pedidos, siempre dentro de SU sede
@@ -138,6 +139,21 @@ router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) =>
   res.json(rows);
 }));
 
+router.post('/:id/items', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
+  const pedido = await withTransaction(client => addOrderItems(client, {
+    id: req.params.id, sucursalId: req.sucursalId, auth: req.auth, items: req.body.items,
+  }));
+  res.status(201).json(pedido);
+}));
+
+router.patch('/:id/items/:itemId', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
+  const pedido = await withTransaction(client => changeOrderItem(client, {
+    id: req.params.id, itemId: req.params.itemId, sucursalId: req.sucursalId, auth: req.auth,
+    cantidad: req.body.cantidad, cantidadEsperada: req.body.cantidadEsperada,
+  }));
+  res.json(pedido);
+}));
+
 router.get('/:id', asyncHandler(async (req, res) => {
   const pedido = await query('SELECT v.*,p.registrado_en,p.motivo_registro,p.registro_manual FROM vw_pedidos_con_estado v JOIN pedidos p ON p.id=v.id WHERE v.id = $1 AND v.sucursal_id = $2', [req.params.id, req.sucursalId]);
   if (pedido.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
@@ -145,8 +161,13 @@ router.get('/:id', asyncHandler(async (req, res) => {
     throw new ApiError(403, 'No puedes ver un pedido que no es tuyo.');
   }
   const items = await query(
-    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono
+    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono,
+       ot.etiqueta AS tamano_etiqueta, ol.etiqueta AS leche_etiqueta, oc.etiqueta AS cafe_etiqueta,
+       COALESCE((SELECT json_agg(oe.etiqueta) FROM pedido_item_extras pie JOIN opciones_extra oe ON oe.id=pie.extra_id WHERE pie.pedido_item_id=pi.id), '[]') AS extras
      FROM pedido_items pi LEFT JOIN productos pr ON pr.id = pi.producto_id
+     LEFT JOIN opciones_tamano ot ON ot.id=pi.tamano_id
+     LEFT JOIN opciones_leche ol ON ol.id=pi.leche_id
+     LEFT JOIN opciones_cafe oc ON oc.id=pi.cafe_id
      WHERE pi.pedido_id = $1 ORDER BY pi.creado_en`,
     [req.params.id]
   );
@@ -157,13 +178,18 @@ router.get('/:id', asyncHandler(async (req, res) => {
 // Aquí — y solo aquí — el trigger de la base de datos acredita el punto de
 // fidelidad, nunca al crear el pedido.
 router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
-  const { metodoPago, montoRecibido, importeEfectivo, motivoCortesia } = req.body;
+  const { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado } = req.body;
   const metodo = metodoPago || 'efectivo';
   if (!METODOS_PAGO.includes(metodo)) throw new ApiError(400, 'Método de pago inválido.');
   const resultado = await withTransaction(async client => {
-    const actual = await client.query('SELECT total, cobrado, es_regalo_fidelidad FROM pedidos WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
+    const actual = await client.query('SELECT total, cobrado, es_regalo_fidelidad, cancelado, no_show, cancelacion_estado FROM pedidos WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
     if (actual.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
     if (actual.rows[0].cobrado) throw new ApiError(409, 'Este pedido ya estaba cobrado.');
+    if (actual.rows[0].cancelado || actual.rows[0].no_show || actual.rows[0].cancelacion_estado === 'pendiente') throw new ApiError(409, 'El ticket está cancelado, no recogido o pendiente de cancelación.');
+    if (totalEsperado !== undefined && (!Number.isFinite(Number(totalEsperado)) || Number(totalEsperado) !== Number(actual.rows[0].total))) {
+      throw new ApiError(409, 'El total cambió. Regresa al ticket y revisa el importe antes de cobrar.');
+    }
+
 
     // Cortesía sobre un pedido en línea: el total pasa a $0 (el subtotal
     // conserva el valor de lo entregado) y aplica el mismo cupo mensual.

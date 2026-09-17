@@ -274,9 +274,11 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
 }
 
 export function getPedidos(fecha) { return request(fecha ? `/pedidos?fecha=${encodeURIComponent(fecha)}` : '/pedidos'); }
+export function agregarItemsPedido(id, cart) { return request(`/pedidos/${id}/items`, { method: 'POST', body: { items: cart.map(itemToApi) } }); }
+export function cambiarCantidadPedido(id, itemId, cantidad, cantidadEsperada) { return request(`/pedidos/${id}/items/${itemId}`, { method: 'PATCH', body: { cantidad, cantidadEsperada } }); }
 export function getPedido(id) { return request(`/pedidos/${id}`); }
-export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo, motivoCortesia } = {}) {
-  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo, motivoCortesia } });
+export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado } = {}) {
+  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado } });
 }
 
 /* ============================================================

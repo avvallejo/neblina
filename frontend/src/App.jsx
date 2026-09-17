@@ -221,7 +221,7 @@ export default function App() {
     return { ...adaptPedido(r.pedido), cortesia: r.cortesia };
   };
   const cobrarPedidoApi = async (orderId, payInfo = null) => {
-    const r = await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia } : {});
+    const r = await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia, totalEsperado: payInfo.totalEsperado } : {});
     await refrescarPedidos(); await refrescarCola();
     addToast(r && r.cortesia ? 'Cortesía registrada' : 'Cobro confirmado', 'success');
     return r;
@@ -495,6 +495,7 @@ export default function App() {
         <CajaApp
           brand={brand}
           sedeNombre={sede ? sede.nombre : ''}
+          onOrderChanged={async () => { await refrescarPedidos(); await refrescarCola(); }}
           orders={pedidos} createOrder={crearPedidoCaja} cancelOrderFn={cancelarPedidoApi}
           confirmarEntrega={cobrarPedidoApi} marcarNoShow={noShowPedidoApi} addToast={addToast}
           onLogout={logout} turnoAbierto={turnoAbierto} onToggleTurno={toggleTurno} currentUser={currentUser} now={now}

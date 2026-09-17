@@ -345,6 +345,25 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 
 /* Turno (lista de ventas) */
 .turno-total { display: flex; justify-content: space-between; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 15px 18px; margin-bottom: 14px; font-weight: 800; box-shadow: var(--shadow-1); }
+.turno-total-label { display: flex; flex-direction: column; gap: 2px; }
+.turno-total-label .field-hint { margin-top: 0; font-weight: 600; }
+
+/* Ventas — barra de fecha: día anterior/siguiente, atajos y calendario. */
+.ventas-fecha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; box-shadow: var(--shadow-1); }
+.ventas-fecha-dia { display: flex; align-items: center; gap: 10px; }
+.ventas-fecha-texto { display: flex; flex-direction: column; line-height: 1.2; min-width: 150px; }
+.ventas-fecha-texto strong { font-size: 15px; font-weight: 800; }
+.ventas-fecha-texto .field-hint { margin-top: 2px; }
+.ventas-fecha-atajos { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ventas-fecha-input { width: auto; min-width: 152px; padding: 9px 12px; font-size: 13px; }
+.icon-btn:disabled { opacity: .35; }
+@media (max-width: 560px) {
+  .ventas-fecha { flex-direction: column; align-items: stretch; }
+  .ventas-fecha-dia { justify-content: space-between; }
+  .ventas-fecha-texto { text-align: center; }
+  .ventas-fecha-atajos { justify-content: space-between; }
+  .ventas-fecha-input { flex: 1; min-width: 0; }
+}
 .turno-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 13px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
 .turno-id { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
 .turno-sub { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }

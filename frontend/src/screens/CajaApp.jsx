@@ -5,7 +5,7 @@ import VentaDirecta from './VentaDirecta';
 import CajaDinero from './CajaDinero';
 import OpenTicketSheet from './OpenTicketSheet.jsx';
 import { adaptPedido } from '../lib/adapters';
-import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets, Gift, Ban } from 'lucide-react';
+import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets, Gift, Ban, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as api from '../api/client.js';
 import { getProduct, NO_SHOW_WARNING_MS, CORTESIA_ESTADO_LABELS, CANCELACION_ESTADO_LABELS, destinoLabel } from '../lib/catalog.js';
 import { money, fmtHora } from '../lib/helpers.js';
@@ -56,10 +56,18 @@ function DetalleVenta({id}) {
   </details>;
 }
 
+// FECHAS DEL DÍA DE NEGOCIO (America/Mexico_City), en texto YYYY-MM-DD. La
+// aritmética se hace en UTC a propósito: así el huso del navegador nunca mueve
+// el día que el cajero está consultando.
+const diaMx = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Mexico_City' }).format(new Date());
+const sumarDias = (f, n) => { const [y, m, d] = f.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+const fechaEnPalabras = (f, opciones) => { const [y, m, d] = f.split('-').map(Number); return new Intl.DateTimeFormat('es-MX', { ...opciones, timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, d))); };
+const capitalizar = t => t.charAt(0).toUpperCase() + t.slice(1);
+
 // `recargar` es un contador: cambia cuando la Caja cancela un ticket, para
 // volver a pedir las ventas del día que se está consultando.
 function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoShow, recargar = 0 }) {
-  const [fecha,setFecha]=useState(()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City'}).format(new Date()));
+  const [fecha,setFecha]=useState(diaMx);
   const [sales,setSales]=useState({fecha:null,orders:[]}),[error,setError]=useState('');
   React.useEffect(()=>{
     let alive=true;
@@ -74,11 +82,38 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
   const orders=loading?[]:sales.orders;
   const total = orders.filter(o => o.cobrado && !o.noShow && o.estado!=='cancelado').reduce((s, o) => s + o.total, 0);
 
+  const hoy = diaMx(), ayer = sumarDias(hoy, -1);
+  const esHoy = fecha === hoy, esAyer = fecha === ayer;
+  const tituloDia = esHoy ? 'Hoy' : esAyer ? 'Ayer' : capitalizar(fechaEnPalabras(fecha, { weekday: 'long' }));
+  const cobrados = orders.filter(o => o.cobrado && !o.noShow && o.estado !== 'cancelado').length;
+  const porCobrar = orders.filter(o => !o.cobrado && !o.cancelado && !o.noShow).length;
+
   return (
     <div style={{ maxWidth: 760 }}>
-      <label className="option-label">Consultar ventas del día<input className="text-input" type="date" value={fecha} onChange={e=>setFecha(e.target.value)}/></label>
+      <div className="ventas-fecha">
+        <div className="ventas-fecha-dia">
+          <button className="icon-btn small" aria-label="Día anterior" onClick={() => setFecha(f => sumarDias(f, -1))}><ChevronLeft size={17}/></button>
+          <div className="ventas-fecha-texto">
+            <strong>{tituloDia}</strong>
+            <span className="field-hint">{fechaEnPalabras(fecha, { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+          </div>
+          <button className="icon-btn small" aria-label="Día siguiente" disabled={fecha >= hoy} onClick={() => setFecha(f => sumarDias(f, 1))}><ChevronRight size={17}/></button>
+        </div>
+        <div className="ventas-fecha-atajos">
+          <button className={`option-chip ${esHoy ? 'selected' : ''}`} onClick={() => setFecha(hoy)}>Hoy</button>
+          <button className={`option-chip ${esAyer ? 'selected' : ''}`} onClick={() => setFecha(ayer)}>Ayer</button>
+          <input className="text-input ventas-fecha-input" type="date" max={hoy} value={fecha}
+                 aria-label="Consultar otra fecha" onChange={e => { if (e.target.value) setFecha(e.target.value); }}/>
+        </div>
+      </div>
       {error&&<p role="alert">{error}</p>}
-      <div className="turno-total"><span>Total del día</span><span className="price-total">{loading?'—':money(total)}</span></div>
+      <div className="turno-total">
+        <div className="turno-total-label">
+          <span>{esHoy ? 'Total de hoy' : 'Total del día'}</span>
+          <span className="field-hint">{loading ? 'Cargando…' : `${cobrados} cobrado(s)${porCobrar ? ` · ${porCobrar} por cobrar` : ''}`}</span>
+        </div>
+        <span className="price-total">{loading?'—':money(total)}</span>
+      </div>
       {loading&&!error&&<p role="status">Cargando ventas…</p>}
       {orders.map(o => {
         const status = o.estado;

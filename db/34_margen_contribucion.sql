@@ -111,7 +111,13 @@ COMMENT ON COLUMN categorias_producto.margen_contribucion IS
   'Margen de contribución objetivo de la categoría (%): de cada peso vendido, cuánto queda después de los insumos. precio = insumo / (1 - margen/100). NULL = usa el de la sede.';
 
 -- El margen del producto cambia de significado: era "% de ganancia sobre el
--- costo" (podía ser 200); ahora es margen de contribución (< 100).
+-- costo" (podía llegar a 1000); ahora es margen de contribución (< 100).
+-- Los valores que no caben con el significado nuevo se limpian ANTES de poner
+-- la restricción: si quedara alguno, el ALTER fallaría y la migración entera
+-- se abortaría en una base real. El producto queda sin margen propio y hereda
+-- el de su categoría (y más abajo se le siembra el que deja su precio actual).
+UPDATE productos SET margen_porcentaje = NULL
+ WHERE margen_porcentaje IS NOT NULL AND (margen_porcentaje >= 100 OR margen_porcentaje <= 0);
 ALTER TABLE productos DROP CONSTRAINT IF EXISTS chk_productos_margen;
 ALTER TABLE productos ADD CONSTRAINT chk_productos_margen
   CHECK (margen_porcentaje IS NULL OR (margen_porcentaje > 0 AND margen_porcentaje < 100));
@@ -149,8 +155,6 @@ BEGIN
   UPDATE productos p
      SET margen_porcentaje = LEAST(GREATEST(fn_contribucion_actual(p.id), 1), 95)
    WHERE p.activo AND fn_contribucion_actual(p.id) IS NOT NULL;
-  -- lo que quedó con el significado viejo (markup, puede pasar de 100) se limpia
-  UPDATE productos SET margen_porcentaje = NULL WHERE margen_porcentaje IS NOT NULL AND margen_porcentaje >= 100;
 
   -- b) cada categoría toma la mediana de sus productos: es lo que heredarán
   --    los productos nuevos y la referencia contra la que comparar

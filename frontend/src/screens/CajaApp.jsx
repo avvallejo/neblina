@@ -1,3 +1,4 @@
+import CoffeeGuide from '../components/CoffeeGuide.jsx';
 // PUNTO DE VENTA (Caja). En escritorio: menú + carrito lado a lado; en móvil:
 // pestañas Menú / Carrito / Turno en la navegación inferior.
 import React, { useState } from 'react';
@@ -345,11 +346,12 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
       title={title}
       subtitle={subtitle}
       wide
-      topRight={
+      topRight={<>
+        <CoffeeGuide />
         <button className={`turno-pill ${turnoAbierto ? 'open' : 'closed'}`} onClick={()=>setDrawerOpen(true)}>
           {turnoAbierto ? '● Turno abierto' : 'Abrir turno'}
         </button>
-      }
+      </>}
     >
       {addingToOrder && <div className="promo-summary-card">
         Agregando productos al ticket <strong>{addingToOrder.folio}</strong> · {destinoLabel(adaptPedido(addingToOrder))}.

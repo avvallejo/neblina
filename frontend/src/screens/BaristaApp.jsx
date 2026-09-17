@@ -1,3 +1,4 @@
+import CoffeeGuide from '../components/CoffeeGuide.jsx';
 import ProductImage from '../components/ProductImage.jsx';
 // BARRA DE PREPARACIÓN (Barista). Los tickets se muestran en una cuadrícula
 // que aprovecha pantallas grandes (varias columnas) y una columna en móvil.
@@ -108,6 +109,7 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
       roleLabel={rolEtiqueta({ rol: mostrador ? 'mostrador' : 'barista', estaciones })}
       sedeNombre={sedeNombre}
       onLogout={onLogout}
+      topRight={<CoffeeGuide />}
       title={titulo}
       subtitle={`${pendientes.length} pendientes • ${enPrep.length} en preparación · Orden de llegada`}
       wide

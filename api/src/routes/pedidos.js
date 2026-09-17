@@ -129,7 +129,7 @@ router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) =>
   // Caja muestre "N producto(s) — Nombre" sin pedir cada pedido por separado.
   const { rows } = await query(
     `SELECT v.*, c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
-            (SELECT COUNT(*) FROM pedido_items pi WHERE pi.pedido_id = v.id) AS num_items
+            (SELECT COUNT(*) FROM pedido_items pi WHERE pi.pedido_id = v.id AND pi.estado <> 'cancelado') AS num_items
      FROM vw_pedidos_con_estado v
      LEFT JOIN clientes c ON c.id = v.cliente_id
      WHERE v.sucursal_id = $1 AND ($2::date IS NULL OR (v.creado_en >= $2::date::timestamp AT TIME ZONE 'America/Mexico_City' AND v.creado_en < ($2::date+1)::timestamp AT TIME ZONE 'America/Mexico_City'))
@@ -149,7 +149,7 @@ router.post('/:id/items', requireRole('cajero', 'admin'), asyncHandler(async (re
 router.patch('/:id/items/:itemId', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
   const pedido = await withTransaction(client => changeOrderItem(client, {
     id: req.params.id, itemId: req.params.itemId, sucursalId: req.sucursalId, auth: req.auth,
-    cantidad: req.body.cantidad, cantidadEsperada: req.body.cantidadEsperada,
+    cantidad: req.body.cantidad, cantidadEsperada: req.body.cantidadEsperada, motivo: req.body.motivo, devuelto: req.body.devuelto,
   }));
   res.json(pedido);
 }));
@@ -190,6 +190,9 @@ router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (
       throw new ApiError(409, 'El total cambió. Regresa al ticket y revisa el importe antes de cobrar.');
     }
 
+
+    const contenido = await client.query("SELECT 1 FROM pedido_items WHERE pedido_id=$1 AND estado<>'cancelado' LIMIT 1", [req.params.id]);
+    if (!contenido.rows.length) throw new ApiError(409, 'El ticket está vacío. Agrega el producto de reemplazo antes de cobrar.');
 
     // Cortesía sobre un pedido en línea: el total pasa a $0 (el subtotal
     // conserva el valor de lo entregado) y aplica el mismo cupo mensual.

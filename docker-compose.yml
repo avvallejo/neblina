@@ -62,6 +62,7 @@ services:
       - ./db/34_margen_contribucion.sql:/docker-entrypoint-initdb.d/34_margen_contribucion.sql:ro
       - ./db/35_insumos_categorias_uso.sql:/docker-entrypoint-initdb.d/35_insumos_categorias_uso.sql:ro
       - ./db/36_estacion_por_linea.sql:/docker-entrypoint-initdb.d/36_estacion_por_linea.sql:ro
+      - ./db/37_devolucion_caja.sql:/docker-entrypoint-initdb.d/37_devolucion_caja.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

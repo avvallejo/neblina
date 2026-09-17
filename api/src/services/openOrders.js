@@ -1,5 +1,6 @@
 const { ApiError } = require('../utils/asyncHandler');
 const { prepareOrderLines } = require('./orderValidation');
+const { correctCashItem } = require('./cashItemReturns');
 const { entregarItemsDeCaja } = require('./stations');
 
 async function lockOpenOrder(client, id, sucursalId) {
@@ -28,7 +29,7 @@ async function audit(client, auth, order, action, before, after) {
 async function addOrderItems(client, { id, sucursalId, auth, items }) {
   const order = await lockOpenOrder(client, id, sucursalId);
   if (Array.isArray(items) && items.some(i => i.esRegalo === true)) throw new ApiError(400, 'Las recompensas se registran en un pedido separado.');
-  const count = await client.query('SELECT COUNT(*)::int AS n FROM pedido_items WHERE pedido_id=$1', [id]);
+  const count = await client.query("SELECT COUNT(*)::int AS n FROM pedido_items WHERE pedido_id=$1 AND estado<>'cancelado'", [id]);
   if (count.rows[0].n + (Array.isArray(items) ? items.length : 0) > 50) throw new ApiError(400, 'El ticket admite hasta 50 líneas; abre otro ticket.');
   const { lines } = await prepareOrderLines(client, items, null, sucursalId);
   const added = [];
@@ -46,14 +47,21 @@ async function addOrderItems(client, { id, sucursalId, auth, items }) {
   return updated;
 }
 
-async function changeOrderItem(client, { id, itemId, sucursalId, auth, cantidad, cantidadEsperada }) {
+async function changeOrderItem(client, { id, itemId, sucursalId, auth, cantidad, cantidadEsperada, motivo, devuelto }) {
   if (!Number.isInteger(cantidad) || cantidad < 0 || cantidad > 50) throw new ApiError(400,'La cantidad debe ser un entero entre 0 y 50.');
   const order = await lockOpenOrder(client,id,sucursalId);
   const { rows: [item] } = await client.query('SELECT * FROM pedido_items WHERE id=$1 AND pedido_id=$2 FOR UPDATE',[itemId,id]);
   if (!item) throw new ApiError(404,'El producto ya no está en este ticket. Actualiza el detalle.');
-  if (item.estacion_preparacion === 'caja' && item.estado === 'terminado') throw new ApiError(409,'Este producto se registró como entregado en caja y ya descontó inventario. Para corregirlo, solicita la cancelación del ticket con motivo y autorización; no está en preparación.');
-  if (item.estado !== 'pendiente') throw new ApiError(409,'Este producto ya comenzó a prepararse o fue entregado. No se puede quitar ni cambiar su cantidad; solicita la cancelación correspondiente.');
+  const esCaja = item.estacion_preparacion === 'caja' && item.estado === 'terminado';
+  if (!esCaja && item.estado !== 'pendiente') throw new ApiError(409,'Este producto ya comenzó a prepararse, fue entregado o retirado. Actualiza el ticket.');
   if (cantidadEsperada !== Number(item.cantidad)) throw new ApiError(409,'La cantidad cambió desde que abriste el ticket. Revisa el detalle actualizado.');
+  if (cantidad === Number(item.cantidad)) return order;
+  if (esCaja) {
+    await correctCashItem(client,{item,cantidad,auth,motivo,devuelto});
+    const updated = await recalculate(client,id);
+    await audit(client,auth,order,'corregir_entrega_caja',item,{itemId,cantidad,total:updated.total,motivo:motivo.trim(),devuelto:devuelto===true});
+    return updated;
+  }
   if (cantidad === 0) {
     const { rows: [count] } = await client.query("SELECT COUNT(*)::int AS n FROM pedido_items WHERE pedido_id=$1 AND estado<>'cancelado'",[id]);
     if (count.n <= 1) throw new ApiError(409,'Para quitar el último producto, usa Cancelar ticket.');

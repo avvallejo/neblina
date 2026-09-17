@@ -51,7 +51,7 @@ function DetalleVenta({id}) {
     {error&&<p>{error}</p>}{data&&<div style={{paddingTop:8,fontSize:13}}>
       {data.registro_manual&&<p>Captura directa · {data.motivo_registro}<br/>Ingresada al sistema: {new Date(data.registrado_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}</p>}
       {data.metodo_pago==='cortesia'&&<p>Cortesía · {CORTESIA_ESTADO_LABELS[data.cortesia_estado]||data.cortesia_estado} · valor {money(data.subtotal)}{data.cortesia_motivo&&<><br/>Motivo: {data.cortesia_motivo}</>}{data.cortesia_nota&&<><br/>Nota del administrador: {data.cortesia_nota}</>}</p>}
-      {data.items.map(i=><p key={i.id}>{i.cantidad} × {i.producto_nombre} · {money(i.precio_unitario)} c/u{i.motivo_precio&&<><br/>Motivo: {i.motivo_precio} {i.precio_catalogo!==null&&`(catálogo: ${money(i.precio_catalogo)})`}</>}</p>)}
+      {data.items.map(i=><p key={i.id}>{i.estado === 'cancelado' && 'Retirado · no se cobra · '}{i.cantidad} × {i.producto_nombre} · {money(i.precio_unitario)} c/u{i.motivo_precio&&<><br/>Motivo: {i.motivo_precio} {i.precio_catalogo!==null&&`(catálogo: ${money(i.precio_catalogo)})`}</>}</p>)}
     </div>}
   </details>;
 }

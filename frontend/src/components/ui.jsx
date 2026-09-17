@@ -16,7 +16,11 @@ export function useAccionUnica(accion) {
   const [enCurso, setEnCurso] = React.useState(false);
   const corriendo = React.useRef(false);
   const montado = React.useRef(true);
-  React.useEffect(() => () => { montado.current = false; }, []);
+  // Se marca montado en CADA pase del efecto: en desarrollo StrictMode monta,
+  // desmonta y vuelve a montar, y si solo se apagara en la limpieza el
+  // componente quedaría "desmontado" para siempre y el botón nunca se
+  // reactivaría (la hoja del ticket abierto se quedaba trabada).
+  React.useEffect(() => { montado.current = true; return () => { montado.current = false; }; }, []);
   const ejecutar = React.useCallback(async (...args) => {
     if (corriendo.current) return undefined;
     corriendo.current = true;

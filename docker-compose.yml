@@ -60,6 +60,7 @@ services:
       - ./db/32_contabilidad.sql:/docker-entrypoint-initdb.d/32_contabilidad.sql:ro
       - ./db/33_cancelaciones.sql:/docker-entrypoint-initdb.d/33_cancelaciones.sql:ro
       - ./db/34_margen_contribucion.sql:/docker-entrypoint-initdb.d/34_margen_contribucion.sql:ro
+      - ./db/35_insumos_categorias_uso.sql:/docker-entrypoint-initdb.d/35_insumos_categorias_uso.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

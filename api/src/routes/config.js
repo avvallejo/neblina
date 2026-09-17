@@ -5,11 +5,13 @@ const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = re
 const { CLAVE_CUPO, normalizarCupo, MAX_CUPO } = require('../services/courtesies');
 const { CLAVE_MESAS, normalizarMesas, MESAS_DEFAULT, MAX_MESAS } = require('../services/stations');
 
+const { normalizarPantallaPersonalizacion } = require('../services/tvMenuConfig');
+
 const router = express.Router();
 
 // Claves de configuración del negocio (en BD) que expone la app. Cada sede
 // tiene las suyas: nombre, logo y verificación por SMS son POR SUCURSAL.
-const CLAVES = ['sms_verificacion', 'nombre_negocio', 'logo', 'lema', 'pie_pantalla', 'pantalla_estilo', CLAVE_CUPO, CLAVE_MESAS];
+const CLAVES = ['sms_verificacion', 'nombre_negocio', 'logo', 'lema', 'pie_pantalla', 'pantalla_estilo', 'pantalla_personalizacion', CLAVE_CUPO, CLAVE_MESAS];
 
 // Lee la config de UNA sede y la entrega con nombres amigables para el front.
 async function leerConfig(sucursalId) {
@@ -28,6 +30,7 @@ async function leerConfig(sucursalId) {
     lema: typeof map.lema === 'string' ? map.lema : '',
     piePantalla: typeof map.pie_pantalla === 'string' ? map.pie_pantalla : '',
     pantallaEstilo: ['clasico','ilustrado'].includes(map.pantalla_estilo) ? map.pantalla_estilo : 'pizarra',
+    pantallaPersonalizacion: normalizarPantallaPersonalizacion(map.pantalla_personalizacion),
     // Cortesías: cupo mensual COMPARTIDO por sucursal para el rol cajero.
     // Sin fila = 0 (toda cortesía requiere autorización del administrador).
     cortesiasMesCajero: Number.isInteger(Number(map[CLAVE_CUPO])) && Number(map[CLAVE_CUPO]) >= 0 ? Math.min(Number(map[CLAVE_CUPO]), MAX_CUPO) : 0,
@@ -60,6 +63,7 @@ router.put('/', requireAuth, requireRole('admin'), resolveSucursal, asyncHandler
   if ('lema' in req.body) await guardar(req.sucursalId, 'lema', String(req.body.lema || '').slice(0, 80));
   if ('piePantalla' in req.body) await guardar(req.sucursalId, 'pie_pantalla', String(req.body.piePantalla || '').slice(0, 120));
   if ('pantallaEstilo' in req.body) await guardar(req.sucursalId, 'pantalla_estilo', ['clasico','ilustrado'].includes(req.body.pantallaEstilo) ? req.body.pantallaEstilo : 'pizarra');
+  if ('pantallaPersonalizacion' in req.body) await guardar(req.sucursalId, 'pantalla_personalizacion', normalizarPantallaPersonalizacion(req.body.pantallaPersonalizacion));
   if ('cortesiasMesCajero' in req.body) await guardar(req.sucursalId, CLAVE_CUPO, normalizarCupo(req.body.cortesiasMesCajero));
   if ('mesas' in req.body) await guardar(req.sucursalId, CLAVE_MESAS, normalizarMesas(req.body.mesas));
   res.json(await leerConfig(req.sucursalId));

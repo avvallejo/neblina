@@ -127,7 +127,7 @@ export default function App() {
         setSmsActivo(!!cfg.smsVerificacion);
         setNombreNegocio(cfg.nombreNegocio || '');
         setLogo(cfg.logo || '');
-        setPantallaCfg({ lema: cfg.lema || '', piePantalla: cfg.piePantalla || '', pantallaEstilo: cfg.pantallaEstilo || 'pizarra' });
+        setPantallaCfg({ lema: cfg.lema || '', piePantalla: cfg.piePantalla || '', pantallaEstilo: cfg.pantallaEstilo || 'pizarra', pantallaPersonalizacion: cfg.pantallaPersonalizacion || {} });
         setCortesiasMes(Number(cfg.cortesiasMesCajero || 0));
         setMesas(cfg.mesas === undefined ? 4 : Number(cfg.mesas));
       } catch { /* conserva el modo seguro */ }
@@ -420,7 +420,7 @@ export default function App() {
       const cfg = await api.setConfig(cambios);
       setNombreNegocio(cfg.nombreNegocio || '');
       setLogo(cfg.logo || '');
-      setPantallaCfg({ lema: cfg.lema || '', piePantalla: cfg.piePantalla || '', pantallaEstilo: cfg.pantallaEstilo || 'pizarra' });
+      setPantallaCfg({ lema: cfg.lema || '', piePantalla: cfg.piePantalla || '', pantallaEstilo: cfg.pantallaEstilo || 'pizarra', pantallaPersonalizacion: cfg.pantallaPersonalizacion || {} });
       setCortesiasMes(Number(cfg.cortesiasMesCajero || 0));
       setMesas(cfg.mesas === undefined ? 4 : Number(cfg.mesas));
       addToast('Configuración guardada', 'success');

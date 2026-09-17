@@ -1,9 +1,10 @@
 // Formularios del panel administrativo (hoja en móvil, modal en escritorio).
 import React, { useState, useEffect, useRef } from 'react';
 import { Coffee, Plus, Trash2 } from 'lucide-react';
+import TvPersonalizationEditor from './TvPersonalizationEditor.jsx';
 import * as api from '../api/client.js';
 import {
-  CATEGORIES, PRODUCTS, ROLE_LABELS, MATERIA_CATEGORIAS, PROVEEDOR_CATEGORIAS, SIZE_OPTIONS, ESTACION_LABELS, ESTACION_USUARIO_LABELS,
+  CATEGORIES, PRODUCTS, ROLE_LABELS, MATERIA_CATEGORIAS, PROVEEDOR_CATEGORIAS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, ESTACION_LABELS, ESTACION_USUARIO_LABELS,
 } from '../lib/catalog.js';
 import {
   normalizeUnidad, unidadDisplay, unidadFamilia, convertirCantidad, convertirCostoUnitario,
@@ -1783,11 +1784,12 @@ export function OpcionFormSheet({ tipo, opcion, materias, margen, redondeo, calc
 // Pantalla del negocio (TV): estilo y pie de página. Los precios y productos
 // salen del catálogo; aquí solo se elige cómo se ve.
 export function PantallaConfigEditor({ cfg, onSave }) {
+  const [personalizacion, setPersonalizacion] = useState(cfg?.pantallaPersonalizacion || {});
   const [estilo, setEstilo] = useState((cfg && cfg.pantallaEstilo) || 'pizarra');
   const [pie, setPie] = useState((cfg && cfg.piePantalla) || '');
   const [guardando, setGuardando] = useState(false);
-  useEffect(() => { setEstilo((cfg && cfg.pantallaEstilo) || 'pizarra'); setPie((cfg && cfg.piePantalla) || ''); }, [cfg]);
-  const cambiado = estilo !== ((cfg && cfg.pantallaEstilo) || 'pizarra') || pie.trim() !== ((cfg && cfg.piePantalla) || '');
+  useEffect(() => { setPersonalizacion(cfg?.pantallaPersonalizacion || {}); setEstilo((cfg && cfg.pantallaEstilo) || 'pizarra'); setPie((cfg && cfg.piePantalla) || ''); }, [cfg]);
+  const cambiado = JSON.stringify(personalizacion) !== JSON.stringify(cfg?.pantallaPersonalizacion || {}) || estilo !== ((cfg && cfg.pantallaEstilo) || 'pizarra') || pie.trim() !== ((cfg && cfg.piePantalla) || '');
   return (
     <div className="branding-editor" style={{ marginTop: 12 }}>
       <div className="option-label">Estilo de la pantalla</div>
@@ -1796,11 +1798,12 @@ export function PantallaConfigEditor({ cfg, onSave }) {
         <button type="button" className={`option-chip ${estilo === 'pizarra' ? 'selected' : ''}`} onClick={() => setEstilo('pizarra')}>Pizarra (oscuro, como el menú impreso)</button>
         <button type="button" className={`option-chip ${estilo === 'clasico' ? 'selected' : ''}`} onClick={() => setEstilo('clasico')}>Clásico</button>
       </div>
+      {estilo === 'ilustrado' && <TvPersonalizationEditor value={personalizacion} onChange={setPersonalizacion} products={PRODUCTS} options={{ cafes: COFFEE_OPTIONS, leches: MILK_OPTIONS, extras: EXTRA_OPTIONS }}/>}
       <div className="option-label" style={{ marginTop: 12 }}>Pie de la pantalla (frases separadas por •)</div>
       <input className="text-input" value={pie} maxLength={120} placeholder="Ej. Café de Chiapas • Hecho al momento • Con pasión" onChange={e => setPie(e.target.value)} />
       <div className="branding-hint">La pizarra muestra la descripción corta de cada producto (se captura al editar el producto) y tacha el precio normal cuando hay precio promocional. No muestra tamaños: el precio es el de la bebida estándar.</div>
       <button className="btn-primary full" style={{ marginTop: 12 }} disabled={!cambiado || guardando}
-              onClick={async () => { setGuardando(true); await onSave({ pantallaEstilo: estilo, piePantalla: pie.trim() }); setGuardando(false); }}>
+              onClick={async () => { setGuardando(true); try { await onSave({ pantallaEstilo: estilo, piePantalla: pie.trim(), pantallaPersonalizacion: personalizacion }); } finally { setGuardando(false); } }}>
         {guardando ? 'Guardando…' : 'Guardar pantalla'}
       </button>
     </div>

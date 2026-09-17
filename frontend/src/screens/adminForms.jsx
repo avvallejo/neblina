@@ -4,7 +4,7 @@ import { Coffee, Plus, Trash2 } from 'lucide-react';
 import TvPersonalizationEditor from './TvPersonalizationEditor.jsx';
 import * as api from '../api/client.js';
 import {
-  CATEGORIES, PRODUCTS, ROLE_LABELS, MATERIA_CATEGORIAS, PROVEEDOR_CATEGORIAS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, ESTACION_LABELS, ESTACION_USUARIO_LABELS,
+  CATEGORIES, PRODUCTS, ROLE_LABELS, MATERIA_CATEGORIAS, PROVEEDOR_CATEGORIAS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, ESTACION_LABELS,
 } from '../lib/catalog.js';
 import {
   normalizeUnidad, unidadDisplay, unidadFamilia, convertirCantidad, convertirCostoUnitario,
@@ -58,10 +58,9 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
   const [general, setGeneral] = useState(user ? user.sucursal_id === null && user.rol === 'admin' && !isNew : false);
   const [sucursalId, setSucursalId] = useState(user && user.sucursal_id ? user.sucursal_id : (sedeActivaId || ''));
   // Comanda que ve (barista / mostrador): barra, parrilla o ambas.
-  const [estaciones, setEstaciones] = useState(user && Array.isArray(user.estaciones) && user.estaciones.length ? user.estaciones : ['barra', 'parrilla']);
+  const [estaciones, setEstaciones] = useState(user && Array.isArray(user.estaciones) && user.estaciones.length ? user.estaciones : (isNew ? ['barra'] : ['barra', 'parrilla']));
   const [error, setError] = useState('');
   const prepara = rol === 'barista' || rol === 'mostrador';
-  const toggleEstacion = e => setEstaciones(prev => (prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]));
 
   const submit = () => {
     if (!nombre.trim()) { setError('Ingresa un nombre.'); return; }
@@ -92,21 +91,25 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
         <div className="option-label">Rol</div>
         <div className="option-row">
           {['cajero', 'barista', 'mostrador', 'admin'].map(r => (
-            <button key={r} className={`option-chip ${rol === r ? 'selected' : ''}`} onClick={() => { setRol(r); if (r !== 'admin') setGeneral(false); }}>{ROLE_LABELS[r]}</button>
+            <button key={r} className={`option-chip ${rol === r ? 'selected' : ''}`} onClick={() => { setRol(r); if (r !== 'admin') setGeneral(false); }}>{r === 'barista' ? 'Preparación (barista / parrillero)' : ROLE_LABELS[r]}</button>
           ))}
         </div>
         {rol === 'mostrador' && <div className="field-hint">Para sedes donde la misma persona levanta el pedido, cobra y prepara: entra con Caja y Barra en la misma sesión y puede cambiar entre ambas con un toque.</div>}
       </div>
       {prepara && (
         <div className="option-group">
-          <div className="option-label">Estaciones que atiende (su comanda)</div>
+          <div className="option-label">¿Qué prepara esta persona?</div>
           <div className="option-row">
-            {['barra', 'parrilla'].map(e => (
-              <button key={e} type="button" className={`option-chip ${estaciones.includes(e) ? 'selected' : ''}`} onClick={() => toggleEstacion(e)}>{ESTACION_USUARIO_LABELS[e]}</button>
+            {[
+              { label: 'Barista', value: ['barra'] },
+              { label: 'Parrillero', value: ['parrilla'] },
+              { label: 'Ambos', value: ['barra', 'parrilla'] },
+            ].map(option => (
+              <button key={option.label} type="button" aria-pressed={option.value.length === estaciones.length && option.value.every(e => estaciones.includes(e))} className={`option-chip ${option.value.length === estaciones.length && option.value.every(e => estaciones.includes(e)) ? 'selected' : ''}`} onClick={() => setEstaciones(option.value)}>{option.label}</button>
             ))}
           </div>
           <div className="field-hint">
-            Solo Barra = barista (bebidas y frappés). Solo Parrilla = parrillero (alimentos a la plancha). Ambas = ve todos los pedidos.
+            Barista ve los productos asignados a Barra. Parrillero ve los asignados a Parrilla. Ambos ve las dos estaciones, en orden de llegada.
             Lo que se marca como "se entrega en caja" no pasa por ninguna comanda.
           </div>
         </div>

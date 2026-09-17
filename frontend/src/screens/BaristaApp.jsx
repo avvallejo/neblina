@@ -75,9 +75,9 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
   const [mermaTicket, setMermaTicket] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
 
-  const dueKey = t => t.horaRecogida || t.createdAt;
-  const pendientes = tickets.filter(t => t.status === 'pendiente').sort((a, b) => dueKey(a) - dueKey(b));
-  const enPrep = tickets.filter(t => t.status === 'en_preparacion').sort((a, b) => dueKey(a) - dueKey(b));
+  const llegada = (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+  const pendientes = tickets.filter(t => t.status === 'pendiente').sort(llegada);
+  const enPrep = tickets.filter(t => t.status === 'en_preparacion').sort(llegada);
   const visible = tab === 'pendientes' ? pendientes : enPrep;
 
   const handleFinish = ticket => {
@@ -108,7 +108,7 @@ export default function BaristaApp({ brand, sedeNombre, tickets, startTicket, fi
       sedeNombre={sedeNombre}
       onLogout={onLogout}
       title={titulo}
-      subtitle={`${pendientes.length} pendientes • ${enPrep.length} en preparación`}
+      subtitle={`${pendientes.length} pendientes • ${enPrep.length} en preparación · Orden de llegada`}
       wide
     >
       {visible.length === 0 ? (

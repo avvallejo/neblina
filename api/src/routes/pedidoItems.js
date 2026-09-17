@@ -7,8 +7,7 @@ const { estacionesDe, ESTACIONES_USUARIO } = require('../services/stations');
 const router = express.Router();
 router.use(requireAuth, requireRole('barista', 'admin'), resolveSucursal);
 
-// Cola del barista, ordenada por urgencia real: lo inmediato primero, lo
-// programado después según su hora de recogida (misma lógica que el prototipo).
+// Cola por llegada de cada línea, incluidas las agregadas después a un ticket.
 // Cada quien ve SOLO su estación (barista → barra, parrillero → parrilla; con
 // ambas ve todo). ?estacion=barra|parrilla acota aún más (p. ej. un admin).
 router.get('/cola', asyncHandler(async (req, res) => {
@@ -39,19 +38,21 @@ router.get('/cola', asyncHandler(async (req, res) => {
      GROUP BY pi.id, pr.nombre, pr.icono, pr.tipo, pr.es_frio, pr.estacion, p.destino, p.mesa_numero, ot.codigo, ot.etiqueta,
               ol.codigo, ol.etiqueta, oc.codigo, oc.etiqueta, p.origen, p.hora_recogida, p.creado_en, p.folio,
               c.nombre, c.apellido
-     ORDER BY COALESCE(p.hora_recogida, pi.creado_en), pi.pedido_id, pi.creado_en`,
+     ORDER BY pi.creado_en, pi.id`,
     [req.sucursalId, estaciones]
   );
   res.json(rows);
 }));
 
 router.patch('/:id/iniciar', asyncHandler(async (req, res) => {
+  const estaciones = await estacionesDe(query, req.auth);
   const { rows } = await query(
     `UPDATE pedido_items SET estado = 'en_preparacion', iniciado_en = now(), barista_id = $1
      WHERE id = $2 AND estado = 'pendiente'
        AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $3)
+       AND EXISTS (SELECT 1 FROM productos pr WHERE pr.id = pedido_items.producto_id AND pr.estacion = ANY($4::text[]))
      RETURNING *`,
-    [req.auth.id, req.params.id, req.sucursalId]
+    [req.auth.id, req.params.id, req.sucursalId, estaciones]
   );
   if (rows.length === 0) throw new ApiError(409, 'El ticket no está pendiente (¿ya se inició o no existe?).');
   res.json(rows[0]);
@@ -62,12 +63,14 @@ router.patch('/:id/iniciar', asyncHandler(async (req, res) => {
 // aplica. Este endpoint no calcula nada de inventario — esa es justo la idea
 // de tenerlo en la base de datos: no se puede "olvidar" descontar.
 router.patch('/:id/terminar', asyncHandler(async (req, res) => {
+  const estaciones = await estacionesDe(query, req.auth);
   const { rows } = await query(
     `UPDATE pedido_items SET estado = 'terminado', terminado_en = now(), barista_id = COALESCE(barista_id, $1)
      WHERE id = $2 AND estado IN ('pendiente', 'en_preparacion')
        AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $3)
+       AND EXISTS (SELECT 1 FROM productos pr WHERE pr.id = pedido_items.producto_id AND pr.estacion = ANY($4::text[]))
      RETURNING *`,
-    [req.auth.id, req.params.id, req.sucursalId]
+    [req.auth.id, req.params.id, req.sucursalId, estaciones]
   );
   if (rows.length === 0) throw new ApiError(409, 'El ticket no se puede terminar desde su estado actual.');
   res.json(rows[0]);

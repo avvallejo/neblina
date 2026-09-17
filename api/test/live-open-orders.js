@@ -80,5 +80,47 @@ let server;
     req('PATCH',`/pedidos/${racing.id}/cobrar`,{metodoPago:'efectivo',montoRecibido:50,totalEsperado:50})]);
   assert((add.status===201 && pay.status===409)||(add.status===409 && pay.status===200), JSON.stringify({add,pay}));
   assert(Number((await one("SELECT count(*) FROM auditoria WHERE sucursal_id=$1 AND accion IN ('agregar_productos','quitar_producto','cambiar_cantidad')",[s.id])).count)>=5);
+  // Perfiles de preparación: creación/edición, permisos y llegada por línea.
+  const admin = await staff(s.id,'admin');
+  const profiles = [];
+  for (const estaciones of [['barra'], ['parrilla'], ['barra','parrilla']]) {
+    const result = await req('POST','/usuarios',{nombre:'QA estación',rol:'barista',pin:'5839',estaciones},admin);
+    assert.equal(result.status,201,JSON.stringify(result.data));
+    profiles.push(await one('SELECT * FROM usuarios WHERE id=$1',[result.data.id]));
+  }
+  const [barra, parrilla, ambos] = profiles;
+  const grillOrder = await create();
+  const grillItem = (await detail(grillOrder.id)).items[0];
+  const drink = await one(`INSERT INTO productos(nombre,categoria_id,tipo,precio_base,permite_tamanos,permite_leche,permite_tipo_cafe,permite_extras,sucursal_id,estacion)
+    VALUES('QA bebida',$1,'bebida',50,false,false,false,false,$2,'barra') RETURNING id`,[cp.id,s.id]);
+  r = await req('POST',`/pedidos/${grillOrder.id}/items`,{items:[{productoId:drink.id,cantidad:1}]});
+  assert.equal(r.status,201);
+  const drinkItem = (await detail(grillOrder.id)).items.find(i=>i.producto_id===drink.id);
+  await query("UPDATE pedido_items SET creado_en='2000-01-01' WHERE id=$1",[grillItem.id]);
+  await query("UPDATE pedidos SET hora_recogida=now()+interval '1 day' WHERE id=$1",[grillOrder.id]);
+  const queue = async user => {
+    const result = await req('GET','/pedido-items/cola',undefined,user);
+    assert.equal(result.status,200); return result.data;
+  };
+  assert((await queue(barra)).every(i=>i.estacion==='barra'));
+  assert((await queue(parrilla)).every(i=>i.estacion==='parrilla'));
+  const all = await queue(ambos);
+  assert(all.some(i=>i.id===drinkItem.id)); assert(all.some(i=>i.id===grillItem.id));
+  assert.equal(all[0].id,grillItem.id,'FIFO por llegada aunque tenga recogida futura');
+  for (let i=1;i<all.length;i++) assert(Date.parse(all[i-1].creado_en)<=Date.parse(all[i].creado_en));
+  r=await req('GET','/pedido-items/cola?estacion=parrilla',undefined,barra); assert.deepEqual(r.data,[]);
+  for (const action of ['iniciar','terminar']) {
+    r=await req('PATCH',`/pedido-items/${grillItem.id}/${action}`,{},barra); assert.equal(r.status,409);
+    r=await req('PATCH',`/pedido-items/${drinkItem.id}/${action}`,{},parrilla); assert.equal(r.status,409);
+    r=await req('PATCH',`/pedido-items/${grillItem.id}/${action}`,{},cashier2); assert.equal(r.status,403);
+  }
+  assert.equal((await one('SELECT estado FROM pedido_items WHERE id=$1',[grillItem.id])).estado,'pendiente');
+  r=await req('PATCH',`/pedido-items/${grillItem.id}/iniciar`,{},parrilla); assert.equal(r.status,200);
+  r=await req('PATCH',`/pedido-items/${drinkItem.id}/iniciar`,{},barra); assert.equal(r.status,200);
+  r=await req('PATCH',`/pedido-items/${grillItem.id}/terminar`,{},ambos); assert.equal(r.status,200);
+  r=await req('PATCH',`/pedido-items/${drinkItem.id}/terminar`,{},barra); assert.equal(r.status,200);
+  r=await req('PATCH',`/usuarios/${barra.id}`,{estaciones:['parrilla']},admin); assert.equal(r.status,200);
+  assert((await queue(barra)).every(i=>i.estacion==='parrilla'),'Cambio de estación aplicado en servidor');
+  console.log('PASS: perfiles barra/parrilla/ambos; creación y edición; cola filtrada; acciones restringidas; FIFO por línea');
   console.log('PASS: unpaid creation reaches kitchen; append same folio; extras/notes; quantities/removal; preparation and stock; discounts; stale payment; paid/cancelled/role/branch protection; concurrent add vs pay; audit');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{if(server)await new Promise(resolve=>server.close(resolve));await pool.end();});

@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import MenuBoard from './screens/MenuBoard.jsx';
+const PrintableMenu = React.lazy(() => import('./screens/PrintableMenu.jsx'));
 import './index.css';
 
 // ?pantalla=menu convierte esta URL en la PANTALLA DEL NEGOCIO (menú para una
@@ -11,6 +12,6 @@ const esPantallaMenu = params.get('pantalla') === 'menu';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {esPantallaMenu ? <MenuBoard sucursalId={params.get('sucursal')} /> : <App />}
+    {params.get('pantalla') === 'imprimir' ? <React.Suspense fallback={<p>Cargando menú imprimible…</p>}><PrintableMenu sucursalId={params.get('sucursal')}/></React.Suspense> : esPantallaMenu ? <MenuBoard sucursalId={params.get('sucursal')} /> : <App />}
   </React.StrictMode>
 );

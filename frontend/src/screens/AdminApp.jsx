@@ -1342,6 +1342,11 @@ export default function AdminApp(props) {
                 <a className="btn-secondary" style={{ textDecoration: 'none' }} href={`/?pantalla=menu&sucursal=${sedeActivaId || ''}`} target="_blank" rel="noreferrer">Abrir</a>
               </div>
             </div>
+            <div className="promo-summary-card" style={{marginTop:16}}>
+              <div className="section-title">Menú para imprimir o compartir</div>
+              <p>Descarga una carta en PDF con los precios vigentes, fotos y opciones de personalización. Elige papel claro o estilo Neblina.</p>
+              <a className="btn-primary" href={`/?pantalla=imprimir&sucursal=${sedeActivaId || ''}`} target="_blank" rel="noreferrer">Crear menú PDF</a>
+            </div>
             <PantallaConfigEditor cfg={pantallaCfg} onSave={onSaveBranding} />
 
             <div className="section-title">Acceso de clientes</div>

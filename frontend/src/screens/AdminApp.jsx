@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Lock, Droplets, Package, Coffee, ClipboardList, Receipt,
   Settings, Building2, BarChart3, Plus, Pencil, UserPlus, Sparkles, AlertTriangle,
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
-  Gift, BadgeCheck, BookOpen, Ban,
+  Gift, BadgeCheck, BookOpen, Ban, Search, X,
 } from 'lucide-react';
 import ContabilidadSection from './ContabilidadSection.jsx';
 import * as api from '../api/client.js';
@@ -26,31 +26,71 @@ import { Sheet } from '../components/ui.jsx';
 
 // INVENTARIO EN LISTA. Antes era una retícula de tarjetas a dos columnas y el
 // botón de agregar quedaba hasta abajo, después de recorrer todo el catálogo.
-// Ahora: una fila por insumo (se escanea de un vistazo) y el botón arriba, que
-// es donde se busca cuando llega mercancía nueva.
+// Ahora: una fila por insumo (se escanea de un vistazo), el botón arriba —que
+// es donde se busca cuando llega mercancía nueva— y un buscador al lado de las
+// categorías, porque con decenas de insumos el filtro por categoría no basta.
+
+// Para buscar "cafe" y que encuentre "Café": sin acentos y sin mayúsculas.
+const sinAcentos = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste }) {
   const [filtro, setFiltro] = useState('Todas');
+  const [busqueda, setBusqueda] = useState('');
   const categorias = ['Todas', ...new Set([...MATERIA_CATEGORIAS, ...materias.map(m => m.categoria).filter(Boolean)])];
-  const lista = filtro === 'Todas' ? materias : materias.filter(m => m.categoria === filtro);
+
+  // Se busca por nombre, categoría y proveedor: así "Leo" trae todo lo de ese
+  // proveedor y "vaso" todos los vasos, sin importar en qué categoría estén.
+  const q = sinAcentos(busqueda.trim());
+  const coincide = m => {
+    if (!q) return true;
+    const prov = proveedores.find(p => p.id === m.proveedorId);
+    return sinAcentos(`${m.nombre} ${m.categoria} ${prov ? prov.nombre : ''}`).includes(q);
+  };
+  const enCategoria = m => filtro === 'Todas' || m.categoria === filtro;
+  const lista = materias.filter(m => enCategoria(m) && coincide(m));
+  // Si no hay nada aquí pero sí en otras categorías, se ofrece ampliar la búsqueda.
+  const enOtras = q && lista.length === 0 ? materias.filter(coincide).length : 0;
   const bajos = lista.filter(m => m.activo && m.stockActual < m.stockMinimo).length;
+  const filtrando = q || filtro !== 'Todas';
+
   return (
     <>
       <div className="inv-toolbar">
         <button className="btn-primary" onClick={onAdd}><Plus size={15} /> Agregar insumo</button>
         <span className="inv-conteo">
-          {lista.length} insumo(s){filtro !== 'Todas' ? ` en ${filtro}` : ''}
+          {filtrando ? `${lista.length} de ${materias.length} insumo(s)` : `${materias.length} insumo(s)`}
           {bajos > 0 && <span className="bajo-tag" style={{ marginLeft: 8 }}><AlertTriangle size={11} /> {bajos} bajo(s)</span>}
         </span>
       </div>
 
-      <div className="cat-tabs">
-        {categorias.map(c => (
-          <button key={c} className={`cat-tab ${filtro === c ? 'active' : ''}`} onClick={() => setFiltro(c)}>{c}</button>
-        ))}
+      <div className="inv-filtros">
+        <div className="cat-tabs">
+          {categorias.map(c => (
+            <button key={c} className={`cat-tab ${filtro === c ? 'active' : ''}`} onClick={() => setFiltro(c)}>{c}</button>
+          ))}
+        </div>
+        <div className="inv-buscador">
+          <Search size={15} className="inv-lupa" aria-hidden="true" />
+          <input
+            className="text-input" type="search" placeholder="Buscar insumo, proveedor…"
+            aria-label="Buscar en el inventario" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          />
+          {busqueda && (
+            <button className="inv-limpiar" onClick={() => setBusqueda('')} aria-label="Limpiar búsqueda"><X size={14} /></button>
+          )}
+        </div>
       </div>
 
       {lista.length === 0
-        ? <EmptyState icon={Droplets} title="Sin insumos en esta categoría" subtitle="Agrega uno con el botón de arriba" />
+        ? (
+          <EmptyState
+            icon={Droplets}
+            title={q ? `Sin resultados para "${busqueda.trim()}"` : 'Sin insumos en esta categoría'}
+            subtitle={enOtras > 0
+              ? `Hay ${enOtras} coincidencia(s) en otras categorías`
+              : 'Agrega uno con el botón de arriba'}
+          />
+        )
         : (
           <div className="inv-list">
             {lista.map(m => {
@@ -85,6 +125,11 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
             })}
           </div>
         )}
+      {enOtras > 0 && (
+        <button className="btn-secondary full" style={{ marginTop: 10 }} onClick={() => setFiltro('Todas')}>
+          Buscar "{busqueda.trim()}" en todas las categorías ({enOtras})
+        </button>
+      )}
     </>
   );
 }

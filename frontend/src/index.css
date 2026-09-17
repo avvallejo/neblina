@@ -470,6 +470,20 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
    mercancía nueva no hay que recorrer todo el catálogo para encontrarlo. */
 .inv-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .inv-conteo { font-size: 12px; color: var(--ink-faint); font-weight: 700; display: inline-flex; align-items: center; }
+/* Categorías y buscador en el mismo renglón: las pestañas se desplazan y el
+   buscador queda fijo a la derecha. */
+.inv-filtros { display: flex; align-items: flex-start; gap: 12px; }
+.inv-filtros .cat-tabs { flex: 1 1 auto; min-width: 0;
+  /* Se desvanece el borde derecho para que se lea "hay más, deslízame" en vez
+     de una pestaña cortada justo contra el buscador. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.inv-buscador { position: relative; display: flex; align-items: center; flex: 0 0 270px; }
+.inv-buscador .text-input { min-height: 42px; border-radius: 999px; padding-left: 38px; padding-right: 36px; font-size: 13px; }
+.inv-buscador .text-input::-webkit-search-cancel-button { display: none; }
+.inv-lupa { position: absolute; left: 14px; color: var(--ink-faint); pointer-events: none; }
+.inv-limpiar { position: absolute; right: 8px; width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-deep); color: var(--ink-soft); border: 0; }
+.inv-limpiar:hover { color: var(--ink); }
 .inv-list { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 200px auto; gap: 10px 18px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); }
 .inv-row:first-child { border-top: 0; }
@@ -486,6 +500,9 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
   .inv-row { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
   .inv-acciones { justify-content: flex-start; }
   .inv-toolbar .btn-primary { flex: 1 1 100%; justify-content: center; }
+  /* No cabe al lado de las pestañas: el buscador pasa abajo, de ancho completo. */
+  .inv-filtros { flex-direction: column; gap: 0; }
+  .inv-buscador { flex: 1 1 auto; width: 100%; margin-bottom: 12px; }
 }
 .stock-alert-card { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--danger); border-radius: var(--radius); padding: 13px 15px; margin-bottom: 10px; }
 .stock-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; }

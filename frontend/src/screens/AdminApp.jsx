@@ -24,45 +24,67 @@ import { Sheet } from '../components/ui.jsx';
 
 /* ---------- Secciones de listado ---------- */
 
+// INVENTARIO EN LISTA. Antes era una retícula de tarjetas a dos columnas y el
+// botón de agregar quedaba hasta abajo, después de recorrer todo el catálogo.
+// Ahora: una fila por insumo (se escanea de un vistazo) y el botón arriba, que
+// es donde se busca cuando llega mercancía nueva.
 function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste }) {
   const [filtro, setFiltro] = useState('Todas');
   const categorias = ['Todas', ...new Set([...MATERIA_CATEGORIAS, ...materias.map(m => m.categoria).filter(Boolean)])];
   const lista = filtro === 'Todas' ? materias : materias.filter(m => m.categoria === filtro);
+  const bajos = lista.filter(m => m.activo && m.stockActual < m.stockMinimo).length;
   return (
     <>
+      <div className="inv-toolbar">
+        <button className="btn-primary" onClick={onAdd}><Plus size={15} /> Agregar insumo</button>
+        <span className="inv-conteo">
+          {lista.length} insumo(s){filtro !== 'Todas' ? ` en ${filtro}` : ''}
+          {bajos > 0 && <span className="bajo-tag" style={{ marginLeft: 8 }}><AlertTriangle size={11} /> {bajos} bajo(s)</span>}
+        </span>
+      </div>
+
       <div className="cat-tabs">
         {categorias.map(c => (
           <button key={c} className={`cat-tab ${filtro === c ? 'active' : ''}`} onClick={() => setFiltro(c)}>{c}</button>
         ))}
       </div>
-      <div className="rows-grid two">
-        {lista.map(m => {
-          const proveedor = proveedores.find(p => p.id === m.proveedorId);
-          const pct = stockPct(m.stockActual, m.stockMinimo);
-          const bajo = m.stockActual < m.stockMinimo;
-          return (
-            <div key={m.id} className="list-row">
-              <div className="list-row-main" style={{ display: 'block', flex: 1 }}>
-                <div className="list-row-title">{m.nombre}{!m.activo ? ' • Inactivo' : ''}</div>
-                <div className="list-row-sub">{m.categoria} • {proveedor ? proveedor.nombre : 'Sin proveedor'} • {money(m.costoUnitario)}/{unidadDisplay(m.unidad)}{m.presentacion ? ` • ${m.presentacion.nombre} de ${formatNumero(m.presentacion.cantidad)} ${unidadDisplay(m.presentacion.unidad)}` : ''}</div>
-                <div className="stock-bar"><div className={`stock-bar-fill ${bajo ? '' : 'ok'}`} style={{ width: `${pct}%` }} /></div>
-                <div className="materia-stock-label">
-                  {m.stockActual} / {m.stockMinimo} {unidadDisplay(m.unidad)}
-                  {bajo && <span className="bajo-tag"><AlertTriangle size={11} /> Bajo</span>}
+
+      {lista.length === 0
+        ? <EmptyState icon={Droplets} title="Sin insumos en esta categoría" subtitle="Agrega uno con el botón de arriba" />
+        : (
+          <div className="inv-list">
+            {lista.map(m => {
+              const proveedor = proveedores.find(p => p.id === m.proveedorId);
+              const pct = stockPct(m.stockActual, m.stockMinimo);
+              const bajo = m.stockActual < m.stockMinimo;
+              return (
+                <div key={m.id} className={`inv-row ${m.activo ? '' : 'inactivo'}`}>
+                  <div className="inv-datos">
+                    <div className="inv-nombre">{m.nombre}{!m.activo ? ' • Inactivo' : ''}</div>
+                    <div className="inv-sub">
+                      {m.categoria} • {proveedor ? proveedor.nombre : 'Sin proveedor'} • {money(m.costoUnitario)}/{unidadDisplay(m.unidad)}
+                      {m.presentacion ? ` • ${m.presentacion.nombre} de ${formatNumero(m.presentacion.cantidad)} ${unidadDisplay(m.presentacion.unidad)}` : ''}
+                    </div>
+                  </div>
+                  <div className="inv-stock">
+                    <div className="inv-stock-cifra">
+                      {m.stockActual} / {m.stockMinimo} {unidadDisplay(m.unidad)}
+                      {bajo && <span className="bajo-tag"><AlertTriangle size={11} /> Bajo</span>}
+                    </div>
+                    <div className="stock-bar"><div className={`stock-bar-fill ${bajo ? '' : 'ok'}`} style={{ width: `${pct}%` }} /></div>
+                  </div>
+                  <div className="inv-acciones">
+                    <button className="icon-btn small" onClick={() => onEdit(m)} aria-label={`Editar ${m.nombre}`}><Pencil size={14} /></button>
+                    <button className="link-toggle" onClick={() => onCompra(m)}>Compra</button>
+                    <button className="link-toggle" onClick={() => onAjuste(m)}>Ajustar</button>
+                    <button className="link-toggle" onClick={() => onToggleActivo(m.id, m.activo)}>{m.activo ? 'Desactivar' : 'Activar'}</button>
+                    <button className="link-danger" onClick={() => onDelete(m)}>Eliminar</button>
+                  </div>
                 </div>
-              </div>
-              <div className="list-row-actions" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
-                <button className="icon-btn small" onClick={() => onEdit(m)} aria-label="Editar"><Pencil size={14} /></button>
-                <button className="link-toggle" onClick={() => onCompra(m)}>Registrar compra</button>
-                <button className="link-toggle" onClick={() => onAjuste(m)}>Ajustar stock</button>
-                <button className="link-toggle" onClick={() => onToggleActivo(m.id, m.activo)}>{m.activo ? 'Desactivar' : 'Activar'}</button>
-                <button className="link-danger" onClick={() => onDelete(m)}>Eliminar</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <button className="btn-secondary" style={{ marginTop: 8 }} onClick={onAdd}><Plus size={15} /> Agregar materia prima</button>
+              );
+            })}
+          </div>
+        )}
     </>
   );
 }

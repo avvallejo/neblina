@@ -464,6 +464,29 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .stock-bar-fill.ok { background: var(--ok); }
 .materia-stock-label { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; font-weight: 600; }
 .bajo-tag { display: inline-flex; align-items: center; gap: 3px; color: var(--danger); font-weight: 800; }
+
+/* INVENTARIO EN LISTA (Admin → Inventario). Una fila por insumo en vez de
+   tarjetas a dos columnas, y el botón de agregar arriba: cuando llega
+   mercancía nueva no hay que recorrer todo el catálogo para encontrarlo. */
+.inv-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.inv-conteo { font-size: 12px; color: var(--ink-faint); font-weight: 700; display: inline-flex; align-items: center; }
+.inv-list { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 200px auto; gap: 10px 18px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); }
+.inv-row:first-child { border-top: 0; }
+.inv-row:hover { background: var(--surface-2); }
+.inv-row.inactivo { opacity: .62; }
+.inv-datos { min-width: 0; }
+.inv-nombre { font-weight: 800; font-size: 13.5px; }
+.inv-sub { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+.inv-stock-cifra { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.inv-stock .stock-bar { margin-top: 5px; }
+.inv-acciones { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+/* En pantallas angostas la fila se apila, pero sigue siendo una lista. */
+@media (max-width: 900px) {
+  .inv-row { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
+  .inv-acciones { justify-content: flex-start; }
+  .inv-toolbar .btn-primary { flex: 1 1 100%; justify-content: center; }
+}
 .stock-alert-card { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--danger); border-radius: var(--radius); padding: 13px 15px; margin-bottom: 10px; }
 .stock-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; }
 .stock-meta { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-faint); margin-top: 8px; gap: 8px; flex-wrap: wrap; }

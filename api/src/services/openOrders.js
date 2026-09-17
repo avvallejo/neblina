@@ -51,6 +51,7 @@ async function changeOrderItem(client, { id, itemId, sucursalId, auth, cantidad,
   const order = await lockOpenOrder(client,id,sucursalId);
   const { rows: [item] } = await client.query('SELECT * FROM pedido_items WHERE id=$1 AND pedido_id=$2 FOR UPDATE',[itemId,id]);
   if (!item) throw new ApiError(404,'El producto ya no está en este ticket. Actualiza el detalle.');
+  if (item.estacion_preparacion === 'caja' && item.estado === 'terminado') throw new ApiError(409,'Este producto se registró como entregado en caja y ya descontó inventario. Para corregirlo, solicita la cancelación del ticket con motivo y autorización; no está en preparación.');
   if (item.estado !== 'pendiente') throw new ApiError(409,'Este producto ya comenzó a prepararse o fue entregado. No se puede quitar ni cambiar su cantidad; solicita la cancelación correspondiente.');
   if (cantidadEsperada !== Number(item.cantidad)) throw new ApiError(409,'La cantidad cambió desde que abriste el ticket. Revisa el detalle actualizado.');
   if (cantidad === 0) {

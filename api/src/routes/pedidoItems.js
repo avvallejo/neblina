@@ -17,7 +17,7 @@ router.get('/cola', asyncHandler(async (req, res) => {
     estaciones = estaciones.filter(e => e === req.query.estacion);
   }
   const { rows } = await query(
-    `SELECT pi.*, pr.nombre AS producto_nombre, pr.icono, pr.tipo AS producto_tipo, pr.es_frio, pr.estacion,
+    `SELECT pi.*, pr.nombre AS producto_nombre, pr.icono, pr.tipo AS producto_tipo, pr.es_frio, pi.estacion_preparacion AS estacion,
             p.destino, p.mesa_numero,
             ot.codigo AS tamano_codigo, ot.etiqueta AS tamano_etiqueta,
             ol.codigo AS leche_codigo, ol.etiqueta AS leche_etiqueta,
@@ -34,8 +34,8 @@ router.get('/cola', asyncHandler(async (req, res) => {
      LEFT JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN pedido_item_extras pie ON pie.pedido_item_id = pi.id
      LEFT JOIN opciones_extra oe ON oe.id = pie.extra_id
-     WHERE pi.estado IN ('pendiente', 'en_preparacion') AND p.sucursal_id = $1 AND pr.estacion = ANY($2)
-     GROUP BY pi.id, pr.nombre, pr.icono, pr.tipo, pr.es_frio, pr.estacion, p.destino, p.mesa_numero, ot.codigo, ot.etiqueta,
+     WHERE pi.estado IN ('pendiente', 'en_preparacion') AND p.sucursal_id = $1 AND pi.estacion_preparacion = ANY($2)
+     GROUP BY pi.id, pr.nombre, pr.icono, pr.tipo, pr.es_frio, p.destino, p.mesa_numero, ot.codigo, ot.etiqueta,
               ol.codigo, ol.etiqueta, oc.codigo, oc.etiqueta, p.origen, p.hora_recogida, p.creado_en, p.folio,
               c.nombre, c.apellido
      ORDER BY pi.creado_en, pi.id`,
@@ -44,17 +44,25 @@ router.get('/cola', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
+async function explicarRechazo(req, estaciones, fallback) {
+  const { rows: [item] } = await query(`SELECT pi.estacion_preparacion FROM pedido_items pi
+    JOIN pedidos p ON p.id=pi.pedido_id WHERE pi.id=$1 AND p.sucursal_id=$2`,[req.params.id,req.sucursalId]);
+  if (!item) throw new ApiError(404,'Producto de comanda no encontrado.');
+  if (!estaciones.includes(item.estacion_preparacion)) throw new ApiError(403,'Este producto pertenece a otra estación. Actualiza tu comanda.');
+  throw new ApiError(409,fallback);
+}
+
 router.patch('/:id/iniciar', asyncHandler(async (req, res) => {
   const estaciones = await estacionesDe(query, req.auth);
   const { rows } = await query(
     `UPDATE pedido_items SET estado = 'en_preparacion', iniciado_en = now(), barista_id = $1
      WHERE id = $2 AND estado = 'pendiente'
        AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $3)
-       AND EXISTS (SELECT 1 FROM productos pr WHERE pr.id = pedido_items.producto_id AND pr.estacion = ANY($4::text[]))
+       AND estacion_preparacion = ANY($4::text[])
      RETURNING *`,
     [req.auth.id, req.params.id, req.sucursalId, estaciones]
   );
-  if (rows.length === 0) throw new ApiError(409, 'El ticket no está pendiente (¿ya se inició o no existe?).');
+  if (rows.length === 0) await explicarRechazo(req, estaciones, 'Este producto ya no está pendiente. Actualiza la comanda.');
   res.json(rows[0]);
 }));
 
@@ -68,11 +76,11 @@ router.patch('/:id/terminar', asyncHandler(async (req, res) => {
     `UPDATE pedido_items SET estado = 'terminado', terminado_en = now(), barista_id = COALESCE(barista_id, $1)
      WHERE id = $2 AND estado IN ('pendiente', 'en_preparacion')
        AND EXISTS (SELECT 1 FROM pedidos p WHERE p.id = pedido_items.pedido_id AND p.sucursal_id = $3)
-       AND EXISTS (SELECT 1 FROM productos pr WHERE pr.id = pedido_items.producto_id AND pr.estacion = ANY($4::text[]))
+       AND estacion_preparacion = ANY($4::text[])
      RETURNING *`,
     [req.auth.id, req.params.id, req.sucursalId, estaciones]
   );
-  if (rows.length === 0) throw new ApiError(409, 'El ticket no se puede terminar desde su estado actual.');
+  if (rows.length === 0) await explicarRechazo(req, estaciones, 'Este producto ya no puede terminarse desde su estado actual. Actualiza la comanda.');
   res.json(rows[0]);
 }));
 

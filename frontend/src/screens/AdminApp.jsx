@@ -37,6 +37,7 @@ const sinAcentos = t => String(t || '').toLowerCase().normalize('NFD').replace(/
 function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste }) {
   const [filtro, setFiltro] = useState('Todas');
   const [busqueda, setBusqueda] = useState('');
+  const [sinUso, setSinUso] = useState(false);
   const categorias = ['Todas', ...new Set([...MATERIA_CATEGORIAS, ...materias.map(m => m.categoria).filter(Boolean)])];
 
   // Se busca por nombre, categoría y proveedor: así "Leo" trae todo lo de ese
@@ -48,11 +49,11 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
     return sinAcentos(`${m.nombre} ${m.categoria} ${prov ? prov.nombre : ''}`).includes(q);
   };
   const enCategoria = m => filtro === 'Todas' || m.categoria === filtro;
-  const lista = materias.filter(m => enCategoria(m) && coincide(m));
+  const lista = materias.filter(m => enCategoria(m) && coincide(m) && (!sinUso || (m.activo && !m.categoriasUso?.length)));
   // Si no hay nada aquí pero sí en otras categorías, se ofrece ampliar la búsqueda.
   const enOtras = q && lista.length === 0 ? materias.filter(coincide).length : 0;
   const bajos = lista.filter(m => m.activo && m.stockActual < m.stockMinimo).length;
-  const filtrando = q || filtro !== 'Todas';
+  const filtrando = q || filtro !== 'Todas' || sinUso;
 
   return (
     <>
@@ -64,6 +65,8 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
         </span>
       </div>
 
+      <label className="field-hint" style={{display:'block',marginBottom:12}}><input type="checkbox" checked={sinUso} onChange={e=>setSinUso(e.target.checked)}/> Solo activos sin “Se utiliza en” ({materias.filter(m=>m.activo && !m.categoriasUso?.length).length})</label>
+      {sinUso && <p className="field-hint">Edita cada insumo para asignarle sus usos. Los ingredientes base y empaques tienen su configuración propia; no los agregues de nuevo como ingredientes fijos.</p>}
       <div className="inv-filtros">
         <div className="cat-tabs">
           {categorias.map(c => (

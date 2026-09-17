@@ -110,8 +110,8 @@ let server;
   for (let i=1;i<all.length;i++) assert(Date.parse(all[i-1].creado_en)<=Date.parse(all[i].creado_en));
   r=await req('GET','/pedido-items/cola?estacion=parrilla',undefined,barra); assert.deepEqual(r.data,[]);
   for (const action of ['iniciar','terminar']) {
-    r=await req('PATCH',`/pedido-items/${grillItem.id}/${action}`,{},barra); assert.equal(r.status,409);
-    r=await req('PATCH',`/pedido-items/${drinkItem.id}/${action}`,{},parrilla); assert.equal(r.status,409);
+    r=await req('PATCH',`/pedido-items/${grillItem.id}/${action}`,{},barra); assert.equal(r.status,403); assert.match(r.data.error || r.data.message,/otra estación/);
+    r=await req('PATCH',`/pedido-items/${drinkItem.id}/${action}`,{},parrilla); assert.equal(r.status,403);
     r=await req('PATCH',`/pedido-items/${grillItem.id}/${action}`,{},cashier2); assert.equal(r.status,403);
   }
   assert.equal((await one('SELECT estado FROM pedido_items WHERE id=$1',[grillItem.id])).estado,'pendiente');
@@ -121,6 +121,29 @@ let server;
   r=await req('PATCH',`/pedido-items/${drinkItem.id}/terminar`,{},barra); assert.equal(r.status,200);
   r=await req('PATCH',`/usuarios/${barra.id}`,{estaciones:['parrilla']},admin); assert.equal(r.status,200);
   assert((await queue(barra)).every(i=>i.estacion==='parrilla'),'Cambio de estación aplicado en servidor');
+  // La estación pertenece a la línea, no al catálogo mutable.
+  const stationOrder = await create();
+  const originalLine = (await detail(stationOrder.id)).items[0];
+  r=await req('PATCH',`/productos/${product.id}`,{estacion:'caja'},admin); assert.equal(r.status,200,JSON.stringify(r.data));
+  assert((await queue(parrilla)).some(i=>i.id===originalLine.id),'Cambiar catálogo no oculta pendientes');
+  r=await req('POST',`/pedidos/${stationOrder.id}/items`,{items:[line]}); assert.equal(r.status,201);
+  let stationLines=(await detail(stationOrder.id)).items;
+  const cajaLine=stationLines.find(i=>i.id!==originalLine.id);
+  assert.equal(cajaLine.estado,'terminado'); assert.equal(cajaLine.estacion,'caja');
+  assert.equal(stationLines.find(i=>i.id===originalLine.id).estado,'pendiente','Agregar caja no auto-entrega la línea original');
+  const stockBefore=Number((await one('SELECT stock_actual FROM materias_primas WHERE id=$1',[ingredient.id])).stock_actual);
+  r=await req('PATCH',`/pedidos/${stationOrder.id}/items/${cajaLine.id}`,{cantidad:2,cantidadEsperada:1});
+  assert.equal(r.status,409);assert.match(r.data.error || r.data.message,/entregado en caja/);
+  assert.equal(Number((await one('SELECT stock_actual FROM materias_primas WHERE id=$1',[ingredient.id])).stock_actual),stockBefore);
+  r=await req('PATCH',`/pedido-items/${originalLine.id}/iniciar`,{},parrilla);assert.equal(r.status,200);
+  r=await req('PATCH',`/pedido-items/${originalLine.id}/terminar`,{},parrilla);assert.equal(r.status,200);
+  r=await req('PATCH',`/productos/${product.id}`,{estacion:'barra'},admin);assert.equal(r.status,200);
+  r=await req('POST',`/pedidos/${stationOrder.id}/items`,{items:[line]});assert.equal(r.status,201);
+  const barraLine=(await detail(stationOrder.id)).items.find(i=>i.estacion==='barra');
+  assert(barraLine); assert((await queue(ambos)).some(i=>i.id===barraLine.id && i.estacion==='barra'));
+  await assert.rejects(()=>query("UPDATE pedido_items SET estacion_preparacion='caja' WHERE id=$1",[barraLine.id]),/no se modifica/);
+  await query("UPDATE productos SET estacion='parrilla' WHERE id=$1",[product.id]);
+  console.log('PASS: estación por línea; cambio a caja sin ocultar comandas; nuevas líneas usan nueva estación; caja bloqueada sin alterar stock');
   // Clasificaciones de uso: múltiples categorías, una sola existencia.
   const catFrio = await one("INSERT INTO categorias_producto(nombre,sucursal_id) VALUES('QA Fríos',$1) RETURNING id",[s.id]);
   const catAjena = await one("INSERT INTO categorias_producto(nombre,sucursal_id) VALUES('QA ajena',$1) RETURNING id",[other.id]);

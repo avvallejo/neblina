@@ -97,7 +97,8 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
             </div>
             <div className="turno-right">
               <div className="turno-amount">{o.esCortesia ? 'Cortesía' : money(o.total)}</div>
-              <StatusChip status={status} />
+              <span className="field-hint">{o.cancelado ? 'Ticket cancelado' : o.cobrado ? 'Pago: cobrado' : 'Pago: pendiente'}</span>
+              <span className="field-hint">Preparación</span><StatusChip status={status} />
               {o.esCortesia && o.cortesiaEstado && <span className={`cortesia-tag ${o.cortesiaEstado}`}><Gift size={11} /> {CORTESIA_ESTADO_LABELS[o.cortesiaEstado] || o.cortesiaEstado}</span>}
               {/* Ya cancelado lo dice la etiqueta de estado; aquí solo lo que
                   falta saber: que hay una solicitud esperando o que se rechazó. */}

@@ -36,7 +36,7 @@ export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
         <div className="cart-item-sub">{[item.tamano_etiqueta, item.leche_etiqueta, item.cafe_etiqueta, ...(item.extras || [])].filter(Boolean).join(' · ')}</div>
         {item.notas && <div>{item.notas}</div>}
         <StatusChip status={item.estado}/>
-        {item.estado !== 'pendiente' && <small> Ya está en preparación o entregado; no se modifica desde aquí.</small>}
+        {item.estado !== 'pendiente' && <small>{item.estacion === 'caja' ? ' Registrado como entregado en caja: ya descontó inventario. Para corregirlo, solicita la cancelación del ticket con motivo y autorización.' : ' Ya está en preparación o entregado; no se modifica desde aquí.'}</small>}
       </div>
       <div className="cart-item-controls">
         <span>{item.cantidad} × {money(item.precio_unitario)}</span>

@@ -64,8 +64,7 @@ function normalizarEstacionesUsuario(value) {
 async function entregarItemsDeCaja(client, pedidoId) {
   const { rows } = await client.query(
     `UPDATE pedido_items pi SET estado = 'terminado', terminado_en = now()
-     FROM productos pr
-     WHERE pr.id = pi.producto_id AND pi.pedido_id = $1 AND pi.estado = 'pendiente' AND pr.estacion = 'caja'
+     WHERE pi.pedido_id = $1 AND pi.estado = 'pendiente' AND pi.estacion_preparacion = 'caja'
      RETURNING pi.id`,
     [pedidoId]
   );

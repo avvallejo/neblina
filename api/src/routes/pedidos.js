@@ -161,7 +161,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
     throw new ApiError(403, 'No puedes ver un pedido que no es tuyo.');
   }
   const items = await query(
-    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono,
+    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono, pi.estacion_preparacion AS estacion,
        ot.etiqueta AS tamano_etiqueta, ol.etiqueta AS leche_etiqueta, oc.etiqueta AS cafe_etiqueta,
        COALESCE((SELECT json_agg(oe.etiqueta) FROM pedido_item_extras pie JOIN opciones_extra oe ON oe.id=pie.extra_id WHERE pie.pedido_item_id=pi.id), '[]') AS extras
      FROM pedido_items pi LEFT JOIN productos pr ON pr.id = pi.producto_id

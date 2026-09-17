@@ -221,9 +221,9 @@ export default function App() {
     return { ...adaptPedido(r.pedido), cortesia: r.cortesia };
   };
   const cobrarPedidoApi = async (orderId, payInfo = null) => {
-    const r = await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia, totalEsperado: payInfo.totalEsperado } : {});
+    const r = await api.cobrarPedido(orderId, payInfo ? { metodoPago: payInfo.metodoPago, montoRecibido: payInfo.montoRecibido, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia, totalEsperado: payInfo.totalEsperado, itemsCortesia: payInfo.itemsCortesia } : {});
     await refrescarPedidos(); await refrescarCola();
-    addToast(r && r.cortesia ? 'Cortesía registrada' : 'Cobro confirmado', 'success');
+    addToast(r && r.cortesia ? (Number(r.total) > 0 ? 'Cobro confirmado con cortesía' : 'Cortesía registrada') : 'Cobro confirmado', 'success');
     return r;
   };
   // Cancelación con motivo. El servidor decide si el ticket se cancela al

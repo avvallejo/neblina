@@ -11,8 +11,11 @@ export function adaptPedido(p) {
     total: Number(p.total || 0),
     subtotal: Number(p.subtotal || 0),
     payMethod: p.metodo_pago ? (PAY_METHOD_LABELS[p.metodo_pago] || p.metodo_pago) : 'Por cobrar',
-    esCortesia: p.metodo_pago === 'cortesia',
+    esCortesia: p.metodo_pago === 'cortesia',          // todo el ticket fue cortesía (total $0)
+    tieneCortesia: !!p.cortesia_estado,                 // regaló al menos un producto (completo o parcial)
     cortesiaEstado: p.cortesia_estado || null,
+    cortesiaValor: Number(p.cortesia_valor || 0),
+    cortesiaUnidades: Number(p.cortesia_unidades || 0),
     destino: p.destino || null,
     mesaNumero: p.mesa_numero != null ? Number(p.mesa_numero) : null,
     cashGiven: p.monto_recibido != null ? Number(p.monto_recibido) : null,

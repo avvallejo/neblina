@@ -150,6 +150,20 @@ reales.
     `pedidos`) y fecha las compras con el día de México
     (`lotes.fecha_compra` por omisión, antes `CURRENT_DATE` en UTC: una compra
     de la tarde caía "mañana" y su egreso salía del mes). Re-ejecutable.
+38. **`38_cortesia_por_producto.sql`** — **Cortesía por producto** (ya no por
+    ticket completo): `pedido_items.es_cortesia` (la línea sale en $0;
+    `precio_unitario` conserva el precio de menú), `pedidos.cortesia_valor` y
+    `pedidos.cortesia_unidades` (lo regalado a precio de menú y las unidades;
+    el cupo mensual se consume **por unidad**), `total = (subtotal −
+    cortesia_valor) × (1 − descuento)`. `metodo_pago = 'cortesia'` queda solo
+    para tickets 100 % cortesía; un ticket mixto lleva la forma de pago real.
+    Traduce las cortesías anteriores (todas sus líneas pasan a `es_cortesia`),
+    reescribe el CHECK de coherencia y el índice parcial (ahora por
+    `cortesia_estado`), recrea `vw_pedidos_con_estado`,
+    `vw_ventas_por_metodo_pago` (las formas reales suman solo lo cobrado; la
+    fila `cortesia` agrupa todo lo regalado con `valor_cortesias` y
+    `unidades_cortesia`) y `vw_productos_mas_vendidos` (las unidades regaladas
+    cuentan como unidades pero no como ingresos). Re-ejecutable.
 
 ```bash
 psql -U postgres -f 00_roles_y_permisos.sql   # cambia la contraseña antes de correrlo
@@ -171,7 +185,7 @@ psql -U postgres -d cafeteria -f 14_proveedores_categorias.sql
 psql -U postgres -d cafeteria -f 15_receta_leche_por_tamano.sql
 psql -U postgres -d cafeteria -f 16_rol_mostrador.sql
 psql -U postgres -d cafeteria -f 17_descripcion_producto.sql
-# … y así hasta 34_margen_contribucion.sql (o simplemente: db/migrar.sh)
+# … y así hasta 38_cortesia_por_producto.sql (o simplemente: db/migrar.sh)
 ```
 
 ## El punto de equilibrio ya considera TODO, no solo insumos

@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}    # p. ej. ubuntu
           key: ${{ secrets.SSH_KEY }}          # llave privada SSH (contenido completo)
           script: |
-            set -e
+            set -euo pipefail
             cd ${{ secrets.APP_DIR }}          # p. ej. /opt/cafeteria-movil
             git fetch --all --tags
             git checkout "${{ github.ref_name }}"

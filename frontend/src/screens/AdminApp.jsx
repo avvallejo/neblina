@@ -267,7 +267,7 @@ function ReportesSection({ data, consolidado }) {
             r.metodo_pago === 'cortesia' ? (
               // Cortesías: no entró dinero (total $0); se muestra lo regalado a precio de menú.
               <div key={i} className="reporte-row">
-                <span>{consolidado && <span className="sede-name">{r.sucursal} — </span>}<Gift size={13} style={{ verticalAlign: -2 }} /> Cortesías <span className="sede-name">· {Number(r.num_pedidos || 0)} pedido(s), valor regalado</span></span>
+                <span>{consolidado && <span className="sede-name">{r.sucursal} — </span>}<Gift size={13} style={{ verticalAlign: -2 }} /> Cortesías <span className="sede-name">· {Number(r.unidades_cortesia || 0)} producto(s) en {Number(r.num_pedidos || 0)} ticket(s), valor regalado</span></span>
                 <span className="turno-amount">{money(r.valor_cortesias || 0)}</span>
               </div>
             ) : (
@@ -360,7 +360,7 @@ function CortesiasPanel({ pendientes, addToast, onResolved }) {
         </div>
         {r.detalle && <div className="detalle">{r.detalle}</div>}
       </div>
-      <div className="valor">{money(r.subtotal)}</div>
+      <div className="valor">{money(r.cortesia_valor ?? r.subtotal)}<span className="field-hint" style={{ display: 'block', fontWeight: 500 }}>{r.cortesia_unidades} producto(s){r.metodo_pago !== 'cortesia' && Number(r.total) > 0 ? ` · cobró ${money(r.total)}` : ''}</span></div>
       {r.cortesia_estado === 'pendiente' && (
         <div className="acciones">
           <input className="text-input" maxLength={300} placeholder="Nota para la Caja (opcional)" value={notas[r.id] || ''} onChange={e => setNotas(n => ({ ...n, [r.id]: e.target.value }))} />
@@ -1367,7 +1367,7 @@ export default function AdminApp(props) {
             <div className="section-title"><Gift size={15} /> Cortesías</div>
             <div className="promo-summary-card">
               {cortesiasMes > 0
-                ? `La Caja puede dar ${cortesiasMes} cortesía(s) al mes sin autorización; las siguientes quedan pendientes en Autorizaciones.`
+                ? `La Caja puede regalar ${cortesiasMes} producto(s) al mes sin autorización (se marcan en el mismo ticket); un ticket cuyos productos ya no caben queda pendiente en Autorizaciones.`
                 : 'Sin cupo: toda cortesía que dé la Caja queda pendiente de autorización.'}
             </div>
             <CortesiasConfigEditor cupo={cortesiasMes} onSave={onSaveBranding} />

@@ -2,6 +2,7 @@ const { ApiError } = require('../utils/asyncHandler');
 const { prepareOrderLines } = require('./orderValidation');
 const { correctCashItem } = require('./cashItemReturns');
 const { entregarItemsDeCaja } = require('./stations');
+const { recalcularImportes } = require('./orderAmounts');
 
 async function lockOpenOrder(client, id, sucursalId) {
   const { rows: [order] } = await client.query('SELECT * FROM pedidos WHERE id=$1 AND sucursal_id=$2 FOR UPDATE', [id, sucursalId]);
@@ -13,13 +14,8 @@ async function lockOpenOrder(client, id, sucursalId) {
   return order;
 }
 
-async function recalculate(client, id) {
-  const { rows: [order] } = await client.query(`UPDATE pedidos SET
-    subtotal=(SELECT COALESCE(SUM(cantidad*precio_unitario),0) FROM pedido_items WHERE pedido_id=$1 AND estado<>'cancelado'),
-    total=ROUND((SELECT COALESCE(SUM(cantidad*precio_unitario),0) FROM pedido_items WHERE pedido_id=$1 AND estado<>'cancelado') * (1-descuento_porcentaje/100),2)
-    WHERE id=$1 RETURNING *`, [id]);
-  return order;
-}
+// Subtotal, cortesías y total salen siempre de las líneas (ver orderAmounts).
+const recalculate = recalcularImportes;
 async function audit(client, auth, order, action, before, after) {
   await client.query(`INSERT INTO auditoria (usuario_id,sucursal_id,entidad,entidad_id,accion,valor_anterior,valor_nuevo,motivo)
     VALUES ($1,$2,'pedidos',$3,$4,$5::jsonb,$6::jsonb,'Edición de ticket abierto antes del cobro')`,
@@ -29,15 +25,17 @@ async function audit(client, auth, order, action, before, after) {
 async function addOrderItems(client, { id, sucursalId, auth, items }) {
   const order = await lockOpenOrder(client, id, sucursalId);
   if (Array.isArray(items) && items.some(i => i.esRegalo === true)) throw new ApiError(400, 'Las recompensas se registran en un pedido separado.');
+  // Las líneas agregadas pueden venir marcadas como cortesía (solo caja/admin
+  // llegan aquí); el cupo se resuelve al cobrar el ticket.
   const count = await client.query("SELECT COUNT(*)::int AS n FROM pedido_items WHERE pedido_id=$1 AND estado<>'cancelado'", [id]);
   if (count.rows[0].n + (Array.isArray(items) ? items.length : 0) > 50) throw new ApiError(400, 'El ticket admite hasta 50 líneas; abre otro ticket.');
   const { lines } = await prepareOrderLines(client, items, null, sucursalId);
   const added = [];
   for (const line of lines) {
     const { rows: [item] } = await client.query(`INSERT INTO pedido_items
-      (pedido_id,producto_id,tamano_id,leche_id,cafe_id,cantidad,precio_unitario,notas,es_regalo)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) RETURNING *`,
-      [id,line.productoId,line.tamanoId||null,line.lecheId||null,line.cafeId||null,line.cantidad,line.precioUnitario,line.notas||null]);
+      (pedido_id,producto_id,tamano_id,leche_id,cafe_id,cantidad,precio_unitario,notas,es_regalo,es_cortesia)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9) RETURNING *`,
+      [id,line.productoId,line.tamanoId||null,line.lecheId||null,line.cafeId||null,line.cantidad,line.precioUnitario,line.notas||null,line.esCortesia===true]);
     for (const extraId of line.extraIds) await client.query('INSERT INTO pedido_item_extras (pedido_item_id,extra_id) VALUES ($1,$2)',[item.id,extraId]);
     added.push(item);
   }

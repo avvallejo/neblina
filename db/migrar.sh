@@ -72,6 +72,7 @@ ya_tiene() {
     35) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'materia_categorias_uso'" ;;
     36) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedido_items' AND column_name = 'estacion_preparacion'" ;;
     37) q "SELECT 1 FROM pg_proc WHERE proname = 'fn_revertir_consumo_item'" ;;
+    38) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedido_items' AND column_name = 'es_cortesia'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

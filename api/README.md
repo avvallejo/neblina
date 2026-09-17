@@ -100,7 +100,7 @@ configuración — pertenece a UNA sucursal. Reglas:
 | `GET /api/turnos/estado?sucursal=<id>` | público | El cliente ve si SU sede está abierta |
 | `POST /api/pedidos` | staff o cliente | Levantar un pedido (precio se calcula en el servidor) |
 | `PATCH /api/pedidos/:id/cobrar` | cajero/admin | Confirma el cobro — **aquí** se acredita fidelidad |
-| `GET /api/cortesias/plan` | cajero/admin | Cupo de cortesías del mes de la sede: límite, usadas, restantes, pendientes |
+| `GET /api/cortesias/plan` | cajero/admin | Cupo de cortesías del mes de la sede (por producto): límite, usadas, restantes, tickets pendientes |
 | `GET /api/pedido-items/cola[?estacion=]` | barista/admin | Comanda filtrada por las estaciones del usuario (barra / parrilla); trae destino y mesa |
 | `GET /api/cortesias?estado=pendiente` · `PATCH /api/cortesias/:id/{autorizar,rechazar}` | admin | Autorizaciones de cortesías fuera del plan (nota opcional) |
 | `PATCH /api/pedidos/:id/no-show` | cajero/admin | Penaliza fidelidad por no recogido |
@@ -235,26 +235,43 @@ El `token` devuelto dura cinco minutos y el pedido lo manda como
 `autorizacionDescuento`. Está ligado al cajero, porcentaje y primer uso. Cinco
 PIN fallidos bloquean nuevas pruebas durante una hora.
 
-### Cortesías
+### Cortesías (por producto)
 
-Una cortesía es un pedido completo entregado sin cobrar. Se registra en el
-mismo cobro: `POST /api/pedidos` con `pago: { metodoPago: 'cortesia',
-motivoCortesia? }` o `PATCH /api/pedidos/:id/cobrar` con `metodoPago:
-'cortesia'`. El servidor deja `total = 0` (el `subtotal` conserva el valor a
-precio de menú), no admite descuento ni recompensa de fidelidad combinados, y
-decide el estado con el cupo mensual de la sede (`PUT /api/config
-{ cortesiasMesCajero }`, compartido por todos los cajeros, reinicia cada mes
-en hora de Ciudad de México):
+Una cortesía es un producto del ticket que se entrega sin cobrar; el resto
+del mismo ticket se cobra normal. Se marca por línea: `POST /api/pedidos`
+con `items[].esCortesia: true` (solo caja/mostrador/admin), o al cobrar un
+ticket abierto o pedido en línea con `PATCH /api/pedidos/:id/cobrar
+{ itemsCortesia: [pedidoItemId…], motivoCortesia? }` (la lista sustituye las
+marcas anteriores; sin el campo se respetan las marcas con que se abrió el
+ticket; `totalEsperado` es el total que la Caja vio antes de marcar). Las
+líneas agregadas a un ticket abierto (`POST /api/pedidos/:id/items`) también
+aceptan `esCortesia`. Por compatibilidad, `pago.metodoPago: 'cortesia'` marca
+TODAS las líneas y solo es válido si el total queda en 0.
 
-* queda cupo → `dentro_plan`;
-* cupo agotado → **la venta se procesa igual** pero queda `pendiente`; la
-  respuesta trae `cortesia.leyenda` para la Caja y el pedido aparece en
-  `GET /api/cortesias?estado=pendiente` hasta que un admin lo autorice o
-  rechace (rechazar solo lo marca: no revierte la venta);
+El servidor guarda `pedido_items.es_cortesia`, `pedidos.cortesia_valor` y
+`pedidos.cortesia_unidades`, y calcula `total = (subtotal − cortesia_valor) ×
+(1 − descuento)`; el descuento aplica solo sobre lo cobrable. Un ticket 100 %
+cortesía sale con `metodo_pago = 'cortesia'` y `total = 0`; uno mixto lleva la
+forma de pago real. No combina con una recompensa de fidelidad (ya es gratis).
+El estado se decide al cobrar con el cupo mensual de la sede (`PUT /api/config
+{ cortesiasMesCajero }`, **unidades** por mes, compartido por todos los
+cajeros, reinicia cada mes en hora de Ciudad de México):
+
+* las unidades del ticket caben en lo que queda → `dentro_plan` (consume esas
+  unidades);
+* no caben completas → **la venta se procesa igual** pero el ticket queda
+  `pendiente` sin consumir cupo; la respuesta trae `cortesia.leyenda` para la
+  Caja y el pedido aparece en `GET /api/cortesias?estado=pendiente` hasta que
+  un admin lo autorice o rechace (rechazar solo lo marca: no revierte la
+  venta);
 * un admin cobrando en Caja → `autorizada` por él mismo, sin consumir cupo.
 
-Un bloqueo de aviso por sucursal (`pg_advisory_xact_lock`) evita que dos
-cajas consuman el último lugar del cupo al mismo tiempo. `test/live-courtesies.js`
+`GET /api/cortesias/plan` devuelve `limite`, `usadas` (unidades), `tickets`,
+`restantes`, `pendientes` (tickets), `unidadesPendientes`, `mes` y
+`mesNombre`. Un bloqueo de aviso por sucursal (`pg_advisory_xact_lock`) evita
+que dos cajas consuman las últimas unidades al mismo tiempo. La caja del
+turno, el resumen del día y el reporte por forma de pago exponen
+`cortesias` (tickets), `unidades` y `valor`. `test/live-courtesies.js`
 (`npm run test:cortesias:live`, con `NODE_ENV=development`, se ejecuta desde
 la raíz de la API como los demás `live-*`) cubre el flujo completo con rollback.
 

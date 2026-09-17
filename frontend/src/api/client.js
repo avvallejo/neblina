@@ -249,6 +249,7 @@ function itemToApi(item) {
     cantidad: item.qty || 1,
     notas: item.notas || undefined,
     esRegalo: !!item.isReward,
+    esCortesia: !!item.cortesia, // solo Caja: la línea sale en $0 y consume el cupo del mes
   };
 }
 
@@ -277,8 +278,10 @@ export function getPedidos(fecha) { return request(fecha ? `/pedidos?fecha=${enc
 export function agregarItemsPedido(id, cart) { return request(`/pedidos/${id}/items`, { method: 'POST', body: { items: cart.map(itemToApi) } }); }
 export function cambiarCantidadPedido(id, itemId, cantidad, cantidadEsperada, correccion = {}) { return request(`/pedidos/${id}/items/${itemId}`, { method: 'PATCH', body: { cantidad, cantidadEsperada, ...correccion } }); }
 export function getPedido(id) { return request(`/pedidos/${id}`); }
-export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado } = {}) {
-  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado } });
+// itemsCortesia: ids de las líneas del ticket que se regalan (sustituye las
+// marcas anteriores); sin el campo se respetan las marcas con que se abrió.
+export function cobrarPedido(id, { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado, itemsCortesia } = {}) {
+  return request(`/pedidos/${id}/cobrar`, { method: 'PATCH', body: { metodoPago, montoRecibido, importeEfectivo, motivoCortesia, totalEsperado, itemsCortesia } });
 }
 
 /* ============================================================

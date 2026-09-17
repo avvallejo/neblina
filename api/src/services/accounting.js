@@ -197,9 +197,9 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
     `SELECT COALESCE(SUM(p.total),0) AS ventas, COUNT(*) AS pedidos,
             COALESCE(SUM(COALESCE(p.importe_efectivo, CASE WHEN p.metodo_pago = 'efectivo' THEN p.total ELSE 0 END)),0) AS ventas_efectivo,
             COUNT(*) FILTER (WHERE p.metodo_pago = 'mixto' AND p.importe_efectivo IS NULL) AS pagos_sin_desglose,
-            COUNT(*) FILTER (WHERE p.metodo_pago = 'cortesia') AS cortesias,
-            COALESCE(SUM(p.subtotal) FILTER (WHERE p.metodo_pago = 'cortesia'),0) AS cortesias_valor,
-            COALESCE(SUM(p.subtotal - p.total) FILTER (WHERE p.metodo_pago <> 'cortesia' AND NOT p.es_regalo_fidelidad),0) AS descuentos
+            COUNT(*) FILTER (WHERE p.cortesia_estado IS NOT NULL) AS cortesias,
+            COALESCE(SUM(p.cortesia_valor),0) AS cortesias_valor,
+            COALESCE(SUM(p.subtotal - p.cortesia_valor - p.total) FILTER (WHERE NOT p.es_regalo_fidelidad),0) AS descuentos
      FROM pedidos p
      WHERE p.sucursal_id = $1 AND p.cobrado AND NOT p.cancelado AND NOT p.no_show
        AND (p.creado_en AT TIME ZONE '${TZ}')::date BETWEEN $2 AND $3`, [sucursalId, r.desde, r.hasta]);

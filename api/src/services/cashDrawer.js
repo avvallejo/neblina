@@ -23,9 +23,10 @@ const drawerSql=`SELECT t.id,t.abierto_en,t.fondo_inicial,
  COALESCE(SUM(p.importe_efectivo),0) ventas_efectivo,
  COALESCE(SUM(p.total-p.importe_efectivo) FILTER(WHERE p.importe_efectivo IS NOT NULL),0) ventas_no_efectivo,
  COUNT(p.id) FILTER(WHERE p.importe_efectivo IS NULL) pagos_sin_desglose,
- COUNT(p.id) FILTER(WHERE p.metodo_pago='cortesia') cortesias_turno,
- COALESCE(SUM(p.subtotal) FILTER(WHERE p.metodo_pago='cortesia'),0) cortesias_valor_turno,
- COUNT(p.id) FILTER(WHERE p.metodo_pago='cortesia' AND p.cortesia_estado='pendiente') cortesias_pendientes_turno,
+ COUNT(p.id) FILTER(WHERE p.cortesia_estado IS NOT NULL) cortesias_turno,
+ COALESCE(SUM(p.cortesia_unidades),0)::int cortesias_unidades_turno,
+ COALESCE(SUM(p.cortesia_valor),0) cortesias_valor_turno,
+ COUNT(p.id) FILTER(WHERE p.cortesia_estado='pendiente') cortesias_pendientes_turno,
  (SELECT COALESCE(SUM(e.monto),0) FROM egresos e WHERE e.turno_id=t.id AND NOT e.anulado) salidas_turno,
  (SELECT COUNT(*) FROM egresos e WHERE e.turno_id=t.id AND NOT e.anulado) num_salidas_turno
  FROM turnos t LEFT JOIN pedidos p ON p.turno_cobro_id=t.id AND p.cobrado AND NOT p.cancelado AND NOT p.no_show

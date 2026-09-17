@@ -126,21 +126,28 @@ gastos) y la venta real promedio para calibrar la estimación. Los montos que
 trae la base de desarrollo son de ejemplo: sustitúyelos por los reales antes
 de fijar precios.
 
-## Cortesías en Caja
+## Cortesías en Caja (por producto)
 
-En **Configuración → Cortesías** el administrador fija cuántas cortesías al
-mes puede dar el rol cajero (cupo compartido por la sucursal; se reinicia cada
-mes). Al cobrar, junto a los montos de billetes hay un botón **Cortesía**: el
-ticket completo sale en $0, la venta se procesa y pasa a la barra como
-cualquier otra. Mientras quede cupo, la cortesía "entra en el plan"; cuando se
-agota, la Caja ve la leyenda de que esa cortesía ya no entra en su plan
-mensual y debe autorizarla un administrador — pero la venta se procesa de
-todos modos. Esas cortesías aparecen en **Admin → Autorizaciones** (con badge
-de pendientes) para aprobarlas o rechazarlas con una nota; rechazar solo la
-marca, no revierte la venta. La caja del turno muestra las cortesías dadas
-(cantidad y valor) y el cupo del mes; en **Reportes → Ventas por forma de
-pago** aparece la fila **Cortesías** con el valor regalado (no suma a ventas).
-Migración `db/26_cortesias.sql`.
+En **Configuración → Cortesías** el administrador fija cuántos **productos**
+de cortesía al mes puede dar el rol cajero (cupo compartido por la sucursal;
+se reinicia cada mes y se consume por unidad: dos cafés regalados son dos).
+En el carrito cada línea tiene un botón de regalo: los productos marcados
+salen en $0 dentro del **mismo ticket** y el resto se cobra normal (el
+descuento, si lo hay, aplica solo sobre lo que sí se cobra); también hay un
+atajo "Todo el ticket de cortesía". Al cobrar un ticket abierto o un pedido
+en línea, la pantalla de cobro muestra las líneas y ahí se marcan las
+cortesías. Si todo el ticket es cortesía, sale con forma de pago "cortesía" y
+$0; si no, con la forma de pago real y el total ya descontado. Mientras las
+unidades del ticket quepan en el cupo, la cortesía "entra en el plan"; si no
+caben completas, la Caja ve la leyenda de que ese ticket ya no entra en su
+plan mensual y debe autorizarlo un administrador — pero la venta se procesa
+de todos modos. Esos tickets aparecen en **Admin → Autorizaciones** (con
+badge de pendientes) para aprobarlos o rechazarlos con una nota; rechazar
+solo marca, no revierte la venta. La caja del turno muestra las cortesías
+dadas (productos, tickets y valor) y el cupo del mes; en **Reportes → Ventas
+por forma de pago** la fila **Cortesías** agrupa todo lo regalado (no suma a
+ventas) y las formas de pago reales suman solo lo cobrado.
+Migraciones `db/26_cortesias.sql` y `db/38_cortesia_por_producto.sql`.
 
 ## Cancelar un ticket (con motivo y autorización)
 

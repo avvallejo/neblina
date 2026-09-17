@@ -1851,7 +1851,7 @@ export function CortesiasConfigEditor({ cupo, onSave }) {
   const cambiado = valido && n !== Number(cupo ?? 0);
   return (
     <div className="branding-editor" style={{ marginTop: 12 }}>
-      <label className="option-label" htmlFor="cortesias-mes">Cortesías permitidas por mes (rol cajero)</label>
+      <label className="option-label" htmlFor="cortesias-mes">Productos de cortesía permitidos por mes (rol cajero)</label>
       <input id="cortesias-mes" className="text-input" type="number" inputMode="numeric" min="0" max="999" step="1" value={valor} onChange={e => setValor(e.target.value)} />
       <div className="branding-hint">
         Es un cupo compartido por todos los cajeros de esta sucursal; se reinicia cada mes (hora de Ciudad de México). Cada cortesía deja el ticket completo en $0.

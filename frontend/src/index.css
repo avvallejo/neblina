@@ -773,6 +773,18 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 /* Cortesías (Caja: chip junto a los billetes, modal y avisos; Admin: autorizaciones) */
 .option-chip.cortesia-chip { display: inline-flex; align-items: center; gap: 6px; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .option-chip.cortesia-chip:hover { background: var(--accent); color: #fff; }
+/* Cortesía por producto: botón de regalo en cada línea del carrito / del cobro */
+.icon-btn.cortesia-toggle { color: var(--accent); border-color: var(--accent-soft); }
+.icon-btn.cortesia-toggle.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cart-item-price.cortesia { color: var(--accent); font-weight: 700; }
+.cart-item-price.cortesia s { color: var(--ink-soft); font-weight: 500; margin-right: 4px; }
+.cart-item.compact { padding: 8px 0; }
+.cart-item.compact .cart-item-controls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.checkout-lineas { margin-bottom: 14px; }
+.cortesia-panel { margin-bottom: 4px; }
+.checkout-cortesia-hint { display: block; margin-top: 4px; color: #C9BCA8; }
+.cortesia-plan.neutral { background: var(--accent-soft); border-color: var(--accent); }
+.cortesia-plan.neutral strong { color: var(--accent); }
 .cortesia-total { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; background: var(--ink); color: #fff; border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
 .cortesia-total .footer-label { color: #C9BCA8; }
 .cortesia-total .field-hint { color: #C9BCA8; margin-top: 2px; }

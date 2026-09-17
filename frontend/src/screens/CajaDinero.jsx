@@ -61,7 +61,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
    <div className="caja-ficha">
     <span className="caja-ficha-icono"><Gift size={15}/></span>
     <span className="footer-label">Cortesías</span>
-    <strong>{cortesias_} · {money(data.cortesias_valor_turno||0)}</strong>
+    <strong>{Number(data.cortesias_unidades_turno||0)} producto(s) en {cortesias_} ticket(s) · {money(data.cortesias_valor_turno||0)}</strong>
     {Number(data.cortesias_pendientes_turno||0)>0
      ?<span className="field-hint caja-ficha-alerta">{data.cortesias_pendientes_turno} pendiente(s) de autorización</span>
      :<span className="field-hint">No suman a las ventas</span>}
@@ -77,7 +77,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
   </div>
   {onOpen&&<button className="btn-secondary" onClick={onOpen}>Abrir turno</button>}
  </section>;
- const planCortesias=plan&&<p className="field-hint">Cortesías de {plan.mesNombre} (cupo de la sucursal): {plan.usadas} de {plan.limite} usadas{plan.restantes>0?` · quedan ${plan.restantes}`:' · cupo agotado: las siguientes requieren autorización'}{plan.pendientes>0?` · ${plan.pendientes} pendiente(s) de autorizar`:''}.</p>;
+ const planCortesias=plan&&<p className="field-hint">Cortesías de {plan.mesNombre} (cupo de la sucursal, por producto): {plan.usadas} de {plan.limite} usadas{plan.restantes>0?` · quedan ${plan.restantes}`:' · cupo agotado: las siguientes requieren autorización'}{plan.pendientes>0?` · ${plan.pendientes} ticket(s) pendiente(s) de autorizar`:''}.</p>;
  async function save(){setBusy(true);setError('');try{
   if(data){await api.registrarFondoTurno(data.id,Number(fund));addToast('Fondo inicial registrado, separado de las ventas','success');}
   else if(await onToggleTurno({fondoInicial:Number(fund)})===false)return;

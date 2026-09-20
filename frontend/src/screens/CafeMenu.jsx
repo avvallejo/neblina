@@ -7,7 +7,7 @@ import './cafeMenu.css';
 
 const dinero = n => `$${Number(n).toLocaleString('es-MX', { maximumFractionDigits: 2 })}`;
 const recargo = n => Number(n) === 0 ? 'Incluido' : `${n > 0 ? '+' : '−'}${dinero(Math.abs(n))}`;
-function FotoBebida({ p }) {
+export function FotoBebida({ p }) {
   const clipId = useId();
   const asset = menuIllustration(p);
   if (p.imagen) return <img className="cm-photo cm-uploaded" src={p.imagen} alt={p.name}/>;

@@ -10,12 +10,15 @@ function illustration(src, frames, index, width, height) {
 // El catálogo y sus precios siguen siendo datos vivos; estas son ilustraciones.
 export function menuIllustration(product) {
   const name = (product.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/ques[ao]\s*burgu?er|quesa\s*burguesa/.test(name)) {
+    return { src: '/images/quesaburger.png', viewBox: '0 0 1254 1254', width: 1254, height: 1254 };
+  }
   const otherRules = [
     [/\bte\b|infusion/, 0], [/chocomilk|choco milk/, 1], [/esquimo/, 2], [/frap.*fresa/, 3],
     [/horchata/, 4], [/jamaica/, 5], [/refresco|cola/, 6], [/brownie/, 7], [/concha/, 8],
     [/galleta.*(ny|new york)/, 10], [/galleta.*chisp|cookie/, 9], [/muffin|panque/, 11],
     [/oreja|palmier/, 12], [/tarta.*frut/, 13], [/hawaiana|hawai/, 15], [/papas|patatas/, 16],
-    [/quesaburger|cheeseburger/, 17], [/hamburguesa|burger/, 14], [/torta/, 18], [/chocolate/, 19],
+    [/cheeseburger/, 17], [/hamburguesa|burger/, 14], [/torta/, 18], [/chocolate/, 19],
   ];
   const other = otherRules.find(([pattern]) => pattern.test(name));
   // Moka/Oreo/Café se resuelven antes del chocolate genérico.

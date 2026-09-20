@@ -1354,6 +1354,11 @@ export default function AdminApp(props) {
               <p>Descarga una carta en PDF con los precios vigentes, fotos y opciones de personalización. Elige papel claro o estilo Neblina.</p>
               <a className="btn-primary" href={`/?pantalla=imprimir&sucursal=${sedeActivaId || ''}`} target="_blank" rel="noreferrer">Crear menú PDF</a>
             </div>
+            <div className="promo-summary-card" style={{marginTop:16}}>
+              <div className="section-title">Menú con QR para las mesas</div>
+              <p>Tarjetas con el número de cada mesa. Tus clientes ven el menú completo con imágenes y precios, sin iniciar sesión.</p>
+              <a className="btn-primary" href={`/?pantalla=qr-mesas&sucursal=${sedeActivaId || ''}`} target="_blank" rel="noreferrer">Imprimir QR de las mesas</a>
+            </div>
             <PantallaConfigEditor cfg={pantallaCfg} onSave={onSaveBranding} />
 
             <div className="section-title">Acceso de clientes</div>

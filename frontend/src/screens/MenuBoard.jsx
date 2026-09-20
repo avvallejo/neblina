@@ -6,9 +6,10 @@ import ProductImage from '../components/ProductImage.jsx';
 import React, { useState, useEffect } from 'react';
 import { Coffee } from 'lucide-react';
 import CafeMenu from './CafeMenu.jsx';
+import TableMenu from './TableMenu.jsx';
 import * as api from '../api/client.js';
 
-export default function MenuBoard({ sucursalId }) {
+export default function MenuBoard({ sucursalId, carta = false, mesa }) {
   const [estado, setEstado] = useState('cargando'); // cargando | listo | error
   const [brand, setBrand] = useState({ nombre: '', logo: '' });
   const [sedeNombre, setSedeNombre] = useState('');
@@ -36,7 +37,7 @@ export default function MenuBoard({ sucursalId }) {
       cargando = true;
       try {
         const sedes = await api.getSucursales();
-        const sede = (sucursalId && sedes.find(s => s.id === sucursalId)) || api.getSucursal() && sedes.find(s => s.id === api.getSucursal().id) || sedes[0];
+        const sede = sucursalId ? sedes.find(s => s.id === sucursalId) : (api.getSucursal() && sedes.find(s => s.id === api.getSucursal().id)) || sedes[0];
         if (!sede) { if (vivo) setEstado('error'); return; }
         api.setSucursal(sede);
         if (vivo) setSedeNombre(sede.nombre);
@@ -86,6 +87,8 @@ export default function MenuBoard({ sucursalId }) {
       </div>
     );
   }
+
+  if (carta) return <TableMenu {...{brand, sedeNombre, productos, categorias, opciones, cfg, mesa, desactualizado}}/>;
 
   if (new URLSearchParams(window.location.search).get('diseno') === 'ilustrado' || !cfg.pantallaEstilo || cfg.pantallaEstilo === 'ilustrado') {
     return <CafeMenu brand={brand} sedeNombre={sedeNombre} productos={productos} opciones={opciones} cfg={cfg} abierto={abierto} desactualizado={desactualizado}/>;

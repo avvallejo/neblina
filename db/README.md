@@ -323,3 +323,49 @@ Es lo correcto — si se quemó leche, ese inventario ya no existe.
 - **La cola offline del lado del dispositivo** (guardar en IndexedDB mientras
   no hay red) — la API ya acepta lotes sincronizados, pero esa cola en el
   prototipo de React todavía no se construyó.
+
+### Nombre del ticket y comandas agrupadas (39)
+
+`39_nombre_ticket.sql` agrega `pedidos.nombre_ticket` (hasta 80 caracteres).
+Aplicar con `bash db/migrar.sh` antes de actualizar la API. Es compatible con
+pedidos anteriores, que pueden no tener nombre. Caja pide el nombre para nuevos
+tickets; la API permite omitirlo para conservar compatibilidad con clientes anteriores.
+Las comandas muestran quién levantó el pedido usando `pedidos.cajero_id`, que se
+asigna desde la sesión al crearlo. Cada estación conserva su filtro de productos.
+
+Verificación local: `docker exec cafeteria-api node test/live-ticket-identity.js`
+(prueba transaccional con reversión) y `node --test frontend/test/preparationOrders.test.js`.
+
+Las comandas se presentan en franjas horizontales. Pendientes y en preparación
+comparten pantalla; las líneas terminadas permanecen dentro del ticket. Los
+tickets completos pasan a «Listos» y se conservan durante el día de operación
+(zona America/Mexico_City), también después de recargar. Iniciar preparación y
+Terminar todo se ejecutan de forma atómica por estación y sobre las líneas
+visibles al pulsar, sin incluir productos agregados después ni repetir consumos.
+
+### Preparación por empleado y entregas (40)
+
+Aplicar `40_preparacion_y_entrega.sql` con `bash db/migrar.sh` antes de actualizar
+la API. Registra quién pulsó Terminar y cuántas unidades entregó caja, con fecha
+y responsable. La entrega no cambia el cobro ni vuelve a consumir inventario.
+Las entregas parciales quedan auditadas y usan control de concurrencia.
+
+Caja → Comandas permite seguir ambas estaciones y registrar entregas.
+Preparados por empleado consulta por fecha de terminación (hora CDMX) y empleado;
+Administración → Comandas / personal ofrece la misma consulta en modo lectura.
+Los productos permanecen en el historial después de entregarlos. Los tickets
+salen de Por entregar cuando no quedan productos pendientes de preparación o entrega.
+No se infieren entregas históricas ni quién terminó registros anteriores: esos
+campos no existían. El historial indica por separado quién inició, si está registrado.
+
+Los productos asignados a Caja / sin preparación también aparecen en Comandas,
+listos para surtir pero con entrega pendiente. El rol Mostrador (Caja + barra)
+puede levantar, preparar y entregar desde su misma sesión; no se cambian los
+permisos del rol de preparación. En Productos, elegir Comprado hecho propone
+Caja como estación; puede cambiarse para productos que necesitan calentarse.
+No se reclasifican automáticamente productos existentes.
+
+«Entregas por empleado» consulta cada evento auditado de entrega, con su fecha,
+cantidad y empleado real (incluidas las parciales de varias personas).
+«Preparados por empleado» excluye Caja, que no requiere preparación. Las
+correcciones y devoluciones ajustan el saldo entregado conservando la auditoría.

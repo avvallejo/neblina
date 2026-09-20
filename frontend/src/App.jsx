@@ -213,8 +213,8 @@ export default function App() {
     return () => clearInterval(t);
   }, [role, sede, refrescarPedidos, refrescarCola, refrescarTurno]);
 
-  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono, destino, mesa }) => {
-    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, destino, mesa });
+  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket }) => {
+    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket });
     await refrescarPedidos(); await refrescarCola();
     addToast(`Pedido ${r.pedido.folio} enviado a preparación`, 'success');
     // `cortesia` viene solo cuando se cobró como cortesía: estado, cupo y leyenda para la Caja.
@@ -240,17 +240,21 @@ export default function App() {
     try { await api.noShowPedido(orderId); await refrescarPedidos(); await refrescarCola(); addToast('Marcado como no recogido', 'warn'); }
     catch (e) { addToast(e.message, 'warn'); }
   };
-  const iniciarTicketApi = async (id) => {
-    try { await api.iniciarItem(id); await refrescarCola(); } catch (e) { addToast(e.message, 'warn'); }
-  };
   const terminarTicketApi = async (ticket) => {
     try {
       await api.terminarItem(ticket.id);
       await refrescarCola(); await refrescarPedidos();
       const p = getProduct(ticket.productId);
       addToast(`${p ? p.name : 'Bebida'} terminada — inventario actualizado`, 'success');
-      if (ticket.origen === 'app' && ticket.cliente) addToast(`📲 Aviso a ${ticket.cliente.nombre}: ¡tu pedido está listo!`, 'success');
-    } catch (e) { addToast(e.message, 'warn'); }
+
+    } catch (e) { await refrescarCola(); throw e; }
+  };
+  const prepararTicketApi = async (orderId, action, estacion, itemIds) => {
+    try {
+      await api.prepararTicket(orderId, action, estacion, itemIds);
+      await refrescarCola(); await refrescarPedidos();
+      addToast(action === 'iniciar' ? 'Preparación iniciada' : 'Productos de esta estación terminados', 'success');
+    } catch (e) { await refrescarCola(); throw e; }
   };
   const crearMermaApi = async (body) => {
     try { await api.crearMerma(body); await refrescarCola(); addToast('Merma registrada — inventario descontado', 'warn'); }
@@ -507,7 +511,7 @@ export default function App() {
         <BaristaApp
           brand={brand}
           sedeNombre={sede ? sede.nombre : ''}
-          tickets={cola} startTicket={iniciarTicketApi} finishTicket={terminarTicketApi} addMerma={crearMermaApi}
+          tickets={cola} prepareTicket={prepararTicketApi} finishTicket={terminarTicketApi} addMerma={crearMermaApi}
           onCancelar={cancelarPedidoApi}
           onLogout={logout} now={now} currentUser={currentUser} recetaOverrides={recetaOverrides}
           mostrador={role === 'mostrador' ? { irA: () => setModoMostrador('caja'), porCobrar: pedidos.filter(o => !o.cobrado && !o.cancelado && !o.noShow).length } : null}

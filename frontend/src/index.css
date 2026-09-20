@@ -918,3 +918,58 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .salida-row strong { font-family: var(--font-mono); white-space: nowrap; }
 .salida-form { margin-top: 10px; }
 @media (max-width: 640px) { .mayordomia-row { min-width: 640px; } }
+
+/* Una sección por pedido; las acciones siguen siendo por producto. */
+.ticket-name-field { display: grid; gap: 8px; margin-bottom: 16px; font-weight: 700; }
+.preparation-order { min-width: 0; background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-1); }
+.preparation-order-header { padding: 18px; background: var(--surface-alt, var(--bg)); border-bottom: 2px solid var(--line); overflow-wrap: anywhere; }
+.preparation-order-header h2 { font-size: 1.5rem; line-height: 1.2; margin: 8px 0; }
+.preparation-order-header .ticket-destino { margin-top: 12px; }
+.preparation-order-items { display: grid; gap: 10px; padding: 12px; }
+.preparation-order .ticket-card { box-shadow: none; padding: 12px; }
+.preparation-order > .ticket-cancelar { margin: 0 16px 16px; }
+
+/* Comandas horizontales: identidad a la izquierda y productos en filas. */
+.preparation-board { display: grid; gap: 18px; }
+.horizontal-order { display: grid; grid-template-columns: 235px minmax(0, 1fr); }
+.horizontal-order .preparation-order-header { border-bottom: 0; border-right: 2px solid var(--line); }
+.preparation-order-body { min-width: 0; }
+.preparation-station + .preparation-station { border-top: 2px solid var(--line); }
+.preparation-station-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px; }
+.preparation-station-head > strong, .preparation-batch-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.horizontal-order .preparation-order-items { padding-top: 0; }
+.preparation-item { display: grid; grid-template-columns: minmax(180px, 1fr) 150px auto; align-items: center; gap: 16px; padding: 14px; border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: var(--radius); }
+.preparation-item .ticket-product, .preparation-item .ticket-actions { margin: 0; }
+.preparation-item .ticket-actions { flex-wrap: wrap; }
+.preparation-item.status-border-en_preparacion { border-left-color: var(--brand); }
+.preparation-item.status-border-terminado { border-left-color: var(--ok); background: var(--ok-soft); }
+.preparation-item-status { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; }
+.preparation-item-status.is-done { color: var(--ok); }
+.preparation-order-status { display: block; margin: 12px 0 6px; }
+.preparation-order-status.terminado { color: var(--ok); }
+.preparation-completed { margin-top: 32px; }
+.preparation-completed > h2 { display: flex; gap: 8px; align-items: center; }
+.preparation-completed > p { color: var(--ink-soft); margin: 8px 0 16px; }
+@media (max-width: 1150px) {
+  .horizontal-order { grid-template-columns: 190px minmax(0, 1fr); }
+  .preparation-item { grid-template-columns: minmax(0, 1fr) auto; }
+  .preparation-item .ticket-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+@media (max-width: 640px) {
+  .horizontal-order { grid-template-columns: 1fr; }
+  .horizontal-order .preparation-order-header { border-right: 0; border-bottom: 2px solid var(--line); }
+  .preparation-item { gap: 10px; padding: 10px; }
+  .preparation-item-status { max-width: 110px; flex-wrap: wrap; }
+  .preparation-station-head .btn-primary, .preparation-station-head .btn-secondary { min-height: 44px; }
+}
+
+.cash-command-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 14px; }
+.cash-command-tools label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.cash-command-summary { font-weight: 700; margin: 16px 0; }
+.cash-command-items { display: grid; gap: 10px; padding: 14px; }
+.cash-command-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: var(--radius); padding: 14px; }
+.cash-command-item.ready { border-left-color: var(--ok); }
+.cash-preparation-status { display: flex; align-items: center; gap: 6px; font-weight: 700; margin-top: 10px; }
+.prepared-by { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+.cash-delivery-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+@media (max-width: 850px) { .cash-command-item { flex-wrap: wrap; } .cash-delivery-actions { width: 100%; } }

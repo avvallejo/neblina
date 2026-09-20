@@ -257,7 +257,7 @@ export function crearAprobacionDescuento({ pin, descuentoPorcentaje }) {
   return request('/pedidos/aprobaciones-descuento', { method: 'POST', body: { pin, descuentoPorcentaje } });
 }
 
-export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente, destino, mesa }) {
+export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente, destino, mesa, nombreTicket }) {
   return request('/pedidos', {
     method: 'POST',
     useClienteToken: !!comoCliente,
@@ -270,10 +270,17 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
       horaRecogida,
       destino, // Caja: 'mesa' | 'barra' | 'llevar' (obligatorio); cliente: no aplica
       mesa,
+      nombreTicket,
     },
   });
 }
 
+export function getComandasCaja({ historial = false, fecha } = {}) {
+  return request(`/pedidos/comandas?historial=${historial}${fecha ? `&fecha=${encodeURIComponent(fecha)}` : ''}`);
+}
+export function entregarProducto(orderId, itemId, cantidad, cantidadEsperada) {
+  return request(`/pedidos/${orderId}/items/${itemId}/entregar`, { method: 'PATCH', body: { cantidad, cantidadEsperada } });
+}
 export function getPedidos(fecha) { return request(fecha ? `/pedidos?fecha=${encodeURIComponent(fecha)}` : '/pedidos'); }
 export function agregarItemsPedido(id, cart) { return request(`/pedidos/${id}/items`, { method: 'POST', body: { items: cart.map(itemToApi) } }); }
 export function cambiarCantidadPedido(id, itemId, cantidad, cantidadEsperada, correccion = {}) { return request(`/pedidos/${id}/items/${itemId}`, { method: 'PATCH', body: { cantidad, cantidadEsperada, ...correccion } }); }
@@ -311,6 +318,7 @@ export function noShowPedido(id) { return request(`/pedidos/${id}/no-show`, { me
    ============================================================ */
 
 export function getColaBarista() { return request('/pedido-items/cola'); }
+export function prepararTicket(orderId, action, estacion, itemIds) { return request(`/pedido-items/pedido/${orderId}/${action}`, { method: 'PATCH', body: { estacion, itemIds } }); }
 export function iniciarItem(id) { return request(`/pedido-items/${id}/iniciar`, { method: 'PATCH' }); }
 export function terminarItem(id) { return request(`/pedido-items/${id}/terminar`, { method: 'PATCH' }); }
 

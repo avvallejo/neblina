@@ -1,3 +1,4 @@
+import CajaComandas from './CajaComandas.jsx';
 import ProductImage from '../components/ProductImage.jsx';
 // PANEL ADMINISTRATIVO. Barra lateral con secciones; el ADMIN GENERAL además
 // tiene el switcher de sucursal, la administración de sucursales y el
@@ -1138,6 +1139,7 @@ export default function AdminApp(props) {
     { id: 'proveedores', label: 'Proveedores', Icon: Package },
     { id: 'usuarios', label: 'Personal', Icon: Lock },
     { id: 'reportes', label: 'Reportes', Icon: Receipt },
+    { id: 'comandas', label: 'Comandas / personal', Icon: ClipboardList },
     { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: (cortesiasPendientes || []).length + (cancelacionesPendientes || []).length },
     ...(esGeneral ? [
       { id: 'comparativo', label: 'Comparativo', Icon: BarChart3 },
@@ -1157,6 +1159,7 @@ export default function AdminApp(props) {
     contabilidad: ['Contabilidad', 'Egresos, estado de resultados, mayordomía y cuentas'],
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
     reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],
+    comandas: ['Preparación por empleado', 'Historial de productos preparados y seguimiento de entregas'],
     autorizaciones: ['Autorizaciones', `${(cortesiasPendientes || []).length} cortesía(s) y ${(cancelacionesPendientes || []).length} cancelación(es) por resolver`],
     comparativo: ['Comparativo de sucursales', 'Todas las sedes'],
     sucursales: ['Sucursales', 'Administración del negocio completo'],
@@ -1179,9 +1182,10 @@ export default function AdminApp(props) {
       onLogout={onLogout}
       title={title}
       subtitle={subtitle}
-      wide={['reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones', 'contabilidad'].includes(screen)}
+      wide={['comandas', 'reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones', 'contabilidad'].includes(screen)}
       topRight={esGeneral ? <span className="sede-pill"><Building2 size={13} /> {sedeNombre || 'Elige sucursal'}</span> : null}
     >
+      {screen === 'comandas' && <CajaComandas key={sedeActivaId || sedeNombre} initialHistory readOnly />}
       {screen === 'dashboard' && (
         <div className="admin-columns">
           <div>

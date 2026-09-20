@@ -22,10 +22,10 @@ async function correctCashItem(client, { item, cantidad, auth, motivo, devuelto 
         [consumo.materia_prima_id, Number(consumo.cantidad)*cantidad/Number(item.cantidad),consumo.unidad,auth.id,item.id]);
     }
     // Sigue terminado: no dispara nuevamente el consumo automático.
-    await client.query('UPDATE pedido_items SET cantidad=$1 WHERE id=$2',[cantidad,item.id]);
+    await client.query('UPDATE pedido_items SET cantidad=$1, cantidad_entregada=LEAST(cantidad_entregada,$1) WHERE id=$2',[cantidad,item.id]);
   } else {
     // Conservar el historial y las referencias del kardex; excluir de total y ventas.
-    await client.query("UPDATE pedido_items SET estado='cancelado' WHERE id=$1",[item.id]);
+    await client.query("UPDATE pedido_items SET estado='cancelado', cantidad_entregada=0 WHERE id=$1",[item.id]);
   }
 }
 module.exports = { correctCashItem };

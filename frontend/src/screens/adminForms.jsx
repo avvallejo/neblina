@@ -94,7 +94,7 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
             <button key={r} className={`option-chip ${rol === r ? 'selected' : ''}`} onClick={() => { setRol(r); if (r !== 'admin') setGeneral(false); }}>{r === 'barista' ? 'Preparación (barista / parrillero)' : ROLE_LABELS[r]}</button>
           ))}
         </div>
-        {rol === 'mostrador' && <div className="field-hint">Para sedes donde la misma persona levanta el pedido, cobra y prepara: entra con Caja y Barra en la misma sesión y puede cambiar entre ambas con un toque.</div>}
+        {rol === 'mostrador' && <div className="field-hint">Para una sola persona: levanta pedidos, cobra, prepara en sus estaciones y registra entregas en Caja → Comandas. Puede cambiar entre Caja y Preparación con un toque.</div>}
       </div>
       {prepara && (
         <div className="option-group">
@@ -110,7 +110,7 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
           </div>
           <div className="field-hint">
             Barista ve los productos asignados a Barra. Parrillero ve los asignados a Parrilla. Ambos ve las dos estaciones, en orden de llegada.
-            Lo que se marca como "se entrega en caja" no pasa por ninguna comanda.
+            Lo que se marca como "se entrega en caja" aparece listo para surtir en Caja → Comandas, sin pasar por barra ni parrilla.
           </div>
         </div>
       )}
@@ -723,7 +723,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
           <button className={`option-chip ${tipo === 'bebida' ? 'selected' : ''}`} onClick={() => setTipo('bebida')}>Bebida (espresso)</button>
           <button className={`option-chip ${tipo === 'frappe' ? 'selected' : ''}`} onClick={() => setTipo('frappe')}>Frappé</button>
           <button className={`option-chip ${tipo === 'alimento' ? 'selected' : ''}`} onClick={() => { setTipo('alimento'); if (estacion === 'barra' || estacion === 'caja') setEstacion('parrilla'); }}>Parrilla / cocina</button>
-          <button className={`option-chip ${tipo === 'snack' ? 'selected' : ''}`} onClick={() => { setTipo('snack'); if (estacion === 'barra') setEstacion('parrilla'); }}>Comprado hecho</button>
+          <button className={`option-chip ${tipo === 'snack' ? 'selected' : ''}`} onClick={() => { setTipo('snack'); setEstacion('caja'); }}>Comprado hecho</button>
         </div>
         <div className="field-hint">
           {tipo === 'alimento'
@@ -748,7 +748,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
           {!conEstacion
             ? 'Las bebidas y frappés siempre van a la comanda de la barra (barista).'
             : estacion === 'caja'
-              ? 'No pasa por ninguna comanda: es un producto empacado que la Caja entrega al momento (galletas, botellas…).'
+              ? 'Aparece listo para surtir en Caja → Comandas (postres listos, refrescos, galletas…). Caja confirma la entrega; no requiere barista ni parrillero.'
               : estacion === 'parrilla'
                 ? 'Aparece en la comanda del parrillero.'
                 : 'Aparece en la comanda del barista.'}

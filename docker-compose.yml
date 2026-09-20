@@ -64,6 +64,8 @@ services:
       - ./db/36_estacion_por_linea.sql:/docker-entrypoint-initdb.d/36_estacion_por_linea.sql:ro
       - ./db/37_devolucion_caja.sql:/docker-entrypoint-initdb.d/37_devolucion_caja.sql:ro
       - ./db/38_cortesia_por_producto.sql:/docker-entrypoint-initdb.d/38_cortesia_por_producto.sql:ro
+      - ./db/39_nombre_ticket.sql:/docker-entrypoint-initdb.d/39_nombre_ticket.sql:ro
+      - ./db/40_preparacion_y_entrega.sql:/docker-entrypoint-initdb.d/40_preparacion_y_entrega.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

@@ -207,7 +207,7 @@ export function calcCartAmounts(cart, discountPct = 0) {
 
 // allowCortesia (solo Caja): cada línea tiene un botón de regalo para marcarla
 // como cortesía dentro del mismo ticket; el resto se cobra normal.
-export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDiscount, onCheckout, allowDiscount = true, allowCortesia = false, ctaLabel, footerExtra, compact, destino, onDestino, mesas }) {
+export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDiscount, onCheckout, allowDiscount = true, allowCortesia = false, ctaLabel, footerExtra, compact, destino, onDestino, mesas, nombreTicket, onNombreTicket }) {
   const [discountOpen, setDiscountOpen] = useState(false);
   const updateQty = (uid, qty) => {
     if (qty <= 0) { setCart(c => c.filter(i => i.uid !== uid)); return; }
@@ -252,6 +252,9 @@ export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDis
       </div>
 
       <div className="cart-summary">
+        {onNombreTicket && <label className="ticket-name-field">¿A nombre de quién?
+          <input className="text-input" value={nombreTicket} onChange={e => onNombreTicket(e.target.value)} maxLength={80} placeholder="Nombre del cliente" required />
+        </label>}
         {onDestino && <DestinoPicker mesas={mesas} value={destino} onChange={onDestino} />}
         {allowDiscount && (
           <button className="discount-link" onClick={() => setDiscountOpen(true)}>
@@ -268,7 +271,7 @@ export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDis
         {cortesiaUnits > 0 && <div className="summary-row discount-row"><span><Gift size={12} style={{ verticalAlign: -2 }} /> Cortesía ({cortesiaUnits} producto{cortesiaUnits === 1 ? '' : 's'})</span><span>-{money(cortesiaAmt)}</span></div>}
         {discount && <div className="summary-row discount-row"><span>Descuento ({discountPct}%)</span><span>-{money(discountAmt)}</span></div>}
         <div className="summary-row total"><span>Total</span><span>{money(total)}</span></div>
-        <button className="btn-primary full" style={{ marginTop: 10 }} disabled={!!onDestino && !destino} onClick={() => onCheckout({ subtotal, cortesiaAmt, cortesiaUnits, discountPct, discountAmt, total })}>{ctaLabel || (total === 0 && cortesiaUnits > 0 ? 'Registrar cortesía' : `Cobrar ${money(total)}`)}</button>
+        <button className="btn-primary full" style={{ marginTop: 10 }} disabled={(!!onDestino && !destino) || (!!onNombreTicket && !nombreTicket?.trim())} onClick={() => onCheckout({ subtotal, cortesiaAmt, cortesiaUnits, discountPct, discountAmt, total })}>{ctaLabel || (total === 0 && cortesiaUnits > 0 ? 'Registrar cortesía' : `Cobrar ${money(total)}`)}</button>
       </div>
 
       {allowDiscount && discountOpen && <DiscountSheet current={discount} onClose={() => setDiscountOpen(false)} onApply={onAuthorizeDiscount} />}

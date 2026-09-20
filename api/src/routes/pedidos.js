@@ -13,6 +13,7 @@ const { resolverDestino, entregarItemsDeCaja } = require('../services/stations')
 const { solicitarCancelacion } = require('../services/cancellations');
 
 const {cashPart}=require('../services/cashDrawer');
+const { preparationTrackingSql, deliveryHistorySql, deliverItem } = require('../services/preparationTracking');
 const { addOrderItems, changeOrderItem } = require('../services/openOrders');
 const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'mixto', 'cortesia'];
 const router = express.Router();
@@ -48,6 +49,10 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, 'El pedido necesita al menos un producto.');
   if (pinAutorizacion !== undefined) throw new ApiError(400, 'Usa una autorización de descuento de un solo uso.');
 
+  const nombreTicket = req.body.nombreTicket;
+  if (nombreTicket !== undefined && (typeof nombreTicket !== 'string' || !nombreTicket.trim() || nombreTicket.trim().length > 80)) {
+    throw new ApiError(400, 'El nombre del ticket debe tener entre 1 y 80 caracteres.');
+  }
   const esStaff = req.auth.tipo === 'staff';
   const origen = esStaff ? 'mostrador' : 'app';
   assertPaymentAllowed(req.auth, pago);
@@ -107,8 +112,8 @@ router.post('/', asyncHandler(async (req, res) => {
           descuento_porcentaje, descuento_autorizado_por, total, metodo_pago, monto_recibido, cambio,
           cobrado, es_regalo_fidelidad, sucursal_id, importe_efectivo,
           cortesia_estado, cortesia_motivo, cortesia_resuelta_por, cortesia_resuelta_en, destino, mesa_numero,
-          cortesia_valor, cortesia_unidades)
-       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          cortesia_valor, cortesia_unidades, nombre_ticket)
+       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
        RETURNING *`,
       [origen, clienteId, esStaff && ['cajero', 'mostrador', 'admin'].includes(req.auth.rol) ? req.auth.id : null, horaRecogida || null, subtotal,
         descuentoFinal, autorizadoPor, total,
@@ -116,7 +121,7 @@ router.post('/', asyncHandler(async (req, res) => {
         cobradoInicial && !esCortesia && pago.montoRecibido ? Math.round((pago.montoRecibido - total) * 100) / 100 : null,
         cobradoInicial, esRegaloPedido, req.sucursalId, cobradoInicial ? cashPart(metodoPago, total, pago.importeEfectivo) : null,
         cortesia ? cortesia.estado : null, cortesia ? cortesia.motivo : null, cortesia ? cortesia.resueltaPor : null, cortesia ? cortesia.resueltaEn : null,
-        dest.destino, dest.mesaNumero, cortesiaValor, cortesiaUnidades]
+        dest.destino, dest.mesaNumero, cortesiaValor, cortesiaUnidades, nombreTicket?.trim() || null]
     );
     const pedido = pedidoRes.rows[0];
 
@@ -148,9 +153,11 @@ router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) =>
   // Se agregan nombre del cliente y conteo de items para que la pantalla de
   // Caja muestre "N producto(s) — Nombre" sin pedir cada pedido por separado.
   const { rows } = await query(
-    `SELECT v.*, c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
+    `SELECT v.*, p.nombre_ticket, u.nombre AS levantado_por_nombre, c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
             (SELECT COUNT(*) FROM pedido_items pi WHERE pi.pedido_id = v.id AND pi.estado <> 'cancelado') AS num_items
      FROM vw_pedidos_con_estado v
+     JOIN pedidos p ON p.id = v.id
+     LEFT JOIN usuarios u ON u.id = p.cajero_id
      LEFT JOIN clientes c ON c.id = v.cliente_id
      WHERE v.sucursal_id = $1 AND ($2::date IS NULL OR (v.creado_en >= $2::date::timestamp AT TIME ZONE 'America/Mexico_City' AND v.creado_en < ($2::date+1)::timestamp AT TIME ZONE 'America/Mexico_City'))
      ORDER BY v.creado_en DESC LIMIT 2000`,
@@ -174,17 +181,37 @@ router.patch('/:id/items/:itemId', requireRole('cajero', 'admin'), asyncHandler(
   res.json(pedido);
 }));
 
+router.get('/comandas', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
+  const deliveries = req.query.historial === 'entregas';
+  const history = req.query.historial === 'true';
+  const fecha = validateDate(req.query.fecha);
+  if ((history || deliveries) && !fecha) throw new ApiError(400, 'Selecciona la fecha del historial.');
+  const { rows } = deliveries
+    ? await query(deliveryHistorySql, [req.sucursalId, fecha])
+    : await query(preparationTrackingSql, [req.sucursalId, history, fecha]);
+  res.json(rows);
+}));
+
+router.patch('/:id/items/:itemId/entregar', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
+  const item = await withTransaction(client => deliverItem(client, {
+    orderId: req.params.id, itemId: req.params.itemId, sucursalId: req.sucursalId, auth: req.auth,
+    cantidad: req.body.cantidad, cantidadEsperada: req.body.cantidadEsperada,
+  }));
+  res.json(item);
+}));
+
 router.get('/:id', asyncHandler(async (req, res) => {
-  const pedido = await query('SELECT v.*,p.registrado_en,p.motivo_registro,p.registro_manual FROM vw_pedidos_con_estado v JOIN pedidos p ON p.id=v.id WHERE v.id = $1 AND v.sucursal_id = $2', [req.params.id, req.sucursalId]);
+  const pedido = await query('SELECT v.*,p.nombre_ticket,u.nombre AS levantado_por_nombre,c.nombre AS cliente_nombre,c.apellido AS cliente_apellido,p.registrado_en,p.motivo_registro,p.registro_manual FROM vw_pedidos_con_estado v JOIN pedidos p ON p.id=v.id LEFT JOIN usuarios u ON u.id=p.cajero_id LEFT JOIN clientes c ON c.id=p.cliente_id WHERE v.id = $1 AND v.sucursal_id = $2', [req.params.id, req.sucursalId]);
   if (pedido.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
   if (req.auth.tipo === 'cliente' && pedido.rows[0].cliente_id !== req.auth.id) {
     throw new ApiError(403, 'No puedes ver un pedido que no es tuyo.');
   }
   const items = await query(
-    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono, pi.estacion_preparacion AS estacion,
+    `SELECT pi.*, COALESCE(pi.concepto_libre,pr.nombre) AS producto_nombre, pr.icono, pi.estacion_preparacion AS estacion, fin.nombre AS terminado_por_nombre,
        ot.etiqueta AS tamano_etiqueta, ol.etiqueta AS leche_etiqueta, oc.etiqueta AS cafe_etiqueta,
        COALESCE((SELECT json_agg(oe.etiqueta) FROM pedido_item_extras pie JOIN opciones_extra oe ON oe.id=pie.extra_id WHERE pie.pedido_item_id=pi.id), '[]') AS extras
      FROM pedido_items pi LEFT JOIN productos pr ON pr.id = pi.producto_id
+     LEFT JOIN usuarios fin ON fin.id=pi.terminado_por
      LEFT JOIN opciones_tamano ot ON ot.id=pi.tamano_id
      LEFT JOIN opciones_leche ol ON ol.id=pi.leche_id
      LEFT JOIN opciones_cafe oc ON oc.id=pi.cafe_id

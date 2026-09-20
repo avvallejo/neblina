@@ -59,8 +59,9 @@ function normalizarEstacionesUsuario(value) {
   return ESTACIONES_USUARIO.filter(e => set.includes(e)); // orden estable
 }
 
-// Ítems de productos que se entregan en caja: quedan terminados de inmediato
-// (siguen contando para inventario y para el estado "listo" del pedido).
+// Sin preparación: quedan LISTOS de inmediato para reservar/descontar inventario.
+// Esto NO registra la entrega física: cantidad_entregada sigue en cero hasta
+// que caja/mostrador la confirme en Comandas. Se conserva el nombre por compatibilidad.
 async function entregarItemsDeCaja(client, pedidoId) {
   const { rows } = await client.query(
     `UPDATE pedido_items pi SET estado = 'terminado', terminado_en = now()

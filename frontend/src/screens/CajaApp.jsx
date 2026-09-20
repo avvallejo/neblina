@@ -4,6 +4,7 @@ import CoffeeGuide from '../components/CoffeeGuide.jsx';
 import React, { useState } from 'react';
 import VentaDirecta from './VentaDirecta';
 import CajaDinero from './CajaDinero';
+import CajaComandas from './CajaComandas.jsx';
 import OpenTicketSheet from './OpenTicketSheet.jsx';
 import { adaptPedido } from '../lib/adapters';
 import { Coffee, ShoppingCart, Receipt, AlertTriangle, Droplets, Gift, Ban, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -37,6 +38,7 @@ function ConfirmedView({ order, onNewSale }) {
     <div className="confirm-screen">
       <div className="confirm-check"><span style={{ fontSize: 34 }}>✓</span></div>
       <div className="confirm-order-id">{order.folio || order.id}</div>
+      {order.nombreTicket && <h2>{order.nombreTicket}</h2>}
       <p style={{ fontWeight: 600, color: 'var(--ink-soft)' }}>Pedido enviado a preparación{destinoLabel(order) ? ` · ${destinoLabel(order)}` : ''}</p>
       {!order.cobrado && <p><strong>Pendiente de pago.</strong> En Ventas puedes agregar productos o cobrar este mismo ticket.</p>}
       <div className="confirm-total">{order.esCortesia ? 'Cortesía · $0.00' : money(order.total)}</div>
@@ -124,7 +126,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
         return (
           <div key={o.id} className="turno-row">
             <div>
-              <div className="turno-id">{o.folio}</div>
+              <div className="turno-id">{o.folio}{o.nombreTicket ? ` · ${o.nombreTicket}` : ''}</div>
               <div className="turno-sub">
                 {fmtHora(o.createdAt)} • {o.numItems} producto(s) • {o.payMethod}
                 {o.destino && ` • ${destinoLabel(o)}`}
@@ -174,6 +176,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
 // (rol "mostrador"): agrega el acceso "Barra" a la navegación.
 export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrderChanged, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null, mesas = 4 }) {
   const [screen, setScreen] = useState('menu');
+  const [nombreTicket, setNombreTicket] = useState('');
   const [destino, setDestino] = useState(null); // { destino: 'mesa'|'barra'|'llevar', mesa }
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [activeCat, setActiveCat] = useState('Calientes');
@@ -230,13 +233,14 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         descuentoPorcentaje: discount?.porcentaje,
         autorizacionDescuento: discount?.autorizacion,
         pago: { metodoPago: payInfo.method, montoRecibido: payInfo.cashGiven, importeEfectivo:payInfo.importeEfectivo, motivoCortesia: payInfo.motivoCortesia },
+        nombreTicket: nombreTicket.trim(),
         destino: destino?.destino,
         mesa: destino?.mesa ?? undefined,
       });
       setLastOrder(order);
       setCart([]);
       setDiscount(null);
-      setDestino(null);
+      setDestino(null); setNombreTicket('');
       setScreen('confirmed');
     } catch (e) {
       if (esCortesia) throw e;
@@ -258,8 +262,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         addToast(`Productos agregados a ${addingToOrder.folio}; sigue pendiente de pago`, 'success');
       } else {
         const order = await createOrder({ cart, descuentoPorcentaje: discount?.porcentaje,
-          autorizacionDescuento: discount?.autorizacion, destino: destino?.destino, mesa: destino?.mesa ?? undefined });
-        setCart([]); setDiscount(null); setDestino(null);
+          nombreTicket: nombreTicket.trim(), autorizacionDescuento: discount?.autorizacion, destino: destino?.destino, mesa: destino?.mesa ?? undefined });
+        setCart([]); setDiscount(null); setDestino(null); setNombreTicket('');
         setLastOrder(order); setScreen('confirmed');
       }
     } catch (e) { addToast(e.message, 'warn'); }
@@ -310,6 +314,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
   const navItems = [
     { id: 'menu', label: 'Menú', Icon: Coffee },
     { id: 'cart', label: 'Carrito', Icon: ShoppingCart, badge: cartCount },
+    { id: 'comandas', label: 'Comandas', Icon: Droplets },
     { id: 'turno', label: 'Ventas', Icon: Receipt },
     ...(mostrador ? [{ id: 'barra', label: 'Barra', Icon: Droplets, badge: mostrador.pendientes }] : []),
   ];
@@ -319,6 +324,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     cart: ['Carrito', `${cartCount} producto(s)`],
     checkout: ['Cobro', chargingOrder ? `Pedido ${chargingOrder.folio}` : 'Venta de mostrador'],
     confirmed: ['Pedido registrado', ''],
+    comandas: ['Comandas y entregas', 'Avance por producto e historial de preparación'],
     turno: ['Ventas', 'Consulta por fecha y pedidos en curso'],
     directa: ['Venta directa o atrasada', 'Precio real y salida de inventario'],
   };
@@ -331,15 +337,16 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
       allowDiscount={!addingToOrder}
       allowCortesia
       ctaLabel={enviando ? 'Enviando…' : addingToOrder ? `Agregar a ${addingToOrder.folio}` : 'Enviar a comanda · cobrar después'}
-      footerExtra={addingToOrder ? <p>Estos productos se sumarán al ticket, que actualmente tiene {money(addingToOrder.total)} por cobrar.</p> : <button className="btn-secondary full" disabled={!destino || enviando} onClick={() => {
+      footerExtra={addingToOrder ? <p>Estos productos se sumarán al ticket, que actualmente tiene {money(addingToOrder.total)} por cobrar.</p> : <button className="btn-secondary full" disabled={!destino || !nombreTicket.trim() || enviando} onClick={() => {
         setAmounts(calcCartAmounts(cart, discount?.porcentaje || 0)); setScreen('checkout');
       }}>Cobrar ahora</button>}
       onAuthorizeDiscount={authorizeDiscount}
       destino={destino} onDestino={addingToOrder ? undefined : setDestino} mesas={mesas}
+      nombreTicket={nombreTicket} onNombreTicket={addingToOrder ? undefined : setNombreTicket}
       onCheckout={enviarComanda}
     />
   );
-  const destinoTexto = chargingOrder ? destinoLabel(chargingOrder) : destinoLabel(destino ? { destino: destino.destino, mesaNumero: destino.mesa } : {});
+  const destinoTexto = [chargingOrder ? `${chargingOrder.folio} · ${chargingOrder.nombreTicket || 'Sin nombre registrado'}` : nombreTicket.trim(), chargingOrder ? destinoLabel(chargingOrder) : destinoLabel(destino ? { destino: destino.destino, mesaNumero: destino.mesa } : {})].filter(Boolean).join(' · ');
 
   return (
     <AppShell
@@ -362,7 +369,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
       </>}
     >
       {addingToOrder && <div className="promo-summary-card">
-        Agregando productos al ticket <strong>{addingToOrder.folio}</strong> · {destinoLabel(adaptPedido(addingToOrder))}.
+        Agregando productos al ticket <strong>{addingToOrder.folio} · {adaptPedido(addingToOrder).nombreTicket || 'Sin nombre'}</strong> · {destinoLabel(adaptPedido(addingToOrder))}.
         <button className="link-toggle" disabled={enviando} onClick={cancelarAgregado}>Cancelar selección</button>
       </div>}
       <CajaDinero open={drawerOpen} onOpen={()=>setDrawerOpen(true)} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>
@@ -377,6 +384,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
           <div className="pos-cart-panel hide-mobile">{cartPanel}</div>
         </div>
       )}
+      {screen === 'comandas' && <CajaComandas />}
       {screen === 'directa' && <VentaDirecta onBack={()=>setScreen('menu')} addToast={addToast}/>}
       {screen === 'cart' && <div style={{ maxWidth: 640 }}>{cartPanel}</div>}
       {screen === 'checkout' && <CheckoutView amounts={amounts} items={chargingOrder && !chargingOrder.registroManual && !chargingOrder.esRecompensaPura ? chargingOrder.items : null} onBack={backFromCheckout} onConfirm={handleConfirmPay} allowCortesia destinoTexto={destinoTexto} />}

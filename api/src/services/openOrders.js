@@ -57,7 +57,7 @@ async function changeOrderItem(client, { id, itemId, sucursalId, auth, cantidad,
   if (esCaja) {
     await correctCashItem(client,{item,cantidad,auth,motivo,devuelto});
     const updated = await recalculate(client,id);
-    await audit(client,auth,order,'corregir_entrega_caja',item,{itemId,cantidad,total:updated.total,motivo:motivo.trim(),devuelto:devuelto===true});
+    await audit(client,auth,order,'corregir_entrega_caja',item,{itemId,cantidad,cantidadEntregada:Math.min(Number(item.cantidad_entregada || 0),cantidad),total:updated.total,motivo:motivo.trim(),devuelto:devuelto===true});
     return updated;
   }
   if (cantidad === 0) {

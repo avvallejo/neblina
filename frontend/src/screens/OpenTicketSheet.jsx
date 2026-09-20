@@ -1,3 +1,4 @@
+import { deliveryLabel } from '../lib/preparationTracking.js';
 import React, { useEffect, useState } from 'react';
 import * as api from '../api/client.js';
 import { Sheet, useAccionUnica, StatusChip } from '../components/ui.jsx';
@@ -35,7 +36,8 @@ export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
   };
   const editable = data && !data.cobrado && !data.cancelado && !data.no_show && data.cancelacion_estado !== 'pendiente' && !data.es_regalo_fidelidad && !data.registro_manual;
   return <Sheet title={`Ticket ${order.folio} · Por cobrar`} onClose={() => { if (!busy) onClose(); }}>
-    <p>Agrega productos al mismo ticket. Puedes cambiar productos pendientes de preparación y corregir los entregados en caja antes del cobro.</p>
+    {order.nombreTicket && <h3>{order.nombreTicket}</h3>}
+    <p>Agrega productos al mismo ticket. Puedes cambiar productos pendientes de preparación y corregir los productos sin preparación antes del cobro.</p>
     {error && <p role="alert" className="form-error">{error}</p>}
     {correction && <fieldset disabled={busy} style={{padding:16,margin:'12px 0',border:'1px solid var(--brand)',borderRadius:12}}>
       <legend>Corregir {correction.item.producto_nombre}</legend>
@@ -51,8 +53,9 @@ export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
         <div className="cart-item-sub">{[item.tamano_etiqueta, item.leche_etiqueta, item.cafe_etiqueta, ...(item.extras || [])].filter(Boolean).join(' · ')}</div>
         {item.notas && <div>{item.notas}</div>}
         {item.estado === 'cancelado' ? <small>Retirado del ticket · no se cobra</small> : <StatusChip status={item.estado}/>}
-        {item.estado === 'terminado' && item.estacion === 'caja' && <small> Entregado en caja. Puedes corregirlo con motivo; si retiras unidades, deben estar disponibles para volver al inventario.</small>}
-        {item.estado !== 'pendiente' && item.estado !== 'cancelado' && item.estacion !== 'caja' && <small> Ya está en preparación o entregado; no se modifica desde aquí.</small>}
+        {item.estado === 'terminado' && item.estacion === 'caja' && <small> {deliveryLabel(item)} · Entregados: {item.cantidad_entregada || 0} de {item.cantidad}. Confirma la entrega en Comandas. Puedes corregir la cantidad con motivo; los productos retirados deben estar disponibles para volver al inventario.</small>}
+        {item.estado === 'terminado' && item.estacion !== 'caja' && <small className="prepared-by">{deliveryLabel(item)} · Terminó: {item.terminado_por_nombre || 'Sin registro histórico'} · Entregados: {item.cantidad_entregada || 0} de {item.cantidad}. Registra la entrega en Comandas.</small>}
+        {item.estado === 'en_preparacion' && <small> En preparación; todavía no está listo para entregar.</small>}
       </div>
       <div className="cart-item-controls">
         <span>{item.cantidad} × {money(item.precio_unitario)}</span>

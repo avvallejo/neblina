@@ -27,8 +27,8 @@ const drawerSql=`SELECT t.id,t.abierto_en,t.fondo_inicial,
  COALESCE(SUM(p.cortesia_unidades),0)::int cortesias_unidades_turno,
  COALESCE(SUM(p.cortesia_valor),0) cortesias_valor_turno,
  COUNT(p.id) FILTER(WHERE p.cortesia_estado='pendiente') cortesias_pendientes_turno,
- (SELECT COALESCE(SUM(e.monto),0) FROM egresos e WHERE e.turno_id=t.id AND NOT e.anulado) salidas_turno,
- (SELECT COUNT(*) FROM egresos e WHERE e.turno_id=t.id AND NOT e.anulado) num_salidas_turno
+ (SELECT COALESCE(SUM(e.monto),0) FROM egresos e WHERE e.turno_id=t.id AND e.pagado AND NOT e.anulado AND e.cuenta_dinero_id IN (SELECT id FROM cuentas_dinero WHERE sucursal_id=t.sucursal_id AND clave='caja')) salidas_turno,
+ (SELECT COUNT(*) FROM egresos e WHERE e.turno_id=t.id AND e.pagado AND NOT e.anulado AND e.cuenta_dinero_id IN (SELECT id FROM cuentas_dinero WHERE sucursal_id=t.sucursal_id AND clave='caja')) num_salidas_turno
  FROM turnos t LEFT JOIN pedidos p ON p.turno_cobro_id=t.id AND p.cobrado AND NOT p.cancelado AND NOT p.no_show
  WHERE t.sucursal_id=$1 AND t.cerrado_en IS NULL GROUP BY t.id`;
 module.exports={moneyAmount,cashPart,setOpeningFund,drawerSql};

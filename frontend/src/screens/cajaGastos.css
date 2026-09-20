@@ -1,0 +1,5 @@
+.salidas-caja .salida-form .option-label { display: block; margin-top: 14px; }
+.salidas-caja .salida-form .text-input { display: block; margin-top: 6px; }
+.salidas-caja .salida-form .field-hint { margin: 10px 0; }
+.salidas-caja .salida-form .option-row { margin-top: 16px; flex-wrap: wrap; }
+.salidas-caja .salida-form input[type="checkbox"] { margin-right: 7px; }

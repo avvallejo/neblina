@@ -1,3 +1,4 @@
+import { productEmoji } from '../lib/productEmojis.js';
 import CoffeeGuide from '../components/CoffeeGuide.jsx';
 // PUNTO DE VENTA (Caja). En escritorio: menú + carrito lado a lado; en móvil:
 // pestañas Menú / Carrito / Turno en la navegación inferior.
@@ -56,7 +57,7 @@ function DetalleVenta({id}) {
       {data.registro_manual&&<p>Captura directa · {data.motivo_registro}<br/>Ingresada al sistema: {new Date(data.registrado_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City'})}</p>}
       {data.cortesia_estado&&<p>{data.metodo_pago==='cortesia'?'Todo el ticket de cortesía':'Cortesía parcial'} · {CORTESIA_ESTADO_LABELS[data.cortesia_estado]||data.cortesia_estado} · {data.cortesia_unidades} producto(s) por {money(data.cortesia_valor)}{data.cortesia_motivo&&<><br/>Motivo: {data.cortesia_motivo}</>}{data.cortesia_nota&&<><br/>Nota del administrador: {data.cortesia_nota}</>}</p>}
       {!data.cobrado&&Number(data.cortesia_unidades)>0&&<p><Gift size={12} style={{verticalAlign:-2}}/> Lleva {data.cortesia_unidades} producto(s) marcados como cortesía; el cupo del mes se aplica al cobrar.</p>}
-      {data.items.map(i=><p key={i.id}>{i.estado === 'cancelado' && 'Retirado · no se cobra · '}{i.es_cortesia && <span className="cortesia-tag" style={{marginRight:6}}><Gift size={10}/> Cortesía</span>}{i.cantidad} × {i.producto_nombre} · {money(i.precio_unitario)} c/u{i.motivo_precio&&<><br/>Motivo: {i.motivo_precio} {i.precio_catalogo!==null&&`(catálogo: ${money(i.precio_catalogo)})`}</>}</p>)}
+      {data.items.map(i=><p key={i.id}>{i.estado === 'cancelado' && 'Retirado · no se cobra · '}{i.es_cortesia && <span className="cortesia-tag" style={{marginRight:6}}><Gift size={10}/> Cortesía</span>}<span aria-hidden="true">{productEmoji(getProduct(i.producto_id) || i)}</span> {i.cantidad} × {i.producto_nombre} · {money(i.precio_unitario)} c/u{i.motivo_precio&&<><br/>Motivo: {i.motivo_precio} {i.precio_catalogo!==null&&`(catálogo: ${money(i.precio_catalogo)})`}</>}</p>)}
     </div>}
   </details>;
 }

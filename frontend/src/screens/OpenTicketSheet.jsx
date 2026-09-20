@@ -1,4 +1,6 @@
 import { deliveryLabel } from '../lib/preparationTracking.js';
+import { getProduct } from '../lib/catalog.js';
+import { productEmoji } from '../lib/productEmojis.js';
 import React, { useEffect, useState } from 'react';
 import * as api from '../api/client.js';
 import { Sheet, useAccionUnica, StatusChip } from '../components/ui.jsx';
@@ -49,7 +51,7 @@ export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
     {!data && !error && <p>Cargando ticket…</p>}
     {data?.items.map(item => <div className="cart-item" key={item.id}>
       <div className="cart-item-info">
-        <strong>{item.producto_nombre}</strong>
+        <strong><span aria-hidden="true">{productEmoji(getProduct(item.producto_id) || item)}</span> {item.producto_nombre}</strong>
         <div className="cart-item-sub">{[item.tamano_etiqueta, item.leche_etiqueta, item.cafe_etiqueta, ...(item.extras || [])].filter(Boolean).join(' · ')}</div>
         {item.notas && <div>{item.notas}</div>}
         {item.estado === 'cancelado' ? <small>Retirado del ticket · no se cobra</small> : <StatusChip status={item.estado}/>}

@@ -153,12 +153,19 @@ async function crearEgreso(client, { sucursalId, usuarioId, fecha, cuentaContabl
 
 const egresoSql = `SELECT e.*, c.nombre AS cuenta_nombre, c.grupo, c.clave AS cuenta_clave, fn_grupo_afecta_utilidad(c.grupo) AS afecta_utilidad,
     d.nombre AS cuenta_dinero_nombre, d.clave AS cuenta_dinero_clave, pr.nombre AS proveedor_nombre, u.nombre AS usuario_nombre,
-    g.concepto AS gasto_fijo_concepto, m.nombre AS lote_insumo
+    g.concepto AS gasto_fijo_concepto, m.nombre AS lote_insumo,
+    pago_usuario.nombre AS pagado_caja_por,
+    pago_caja.valor_nuevo->'comprobantePago'->>'referencia' AS pago_caja_referencia,
+    pago_caja.valor_nuevo->'comprobantePago'->>'nota' AS pago_caja_nota
   FROM egresos e
   JOIN cuentas_contables c ON c.id = e.cuenta_contable_id
   LEFT JOIN cuentas_dinero d ON d.id = e.cuenta_dinero_id
   LEFT JOIN proveedores pr ON pr.id = e.proveedor_id
   LEFT JOIN usuarios u ON u.id = e.usuario_id
+  LEFT JOIN LATERAL (SELECT usuario_id,valor_nuevo FROM auditoria
+    WHERE entidad='egresos' AND entidad_id=e.id::text AND accion IN ('pago_caja','gasto_caja')
+    ORDER BY creado_en DESC LIMIT 1) pago_caja ON true
+  LEFT JOIN usuarios pago_usuario ON pago_usuario.id=pago_caja.usuario_id
   LEFT JOIN gastos_fijos g ON g.id = e.gasto_fijo_id
   LEFT JOIN lotes l ON l.id = e.lote_id LEFT JOIN materias_primas m ON m.id = l.materia_prima_id`;
 

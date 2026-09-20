@@ -5,6 +5,7 @@ const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = re
 
 const {moneyAmount,setOpeningFund,drawerSql}=require('../services/cashDrawer');
 const A = require('../services/accounting');
+const {cashExpense}=require('../services/cashExpenses');
 
 const router = express.Router();
 
@@ -48,34 +49,53 @@ router.post('/cerrar', asyncHandler(async (req, res) => {
 // en Contabilidad (cuenta elegida o "Otros gastos de operación").
 router.get('/salidas/cuentas', asyncHandler(async (req, res) => {
   const { rows } = await query(
-    `SELECT id, nombre, grupo, clave FROM cuentas_contables WHERE sucursal_id = $1 AND activo AND grupo IN ('gasto_operacion','inventario','costo_ventas') ORDER BY orden, nombre`, [req.sucursalId]);
+    `SELECT id, nombre, grupo, clave FROM cuentas_contables WHERE sucursal_id = $1 AND activo AND grupo IN ('gasto_operacion','costo_ventas') ORDER BY orden, nombre`, [req.sucursalId]);
   res.json(rows);
+}));
+router.get('/salidas/insumos', asyncHandler(async(req,res)=>{
+ const {rows}=await query(`SELECT m.id,m.nombre,m.unidad,m.stock_actual,m.requiere_lote,
+ m.presentacion_cantidad,m.presentacion_unidad,m.presentacion_nombre,
+ COALESCE((SELECT string_agg(DISTINCT p.nombre, ', ' ORDER BY p.nombre)
+ FROM receta_insumos_fijos r JOIN productos p ON p.id=r.producto_id
+ WHERE r.materia_prima_id=m.id AND p.sucursal_id=m.sucursal_id AND p.tipo='snack' AND p.activo),'') AS productos_comprados
+ FROM materias_primas m WHERE m.sucursal_id=$1 AND m.activo ORDER BY m.nombre`,[req.sucursalId]);
+ res.json(rows);
+}));
+router.post('/actual/compras', asyncHandler(async(req,res)=>{
+ if(!req.body.materiaId)throw new ApiError(400,'Selecciona qué compraste.');
+ res.status(201).json(await withTransaction(c=>cashExpense(c,{sucursalId:req.sucursalId,usuarioId:req.auth.id,body:req.body,materiaId:req.body.materiaId})));
+}));
+router.get('/salidas/proveedores', asyncHandler(async(req,res)=>{
+  const {rows}=await query('SELECT id,nombre FROM proveedores WHERE sucursal_id=$1 ORDER BY nombre',[req.sucursalId]);
+  res.json(rows);
+}));
+router.get('/salidas/compras-pendientes', asyncHandler(async(req,res)=>{
+  const {rows}=await query(`SELECT e.id,e.fecha,e.concepto,e.monto,e.referencia,p.nombre AS proveedor_nombre
+    FROM egresos e LEFT JOIN proveedores p ON p.id=e.proveedor_id
+    WHERE e.sucursal_id=$1 AND e.lote_id IS NOT NULL AND NOT e.pagado AND NOT e.anulado
+    ORDER BY e.fecha,e.creado_en`,[req.sucursalId]);
+  res.json(rows.map(r=>A.normalizarFechas(r)));
 }));
 router.get('/actual/salidas', asyncHandler(async (req, res) => {
   const { rows: [t] } = await query('SELECT id FROM turnos WHERE sucursal_id = $1 AND cerrado_en IS NULL', [req.sucursalId]);
   if (!t) return res.json([]);
   const { rows } = await query(
-    `SELECT e.id, e.fecha, e.concepto, e.monto, e.creado_en, e.anulado, c.nombre AS cuenta_nombre, u.nombre AS usuario_nombre
-     FROM egresos e JOIN cuentas_contables c ON c.id = e.cuenta_contable_id LEFT JOIN usuarios u ON u.id = e.usuario_id
-     WHERE e.turno_id = $1 AND NOT e.anulado ORDER BY e.creado_en DESC`, [t.id]);
-  res.json(rows.map(r => A.normalizarFechas(r)));
+    `SELECT e.id,e.fecha,e.concepto,e.monto,e.creado_en,e.lote_id,c.nombre AS cuenta_nombre,
+      COALESCE(pagador.nombre,u.nombre) AS usuario_nombre,p.nombre AS proveedor_nombre,
+      COALESCE(a.valor_nuevo->'comprobantePago'->>'referencia',e.referencia) AS referencia,
+      COALESCE(a.valor_nuevo->'comprobantePago'->>'nota',e.nota) AS nota
+     FROM egresos e JOIN cuentas_contables c ON c.id=e.cuenta_contable_id
+     LEFT JOIN usuarios u ON u.id=e.usuario_id LEFT JOIN proveedores p ON p.id=e.proveedor_id
+     LEFT JOIN LATERAL (SELECT usuario_id,valor_nuevo FROM auditoria WHERE entidad='egresos' AND entidad_id=e.id::text AND accion IN ('pago_caja','gasto_caja') ORDER BY creado_en DESC LIMIT 1) a ON true
+     LEFT JOIN usuarios pagador ON pagador.id=a.usuario_id
+     WHERE e.turno_id=$1 AND e.pagado AND NOT e.anulado ORDER BY e.actualizado_en DESC`,[t.id]);
+  res.json(rows.map(r=>A.normalizarFechas(r)));
 }));
-router.post('/actual/salidas', asyncHandler(async (req, res) => {
-  const out = await withTransaction(async c => {
-    const q = c.query.bind(c);
-    const { rows: [t] } = await q('SELECT id FROM turnos WHERE sucursal_id = $1 AND cerrado_en IS NULL FOR UPDATE', [req.sucursalId]);
-    if (!t) throw new ApiError(409, 'No hay un turno abierto en esta sucursal.');
-    const caja = await A.cuentaDineroPorClave(q, req.sucursalId, 'caja');
-    const cuenta = req.body.cuentaContableId ? await A.validarCuentaContable(q, req.sucursalId, req.body.cuentaContableId) : await A.cuentaPorClave(q, req.sucursalId, 'otros_gastos');
-    if (cuenta.grupo === 'diezmo_ofrenda' || cuenta.grupo === 'retiro') throw new ApiError(400, 'Diezmos, ofrendas y retiros del dueño se registran desde Contabilidad, no como salida de caja.');
-    const egreso = await A.crearEgreso(c, {
-      sucursalId: req.sucursalId, usuarioId: req.auth.id, fecha: A.hoyMx(), cuentaContable: cuenta,
-      concepto: req.body.concepto, monto: req.body.monto, cuentaDineroId: caja.id, pagado: true,
-      proveedorId: req.body.proveedorId || null, turnoId: t.id, referencia: req.body.referencia, nota: req.body.nota,
-    });
-    return A.normalizarFechas({ ...egreso, cuenta_nombre: cuenta.nombre });
-  });
-  res.status(201).json(out);
+router.post('/actual/salidas', asyncHandler(async(req,res)=>{
+  res.status(201).json(await withTransaction(c=>cashExpense(c,{sucursalId:req.sucursalId,usuarioId:req.auth.id,body:req.body})));
+}));
+router.post('/actual/salidas/compras/:id/pagar', asyncHandler(async(req,res)=>{
+  res.json(await withTransaction(c=>cashExpense(c,{sucursalId:req.sucursalId,usuarioId:req.auth.id,body:req.body,purchaseId:req.params.id})));
 }));
 
 router.get('/actual/kpis', asyncHandler(async (req, res) => {

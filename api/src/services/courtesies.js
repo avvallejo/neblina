@@ -53,18 +53,18 @@ async function leerCupo(queryFn, sucursalId) {
 // Estado del plan del mes en curso: cuántas UNIDADES de cortesía DENTRO DEL
 // PLAN se han dado en la sucursal (las canceladas liberan su lugar; las que
 // excedieron el cupo no cuentan porque están fuera del plan).
-async function planDelMes(queryFn, sucursalId) {
+async function planDelMes(queryFn, sucursalId, fechaReferencia = null) {
   const limite = await leerCupo(queryFn, sucursalId);
   const { rows: [r] } = await queryFn(
     `SELECT COALESCE(SUM(cortesia_unidades) FILTER (WHERE cortesia_estado = 'dentro_plan'), 0)::int AS usadas,
             COUNT(*) FILTER (WHERE cortesia_estado = 'dentro_plan')::int AS tickets,
             COUNT(*) FILTER (WHERE cortesia_estado = 'pendiente')::int AS pendientes,
             COALESCE(SUM(cortesia_unidades) FILTER (WHERE cortesia_estado = 'pendiente'), 0)::int AS unidades_pendientes,
-            to_char(now() AT TIME ZONE $2, 'YYYY-MM') AS mes
+            to_char(COALESCE($3::date,(now() AT TIME ZONE $2)::date), 'YYYY-MM') AS mes
      FROM pedidos
      WHERE sucursal_id = $1 AND cortesia_estado IS NOT NULL AND NOT cancelado
-       AND date_trunc('month', creado_en AT TIME ZONE $2) = date_trunc('month', now() AT TIME ZONE $2)`,
-    [sucursalId, TZ]
+       AND date_trunc('month', creado_en AT TIME ZONE $2) = date_trunc('month', COALESCE($3::date,(now() AT TIME ZONE $2)::date)::timestamp)`,
+    [sucursalId, TZ, fechaReferencia]
   );
   const [anio, mesNum] = r.mes.split('-');
   return {
@@ -90,7 +90,7 @@ function normalizarUnidades(unidades) {
 // bloqueo por sucursal evita que dos cajas consuman el último lugar del cupo
 // al mismo tiempo. El ticket entra completo o no entra: si sus unidades no
 // caben en lo que queda, todo el ticket queda pendiente y no consume cupo.
-async function resolverCortesia(client, { auth, sucursalId, motivo, unidades = 1 }) {
+async function resolverCortesia(client, { auth, sucursalId, motivo, unidades = 1, fechaReferencia = null }) {
   if (!auth || auth.tipo !== 'staff' || !['cajero', 'mostrador', 'admin'].includes(auth.rol)) {
     throw new ApiError(403, 'Solo caja o administración pueden registrar una cortesía.');
   }
@@ -98,11 +98,11 @@ async function resolverCortesia(client, { auth, sucursalId, motivo, unidades = 1
   const n = normalizarUnidades(unidades);
   const q = client.query.bind(client);
   if (auth.rol === 'admin') {
-    const plan = await planDelMes(q, sucursalId);
+    const plan = await planDelMes(q, sucursalId, fechaReferencia);
     return { estado: 'autorizada', motivo: motivoLimpio, resueltaPor: auth.id, resueltaEn: new Date(), plan, unidades: n, excedida: false };
   }
   await q('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`cortesias:${sucursalId}`]);
-  const antes = await planDelMes(q, sucursalId);
+  const antes = await planDelMes(q, sucursalId, fechaReferencia);
   const dentro = antes.restantes >= n;
   const plan = dentro
     ? { ...antes, usadas: antes.usadas + n, tickets: antes.tickets + 1, restantes: antes.restantes - n }

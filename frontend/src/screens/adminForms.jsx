@@ -1,3 +1,4 @@
+import { PRODUCT_EMOJIS, suggestedProductEmoji } from '../lib/productEmojis.js';
 // Formularios del panel administrativo (hoja en móvil, modal en escritorio).
 import React, { useState, useEffect, useRef } from 'react';
 import { Coffee, Plus, Trash2 } from 'lucide-react';
@@ -560,7 +561,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
     setCatsMenu(rows.map(r => r.nombre));
     return c.nombre;
   };
-  const [icon, setIcon] = useState(producto ? producto.icon || '☕' : '☕');
+  const [icon, setIcon] = useState(producto ? producto.icon || '' : '');
   const [tipo, setTipo] = useState(producto ? producto.tipo || 'bebida' : 'bebida');
   const [price, setPrice] = useState(producto ? String(producto.precioBase ?? producto.price ?? '') : '');
   const [promo, setPromo] = useState(producto && producto.precioPromocional !== null && producto.precioPromocional !== undefined ? String(producto.precioPromocional) : '');
@@ -637,7 +638,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
       }
     }
     setError('');
-    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || '☕', tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim(), estacion: conEstacion ? estacion : 'barra' };
+    const base = { ...(imagenCambiada?{imagen:imagen||null}:{}), name: name.trim(), cat, icon: icon.trim() || suggestedProductEmoji({ name, cat, tipo }), tipo, price: precioNum, precioPromocional: promoNum, descripcion: descripcion.trim(), estacion: conEstacion ? estacion : 'barra' };
     setSaving(true);
     // El insumo nuevo se crea primero (con el nombre del producto, en piezas);
     // los niveles de un insumo existente se actualizan antes de guardar.
@@ -691,10 +692,18 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
         <input ref={imagenRef} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Seleccionar imagen del producto" hidden onChange={subirImagen}/>
         <div className="field-hint">JPG, PNG o WebP. La imagen se ajusta automáticamente y aparece en el menú al guardar.</div>
       </div>
+      <div className="option-group">
+        <div className="option-label">Elige el emoji del producto</div>
+        <div className="option-row">
+          <button type="button" className={`option-chip ${!icon ? 'selected' : ''}`} onClick={() => setIcon('')}>Automático {suggestedProductEmoji({ name, cat, tipo })}</button>
+          {PRODUCT_EMOJIS.map(([emoji, label]) => <button type="button" key={emoji} className={`option-chip ${icon === emoji ? 'selected' : ''}`} title={label} aria-label={label} aria-pressed={icon === emoji} onClick={() => setIcon(emoji)} style={{ fontSize: 24 }}>{emoji}</button>)}
+        </div>
+        <div className="field-hint">Se muestra en pedidos y ventas. Si cargas una foto, la foto tiene prioridad.</div>
+      </div>
       <div className="option-group two-col">
         <div>
           <div className="option-label">Ícono (emoji)</div>
-          <input className="text-input" value={icon} onChange={e => setIcon(e.target.value)} placeholder="☕" maxLength={4} />
+          <input className="text-input" value={icon} onChange={e => setIcon(e.target.value)} aria-label="Emoji del producto" placeholder={suggestedProductEmoji({ name, cat, tipo })} maxLength={16} />
         </div>
         <div>
           <div className="option-label">Precio normal ($)</div>

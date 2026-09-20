@@ -357,6 +357,7 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
                 {e.proveedor_nombre ? ` · ${e.proveedor_nombre}` : ''}{e.turno_id ? ' · salida de caja' : ''}{e.lote_id ? ' · compra' : ''}{e.periodo && e.grupo === 'diezmo_ofrenda' ? ` · aplica a ${nombreMes(e.periodo)}` : ''}
                 {e.pagado ? (e.cuenta_dinero_nombre ? ` · ${e.cuenta_dinero_nombre}` : <span className="warn"> · sin cuenta de dinero</span>) : <span className="warn"> · por pagar</span>}
                 {e.referencia ? ` · ref. ${e.referencia}` : ''}
+                {e.pagado_caja_por && <div>Pagó en caja: {e.pagado_caja_por} · {fmtFecha(e.pagado_en)}{e.pago_caja_referencia ? ` · comprobante ${e.pago_caja_referencia}` : ' · sin comprobante'}{e.pago_caja_nota && <div>{e.pago_caja_nota}</div>}</div>}
               </div>
             </div>
             <strong className="egreso-monto">{money(e.monto)}</strong>

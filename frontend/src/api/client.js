@@ -1,3 +1,4 @@
+import { productEmoji } from '../lib/productEmojis.js';
 // Cliente HTTP de la API de la cafetería — MULTI-SUCURSAL.
 //
 // Centraliza: el token JWT (personal y cliente), la SUCURSAL ACTIVA, el manejo
@@ -97,7 +98,7 @@ function adaptProducto(p) {
     id: p.id,
     name: p.nombre,
     cat: p.categoria,
-    icon: p.icono || '☕',
+    icon: productEmoji(p),
     price: Number(p.precio_efectivo ?? p.precio_base),
     precioBase: Number(p.precio_base),            // para tachar el precio normal cuando hay promoción
     precioPromocional: p.precio_promocional === null || p.precio_promocional === undefined ? null : Number(p.precio_promocional),
@@ -444,6 +445,12 @@ export function getMayordomia(anio) { return request(`/contabilidad/mayordomia?a
 export function getCierresMes() { return request('/contabilidad/cierres'); }
 export function cerrarMes(periodo) { return request('/contabilidad/cierres', { method: 'POST', body: { periodo } }); }
 export function reabrirMes(periodo, motivo) { return request(`/contabilidad/cierres/${periodo}`, { method: 'DELETE', body: { motivo } }); }
+export function getInsumosCompraCaja() { return request('/turnos/salidas/insumos'); }
+export function registrarCompraCaja(body) { return request('/turnos/actual/compras', { method: 'POST', body }); }
+export function getProveedoresSalidaTurno() { return request('/turnos/salidas/proveedores'); }
+export function getComprasPendientesCaja() { return request('/turnos/salidas/compras-pendientes'); }
+export function pagarCompraCaja(id, body) { return request(`/turnos/actual/salidas/compras/${id}/pagar`, { method: 'POST', body }); }
+
 // Caja: salidas de efectivo del turno.
 export function getSalidasTurno() { return request('/turnos/actual/salidas'); }
 export function getCuentasSalidaTurno() { return request('/turnos/salidas/cuentas'); }
@@ -578,6 +585,6 @@ export function guardarReceta(productoId, ov) {
 export function restaurarReceta(productoId) { return request(`/recetas/${productoId}/restaurar`, { method: 'POST' }); }
 
 export function getInsumosVenta(){return request('/ventas-directas/insumos');}
-export function registrarVentaDirecta({cart,...body}){return request('/ventas-directas',{method:'POST',body:{...body,items:cart.map(x=>({...itemToApi(x),precioUnitario:x.unitPrice,motivoPrecio:x.motivoPrecio,concepto:x.concepto,insumoId:x.insumoId,cantidadInsumo:x.cantidadInsumo,unidadInsumo:x.unidadInsumo}))}});}
+export function registrarVentaDirecta({cart,...body}){return request('/ventas-directas',{method:'POST',body:{...body,items:cart.map(x=>({...itemToApi(x),precioUnitario:x.unitPrice,descuentoPorcentaje:x.descuentoPorcentaje||0,motivoBeneficio:x.motivoBeneficio,motivoPrecio:x.motivoPrecio,concepto:x.concepto,insumoId:x.insumoId,cantidadInsumo:x.cantidadInsumo,unidadInsumo:x.unidadInsumo}))}});}
 
 export function eliminarOpcion(tipo,id){return request(`/opciones/${tipo}/${id}`,{method:'DELETE'});}

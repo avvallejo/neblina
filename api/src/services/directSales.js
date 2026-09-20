@@ -4,6 +4,8 @@ const { calcularPrecioItem } = require('../utils/pricing');
 const { normalizeItems } = require('./orderValidation');
 const { validateDate } = require('./dailySales');
 const {cashPart}=require('./cashDrawer');
+const {resolverCortesia,respuestaCortesia}=require('./courtesies');
+const {exigirMesAbierto}=require('./accounting');
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function texto(v, nombre) {
   if(typeof v!=='string'||v.trim().length<3||v.trim().length>300) throw new ApiError(400,`${nombre}: escribe entre 3 y 300 caracteres.`);
@@ -28,12 +30,19 @@ async function registrarVenta(client, body, auth, sucursalId) {
   if(!fecha||!/^([01]\d|2[0-3]):[0-5]\d$/.test(body.hora||'')) throw new ApiError(400,'Indica fecha y hora de la venta.');
   const {rows:[tiempo]}=await client.query("SELECT $1::timestamp AT TIME ZONE 'America/Mexico_City' AS venta, ($1::timestamp AT TIME ZONE 'America/Mexico_City') > now()+interval '1 minute' AS futuro",[`${fecha} ${body.hora}`]);
   if(tiempo.futuro) throw new ApiError(400,'La venta no puede tener fecha futura.');
+  await exigirMesAbierto(client.query.bind(client),sucursalId,fecha);
   const motivo=texto(body.motivo,'Motivo del registro');
-  if(!['efectivo','tarjeta','transferencia','mixto'].includes(body.metodoPago)) throw new ApiError(400,'Método de pago inválido.');
+  if(!['efectivo','tarjeta','transferencia','mixto','cortesia'].includes(body.metodoPago)) throw new ApiError(400,'Método de pago inválido.');
   const lines=[];
   for(const item of normalizeItems(body.items)) {
     if(item.esRegalo) throw new ApiError(400,'Esta captura no admite recompensas de fidelidad.');
-    const price=importe(item.precioUnitario);
+    const basePrice=importe(item.precioUnitario);
+    const courtesy=item.esCortesia===true;
+    const discount=item.descuentoPorcentaje===undefined?0:Number(item.descuentoPorcentaje);
+    if(!Number.isFinite(discount)||discount<0||discount>=100||typeof item.descuentoPorcentaje==='boolean')throw new ApiError(400,'El descuento por producto debe ser de 0 a menos de 100%. Para regalarlo marca Cortesía.');
+    if(courtesy&&discount)throw new ApiError(400,'Un producto no puede tener descuento y cortesía a la vez.');
+    const price=courtesy?basePrice:Math.round(basePrice*(1-discount/100)*100)/100;
+    const motivoBeneficio=(courtesy||discount)?texto(item.motivoBeneficio,'Motivo del descuento o cortesía'):null;
     let regular=null, concepto=null, insumo=null;
     if(item.productoId) {
       regular=await calcularPrecioItem({...item,sucursalId},client.query.bind(client));
@@ -52,25 +61,33 @@ async function registrarVenta(client, body, auth, sucursalId) {
         insumo={id:item.insumoId,cantidad:q,unidad:item.unidadInsumo};
       }
     }
-    const motivoPrecio=regular===null||price!==regular ? texto(item.motivoPrecio,'Motivo del precio') : null;
-    lines.push({...item,price,regular,concepto,insumo,motivoPrecio});
+    const precioMotivo=regular===null||basePrice!==regular ? texto(item.motivoPrecio,'Motivo del precio') : null;
+    const motivoPrecio=[precioMotivo,discount?`Descuento ${discount}% sobre $${basePrice.toFixed(2)}: ${motivoBeneficio}`:courtesy?`Cortesía: ${motivoBeneficio}`:null].filter(Boolean).join(' · ')||null;
+    lines.push({...item,price,basePrice,discount,courtesy,motivoBeneficio,regular,concepto,insumo,motivoPrecio});
   }
-  const total=Math.round(lines.reduce((sum,l)=>sum+l.price*l.cantidad,0)*100)/100;
+  const subtotal=Math.round(lines.reduce((sum,l)=>sum+l.basePrice*l.cantidad,0)*100)/100;
+  const cortesiaValor=Math.round(lines.filter(l=>l.courtesy).reduce((sum,l)=>sum+l.basePrice*l.cantidad,0)*100)/100;
+  const cortesiaUnidades=lines.filter(l=>l.courtesy).reduce((sum,l)=>sum+l.cantidad,0);
+  const total=Math.round(lines.reduce((sum,l)=>sum+(l.courtesy?0:l.price*l.cantidad),0)*100)/100;
+  const metodo=lines.every(l=>l.courtesy)?'cortesia':body.metodoPago;
+  if(metodo==='cortesia'&&!lines.every(l=>l.courtesy))throw new ApiError(400,'Marca cada producto regalado como cortesía.');
+  const cortesia=cortesiaUnidades?await resolverCortesia(client,{auth,sucursalId,unidades:cortesiaUnidades,fechaReferencia:fecha,motivo:lines.filter(l=>l.courtesy).map(l=>l.motivoBeneficio).join('; ').slice(0,200)}):null;
   if(total>99999999.99) throw new ApiError(400,'El total excede el límite de una venta.');
-  const recibido=body.metodoPago==='efectivo'?importe(body.montoRecibido):total;
+  const recibido=metodo==='efectivo'?importe(body.montoRecibido):total;
   if(recibido<total) throw new ApiError(400,'El efectivo recibido no cubre el total.');
-  const {rows:[pedido]}=await client.query(`INSERT INTO pedidos(origen,cajero_id,subtotal,total,metodo_pago,monto_recibido,cambio,cobrado,sucursal_id,creado_en,registro_manual,motivo_registro,clave_registro,captura_hash,importe_efectivo)
-    VALUES ('mostrador',$1,$2,$2,$3,$4,$5,true,$6,$7,true,$8,$9,$10,$11) RETURNING *`,[auth.id,total,body.metodoPago,recibido,Math.round((recibido-total)*100)/100,sucursalId,tiempo.venta,motivo,body.claveRegistro,hash,cashPart(body.metodoPago,total,body.importeEfectivo)]);
+  const {rows:[pedido]}=await client.query(`INSERT INTO pedidos(origen,cajero_id,subtotal,total,metodo_pago,monto_recibido,cambio,cobrado,sucursal_id,creado_en,registro_manual,motivo_registro,clave_registro,captura_hash,importe_efectivo,cortesia_valor,cortesia_unidades,cortesia_estado,cortesia_motivo,cortesia_resuelta_por,cortesia_resuelta_en)
+    VALUES ('mostrador',$1,$2,$3,$4,$5,$6,true,$7,$8,true,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,[auth.id,subtotal,total,metodo,recibido,Math.round((recibido-total)*100)/100,sucursalId,tiempo.venta,motivo,body.claveRegistro,hash,cashPart(metodo,total,body.importeEfectivo),cortesiaValor,cortesiaUnidades,cortesia?.estado||null,cortesia?.motivo||null,cortesia?.resueltaPor||null,cortesia?.resueltaEn||null]);
   for(const l of lines) {
-    const {rows:[item]}=await client.query(`INSERT INTO pedido_items(pedido_id,producto_id,tamano_id,leche_id,cafe_id,cantidad,precio_unitario,notas,concepto_libre,precio_catalogo,motivo_precio,insumo_directo_id,cantidad_insumo,unidad_insumo,barista_id,creado_en,estado,terminado_en)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
-      [pedido.id,l.productoId||null,l.tamanoId||null,l.lecheId||null,l.cafeId||null,l.cantidad,l.price,l.notas||null,l.concepto,l.regular,l.motivoPrecio,l.insumo?.id||null,l.insumo?.cantidad||null,l.insumo?.unidad||null,auth.id,tiempo.venta,l.productoId?'pendiente':'terminado',l.productoId?null:tiempo.venta]);
+    const {rows:[item]}=await client.query(`INSERT INTO pedido_items(pedido_id,producto_id,tamano_id,leche_id,cafe_id,cantidad,precio_unitario,notas,concepto_libre,precio_catalogo,motivo_precio,insumo_directo_id,cantidad_insumo,unidad_insumo,barista_id,creado_en,estado,terminado_en,es_cortesia)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+      [pedido.id,l.productoId||null,l.tamanoId||null,l.lecheId||null,l.cafeId||null,l.cantidad,l.price,l.notas||null,l.concepto,l.regular,l.motivoPrecio,l.insumo?.id||null,l.insumo?.cantidad||null,l.insumo?.unidad||null,auth.id,tiempo.venta,l.productoId?'pendiente':'terminado',l.productoId?null:tiempo.venta,l.courtesy]);
     for(const extra of l.extraIds) await client.query('INSERT INTO pedido_item_extras(pedido_item_id,extra_id) VALUES($1,$2)',[item.id,extra]);
     if(l.productoId) await client.query("UPDATE pedido_items SET estado='terminado',terminado_en=$2 WHERE id=$1",[item.id,tiempo.venta]);
     else if(l.insumo) await client.query('SELECT fn_consumir_insumo($1,$2,$3,$4,$5)',[l.insumo.id,l.insumo.cantidad*l.cantidad,l.insumo.unidad,auth.id,item.id]);
   }
   await client.query(`INSERT INTO auditoria(entidad,entidad_id,accion,valor_nuevo,motivo,usuario_id,sucursal_id)
     VALUES('pedidos',$1,'venta_directa',$2,$3,$4,$5)`,[pedido.id,{fechaVenta:tiempo.venta,total,items:lines},motivo,auth.id,sucursalId]);
-  return {pedido};
+  const {rows:[saved]}=await client.query('SELECT * FROM pedidos WHERE id=$1',[pedido.id]);
+  return {pedido:saved,cortesia:cortesia?respuestaCortesia(cortesia):undefined};
 }
 module.exports={registrarVenta,importe};

@@ -82,7 +82,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
  }catch(e){setError(e.message);}finally{setBusy(false);}}
  async function closeShift(){if(!window.confirm('¿Cerrar este turno? El fondo inicial y sus ventas quedarán guardados.'))return;setBusy(true);try{if(await onToggleTurno()!==false){await refresh();onClose();}}finally{setBusy(false);}}
  return <>
- {!open&&(metrics||resumenCerrado)}
+ {!open&&<div className="caja-resumen-inline">{metrics||resumenCerrado}</div>}
  {!open&&data&&onOpen&&<button className="btn-secondary" onClick={onOpen} style={{marginBottom:12}}>Registrar compra / Gasto / Pago</button>}
  {error&&!open&&<p role="alert" className="form-error">No se pudo actualizar Caja: {error}</p>}
  {open&&<Sheet title={data?'Caja del turno':'Abrir turno'} onClose={onClose}>

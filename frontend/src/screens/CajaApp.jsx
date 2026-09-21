@@ -177,6 +177,9 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
 // (rol "mostrador"): agrega el acceso "Barra" a la navegación.
 export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrderChanged, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null, mesas = 4 }) {
   const [screen, setScreen] = useState('menu');
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [screen]);
   const [nombreTicket, setNombreTicket] = useState('');
   const [destino, setDestino] = useState(null); // { destino: 'mesa'|'barra'|'llevar', mesa }
   const [drawerOpen,setDrawerOpen]=useState(false);

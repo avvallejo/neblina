@@ -349,6 +349,9 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .turno-total-label .field-hint { margin-top: 0; font-weight: 600; }
 
 /* Caja — resumen del turno: estado, efectivo esperado y fichas del turno. */
+/* En celular el resumen completo se consulta desde el botón del turno.
+   Repetirlo sobre cada sección oculta el contenido detrás de varias fichas. */
+@media (max-width: 759px) { .caja-resumen-inline { display: none; } }
 .caja-resumen { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: 14px 16px 16px; margin-bottom: 16px; }
 .caja-resumen-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
 .caja-resumen-head .field-hint { margin-top: 0; }

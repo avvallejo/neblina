@@ -103,7 +103,7 @@ router.patch('/cuentas-dinero/:id', asyncHandler(async (req, res) => {
 
 // ---- Egresos ---------------------------------------------------------------------
 router.get('/egresos', asyncHandler(async (req, res) => {
-  res.json(await A.listarEgresos(query, req.sucursalId, { periodo: req.query.periodo, pendientes: req.query.pendientes === 'true', cuentaId: req.query.cuenta, incluirAnulados: req.query.anulados === 'true' }));
+  res.json(await A.listarEgresos(query, req.sucursalId, { periodo: req.query.periodo, pagadoPeriodo: req.query.pagado_periodo, pendientes: req.query.pendientes === 'true', cuentaId: req.query.cuenta, incluirAnulados: req.query.anulados === 'true' }));
 }));
 router.post('/egresos', asyncHandler(async (req, res) => {
   const egreso = await withTransaction(c => A.crearEgreso(c, { sucursalId: req.sucursalId, usuarioId: req.auth.id, ...req.body }));

@@ -879,6 +879,18 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .er-row.sub { padding-left: 28px; font-weight: 600; color: var(--ink-faint); font-size: 12.5px; }
 .er-row.total { background: var(--surface-2); font-weight: 800; }
 .er-row.neta { background: var(--brand-soft, rgba(180, 85, 29, 0.08)); font-size: 15px; font-weight: 900; }
+.costo-explica .er-label { font-weight: 500; color: var(--ink-soft); line-height: 1.45; }
+.er-detalle-box { background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.er-detalle-head { display: flex; justify-content: space-between; padding: 8px 14px 4px 28px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-faint); }
+.er-detalle-total .ok { color: var(--ok); } .er-detalle-total .warn { color: var(--warn); }
+.er-detalle-total .er-label { color: var(--ink-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.egresos-total { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); padding: 10px 14px; margin: 8px 0 12px; }
+.egresos-total-fila { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; font-weight: 800; }
+.egresos-total-fila strong { font-variant-numeric: tabular-nums; }
+.egresos-cuadre { margin-top: 6px; font-size: 12.5px; font-weight: 700; display: flex; gap: 6px; align-items: flex-start; }
+.egresos-cuadre svg { flex-shrink: 0; margin-top: 2px; }
+.egresos-cuadre.ok { color: var(--ok, #2f7d4f); }
+.egresos-cuadre.warn { color: var(--warn); }
 .er-row.neta .er-value { color: var(--brand); font-size: 18px; }
 .er-label { min-width: 0; }
 .er-detalle { color: var(--ink-faint); font-weight: 600; font-size: 12px; }

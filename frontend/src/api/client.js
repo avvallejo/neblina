@@ -423,9 +423,10 @@ export function actualizarCuentaContable(id, body) { return request(`/contabilid
 export function eliminarCuentaContable(id) { return request(`/contabilidad/cuentas/${id}`, { method: 'DELETE' }); }
 export function getCuentasDinero() { return request('/contabilidad/cuentas-dinero'); }
 export function actualizarCuentaDinero(id, body) { return request(`/contabilidad/cuentas-dinero/${id}`, { method: 'PATCH', body }); }
-export function getEgresos({ periodo, pendientes, cuenta } = {}) {
+export function getEgresos({ periodo, pagadoPeriodo, pendientes, cuenta } = {}) {
   const q = new URLSearchParams();
   if (periodo) q.set('periodo', periodo);
+  if (pagadoPeriodo) q.set('pagado_periodo', pagadoPeriodo);
   if (pendientes) q.set('pendientes', 'true');
   if (cuenta) q.set('cuenta', cuenta);
   return request(`/contabilidad/egresos?${q.toString()}`);
@@ -455,6 +456,10 @@ export function pagarCompraCaja(id, body) { return request(`/turnos/actual/salid
 export function getSalidasTurno() { return request('/turnos/actual/salidas'); }
 export function getCuentasSalidaTurno() { return request('/turnos/salidas/cuentas'); }
 export function registrarSalidaTurno(body) { return request('/turnos/actual/salidas', { method: 'POST', body }); }
+// Salida sin venta (surtir mesas, consumo del personal, uso interno). motivo: 'mesas' | 'personal' | 'interno'.
+export function registrarSalidaInterna(materiaId, { cantidad, motivo, nota }) {
+  return request(`/materias-primas/${materiaId}/salida-interna`, { method: 'POST', body: { cantidad, motivo, nota } });
+}
 export function ajustarStock(materiaId, { nuevaCantidad, motivo, stockEsperado, fechaCaducidad }) {
   return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo, stockEsperado, fechaCaducidad } });
 }

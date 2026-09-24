@@ -89,3 +89,11 @@ con bloqueos breves para impedir nuevos usos simultáneos. Se guarda el insumo y
 la configuración retirada en auditoría, incluyendo sucursal y administrador.
 El script masivo anterior mantiene su comportamiento conservador: solo elimina
 insumos completamente libres de referencias y no desvincula menús.
+
+## Ventas cobradas sin costo de ventas
+
+`diagnostico_costo_pendiente.sql` (solo lectura) lista, por sede, las líneas
+cobradas del mes cuyo costo no ha entrado al estado de resultados: las que
+siguen pendientes o en preparación (el costo llega al pulsar «Terminar») y las
+terminadas sin consumo valorado (sin receta, insumos a $0 o concepto libre sin
+insumo). El mismo aviso aparece en Contabilidad → Estado de resultados.

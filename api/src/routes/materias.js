@@ -13,6 +13,7 @@ const { normalizarPresentacion, registrarCompra } = require('../services/purchas
 const { guardarCategoriasUso } = require('../services/ingredientCategories');
 const { eliminarMateria } = require('../services/deleteMateria');
 const { ajustarStock } = require('../services/adjustStock');
+const { registrarSalidaInterna } = require('../services/internalUse');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
@@ -280,6 +281,16 @@ router.post('/:id/ajustar-stock', asyncHandler(async (req, res) => {
     ...req.body, id: req.params.id, sucursalId: req.sucursalId, usuarioId: req.auth.id,
   }));
 
+  res.json(result);
+}));
+
+// Salida sin venta: surtir consumibles de mesa (azúcar, salsas…), consumo del
+// personal o uso interno. Entra al costo de ventas como su propia línea.
+router.post('/:id/salida-interna', asyncHandler(async (req, res) => {
+  const result = await withTransaction(client => registrarSalidaInterna(client, {
+    id: req.params.id, sucursalId: req.sucursalId, usuarioId: req.auth.id,
+    cantidad: req.body.cantidad, motivo: req.body.motivo, nota: req.body.nota,
+  }));
   res.json(result);
 }));
 

@@ -12,7 +12,7 @@ import {
   Check, AlertTriangle, Trash2, ChevronLeft, ChevronRight, HandCoins, Wallet,
 } from 'lucide-react';
 import * as api from '../api/client.js';
-import { money } from '../lib/helpers.js';
+import { money, unidadDisplay } from '../lib/helpers.js';
 import { Sheet, EmptyState, FormError } from '../components/ui.jsx';
 
 const GRUPO_LABELS = {
@@ -150,6 +150,15 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
   const [consolidado, setConsolidado] = useState(false);
   const [cons, setCons] = useState(null);
   const [verGastos, setVerGastos] = useState(false);
+  const [verCosto, setVerCosto] = useState(false);
+  // Desglose de egresos del mes (se carga al abrir el primero): de dónde sale cada cantidad.
+  const [egMes, setEgMes] = useState(null);
+  const [abierto, setAbierto] = useState(null);
+  const abrir = async grupo => {
+    setAbierto(a => (a === grupo ? null : grupo));
+    if (egMes === null) { try { setEgMes(await api.getEgresos({ periodo })); } catch (e) { setEgMes([]); } }
+  };
+  useEffect(() => { setEgMes(null); setAbierto(null); }, [periodo, version]);
   const [busy, setBusy] = useState(false);
   const [reabrir, setReabrir] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -224,20 +233,33 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
           <Fila label="En efectivo" value={er.ventas.efectivo} sub />
           <Fila label="Tarjeta y transferencia" value={er.ventas.banco} sub />
           {er.ventas.cortesiasValor > 0 && <div className="er-row sub"><span className="er-label">Cortesías regaladas (no suman)</span><span className="er-value faint">{money(er.ventas.cortesiasValor)}</span></div>}
-          <Fila label="Costo de ventas" value={er.costoVentas.total} negativo detalle="· insumos consumidos" />
-          {er.costoVentas.mermas !== 0 && <Fila label="de los cuales mermas" value={er.costoVentas.mermas} sub />}
-          {er.costoVentas.ajustes !== 0 && <Fila label="de los cuales ajustes de inventario" value={er.costoVentas.ajustes} sub />}
+          <div className="er-row">
+            <span className="er-label">Costo de ventas <span className="er-detalle">· insumos consumidos</span> <button type="button" className="link-toggle" onClick={() => setVerCosto(v => !v)}>{verCosto ? 'ocultar' : 'ver detalle'}</button></span>
+            <span className="er-value">− {money(er.costoVentas.total)}</span>
+          </div>
+          {verCosto ? <CostoVentasDetalle cv={er.costoVentas} /> : (
+            <>
+              {(er.costoVentas.consumoInterno || 0) !== 0 && <Fila label="de los cuales consumibles de mesa y uso interno" value={er.costoVentas.consumoInterno} sub />}
+              {er.costoVentas.mermas !== 0 && <Fila label="de los cuales mermas" value={er.costoVentas.mermas} sub />}
+              {(er.costoVentas.ajustesConteo ?? er.costoVentas.ajustes) !== 0 && <Fila label="de los cuales ajustes de inventario (conteo físico)" value={er.costoVentas.ajustesConteo ?? er.costoVentas.ajustes} sub />}
+            </>
+          )}
           <Fila label="Utilidad bruta" value={er.utilidadBruta} total />
           <div className="er-row">
             <span className="er-label">Gastos de operación {gastosDetalle.length > 0 && <button type="button" className="link-toggle" onClick={() => setVerGastos(v => !v)}>{verGastos ? 'ocultar' : 'ver detalle'}</button>}</span>
             <span className="er-value">− {money(er.gastosOperacion)}</span>
           </div>
           {verGastos && gastosDetalle.map(c => <Fila key={c.id} label={c.nombre} value={c.monto} sub detalle={c.porPagar > 0 ? `· ${money(c.porPagar)} por pagar` : ''} />)}
+          {verGastos && (
+            <div className="er-row sub"><span className="er-label"><button type="button" className="link-toggle" onClick={() => abrir('gasto_operacion')}>{abierto === 'gasto_operacion' ? 'ocultar cada egreso' : 'ver cada egreso'}</button></span><span /></div>
+          )}
+          {verGastos && abierto === 'gasto_operacion' && <DetalleEgresos egresos={egMes} grupo="gasto_operacion" total={er.gastosOperacion} periodo={periodo} titulo="Gastos de operación" />}
           <Fila label="Utilidad de operación" value={er.utilidadOperacion} total />
           <Fila label="Gastos financieros (préstamo, intereses)" value={er.gastosFinancieros} negativo />
           <Fila label="Impuestos" value={er.impuestos} negativo />
           <Fila label="Utilidad neta" value={er.utilidadNeta} neta detalle={er.utilidadNeta >= 0 && er.margenNeto !== null ? `· ${er.margenNeto}% de las ventas` : (er.utilidadNeta < 0 ? '· el mes cerró con pérdida' : '')} />
         </div>
+        <VentasSinCosto cv={er.costoVentas} />
 
         <div className="section-title"><HeartHandshake size={15} /> Mayordomía de {er.nombre}</div>
         <div className="mayordomia-card">
@@ -249,11 +271,35 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
 
         <div className="section-title"><Wallet size={15} /> Otras salidas del mes (no bajan la utilidad)</div>
         <div className="er-table">
-          <Fila label="Compra de insumos (entra al inventario)" value={er.otrasSalidas.inventario} />
-          <Fila label="Inversiones en equipo" value={er.otrasSalidas.inversion} />
-          <Fila label="Retiros del dueño" value={er.otrasSalidas.retiros} />
-          <Fila label="Diezmos y ofrendas entregados" value={er.otrasSalidas.diezmoOfrenda} />
+          {[['inventario', 'Compra de insumos (entra al inventario)', er.otrasSalidas.inventario],
+            ['inversion', 'Inversiones en equipo', er.otrasSalidas.inversion],
+            ['retiro', 'Retiros del dueño', er.otrasSalidas.retiros],
+            ['diezmo_ofrenda', 'Diezmos y ofrendas entregados', er.otrasSalidas.diezmoOfrenda]].map(([grupo, label, valor]) => (
+            <React.Fragment key={grupo}>
+              <div className="er-row">
+                <span className="er-label">{label} {valor > 0 && <button type="button" className="link-toggle" onClick={() => abrir(grupo)}>{abierto === grupo ? 'ocultar' : 'ver detalle'}</button>}</span>
+                <span className="er-value">{signo(valor)}</span>
+              </div>
+              {abierto === grupo && <DetalleEgresos egresos={egMes} grupo={grupo} total={valor} periodo={periodo} titulo={label} porInsumo={grupo === 'inventario'} />}
+            </React.Fragment>
+          ))}
         </div>
+        {er.otrasSalidas.inventario > 0 && (
+          <div className="promo-summary-card">
+            <strong>¿Dónde quedó lo que compraste?</strong>
+            <div className="flujo-grid" style={{ marginTop: 6 }}>
+              <span>Compraste de insumos en {er.nombre}</span><span>{money(er.otrasSalidas.inventario)}</span>
+              <span>− Salió del almacén (costo de ventas)</span><span>{money(er.costoVentas.total)}</span>
+              <span><strong>{er.otrasSalidas.inventario - er.costoVentas.total >= 0 ? '= Se quedó de más en el almacén' : '= Se usó de lo que ya había'}</strong></span><span><strong>{money(Math.abs(er.otrasSalidas.inventario - er.costoVentas.total))}</strong></span>
+            </div>
+            <div className="field-hint" style={{ marginTop: 6 }}>
+              {er.otrasSalidas.inventario - er.costoVentas.total >= 0
+                ? 'Compraste más de lo que se consumió: la diferencia no se perdió, es mercancía que sigue en tu almacén (el siguiente mes se consume y ya no habrá que comprarla).'
+                : 'Se consumió más de lo que compraste: se usó inventario que ya tenías de antes.'}
+              {' '}Valor de todo tu inventario hoy, a su costo: <strong>{money(er.inventarioHoy?.valor || 0)}</strong> ({er.inventarioHoy?.insumos || 0} insumos con existencia). Compáralo con un conteo físico.
+            </div>
+          </div>
+        )}
       </div>
       <div>
         <div className="section-title"><Landmark size={15} /> Flujo de dinero · {flujo.nombre}</div>
@@ -301,6 +347,127 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
   );
 }
 
+/* ---------- Cada egreso detrás de una cifra del estado de resultados ----------
+   Suma exactamente lo mismo que la línea (mismo mes por fecha del egreso, sin
+   anulados). Para compras de insumos agrupa por insumo y permite bajar CSV. */
+const fmtCant = (n, u) => `${Number(Number(n).toFixed(3)).toLocaleString('es-MX')} ${unidadDisplay(u)}`;
+function descargarCsv(nombre, filas) {
+  const esc = v => { const t = v === null || v === undefined ? '' : String(v); return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const csv = '\uFEFF' + filas.map(f => f.map(esc).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function DetalleEgresos({ egresos, grupo, total, periodo, titulo, porInsumo = false }) {
+  const [verCada, setVerCada] = useState(!porInsumo);
+  if (egresos === null) return <div className="er-row sub"><span className="er-label">Cargando…</span><span /></div>;
+  const lista = egresos.filter(e => e.grupo === grupo);
+  const suma = Math.round(lista.reduce((t, e) => t + Number(e.monto), 0) * 100) / 100;
+  const cuadra = Math.abs(suma - Number(total)) < 0.005;
+  const pago = e => (e.pagado ? (e.cuenta_dinero_nombre || 'pagado sin cuenta') : 'por pagar');
+  const grupos = porInsumo ? Object.values(lista.reduce((acc, e) => {
+    const k = e.lote_materia_id || `c:${e.concepto}`;
+    const g = acc[k] || (acc[k] = { nombre: e.lote_insumo || e.concepto, unidad: e.lote_unidad, cantidad: 0, monto: 0, compras: 0, porPagar: 0 });
+    g.cantidad += Number(e.lote_cantidad || 0); g.monto += Number(e.monto); g.compras += 1; if (!e.pagado) g.porPagar += Number(e.monto);
+    return acc;
+  }, {})).sort((a, b) => b.monto - a.monto) : [];
+  const csv = () => descargarCsv(`${grupo}-${periodo}.csv`, [
+    ['Fecha', 'Concepto', 'Insumo', 'Cantidad', 'Unidad', 'Proveedor', 'Cuenta', 'Pago', 'Referencia', 'Monto'],
+    ...lista.map(e => [e.fecha, e.concepto, e.lote_insumo || '', e.lote_cantidad ? Number(Number(e.lote_cantidad).toFixed(3)) : '', e.lote_unidad || '', e.proveedor_nombre || '', e.cuenta_nombre, pago(e), e.referencia || '', Number(e.monto).toFixed(2)]),
+    ['', 'TOTAL', '', '', '', '', '', '', '', suma.toFixed(2)],
+  ]);
+  return (
+    <div className="er-detalle-box">
+      {porInsumo && (
+        <>
+          <div className="er-detalle-head"><span>Por insumo · {grupos.length} insumo(s), {lista.length} compra(s)</span><span /></div>
+          {grupos.map(g => (
+            <div key={g.nombre} className="er-row sub">
+              <span className="er-label">{g.nombre}<span className="er-detalle"> · {g.cantidad > 0 && g.unidad ? `${fmtCant(g.cantidad, g.unidad)} · ` : ''}{g.compras} compra(s){g.porPagar > 0 ? ` · ${money(g.porPagar)} por pagar` : ''}</span></span>
+              <span className="er-value">{money(g.monto)}</span>
+            </div>
+          ))}
+          <div className="er-row sub"><span className="er-label"><button type="button" className="link-toggle" onClick={() => setVerCada(v => !v)}>{verCada ? 'ocultar cada compra' : 'ver cada compra (fecha, proveedor, pago)'}</button></span><span /></div>
+        </>
+      )}
+      {verCada && lista.map(e => (
+        <div key={e.id} className="er-row sub">
+          <span className="er-label">{fmtFecha(e.fecha)} · {e.concepto}<span className="er-detalle">{e.proveedor_nombre ? ` · ${e.proveedor_nombre}` : ''} · {pago(e)}{e.referencia ? ` · ref. ${e.referencia}` : ''}</span></span>
+          <span className="er-value">{money(e.monto)}</span>
+        </div>
+      ))}
+      <div className="er-row sub er-detalle-total">
+        <span className="er-label"><span className={cuadra ? 'ok' : 'warn'}>{cuadra ? <Check size={12} style={{ verticalAlign: -1 }} /> : <AlertTriangle size={12} style={{ verticalAlign: -1 }} />} {cuadra ? `Suman ${lista.length} egreso(s) = la cifra de “${titulo}”` : `Suman ${money(suma)}; la cifra dice ${money(total)}`}</span> <button type="button" className="link-toggle" onClick={csv}>descargar CSV</button></span>
+        <span className="er-value">{money(suma)}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- De dónde sale el costo de ventas ----------
+   Todo es inventario que salió del almacén este mes, valuado a lo que costó. */
+function CostoVentasDetalle({ cv }) {
+  const lineas = [
+    { label: 'Insumos de lo vendido', value: cv.consumoVentas ?? cv.consumo,
+      hint: 'Lo que marcan las recetas de cada producto terminado (menos lo que regresó al almacén por tickets cancelados o devueltos).' },
+    { label: 'Consumibles de mesa y uso interno', value: cv.consumoInterno || 0,
+      hint: 'Azúcar, salsas, servilletas… lo que surtes en mesas, más consumo del personal. Se registra en Inventario → “Surtir” cada vez que rellenas.' },
+    { label: 'Mermas', value: cv.mermas, hint: 'Desperdicio que sí se anotó: se cayó, se echó a perder, salió mal y se tiró.' },
+    { label: 'Ajustes de inventario (conteo físico)', value: cv.ajustesConteo ?? cv.ajustes,
+      hint: 'La diferencia cuando cuentas lo que hay y no coincide con el sistema. Positivo = faltó producto (salió sin registrarse); negativo = sobró.' },
+    ...(cv.manual ? [{ label: 'Capturado como egreso de costo de ventas', value: cv.manual, hint: 'Egresos registrados directamente en una cuenta de costo de ventas.' }] : []),
+  ];
+  return (
+    <>
+      {lineas.map(l => (
+        <div key={l.label} className="er-row sub">
+          <span className="er-label">{l.label}<span className="field-hint" style={{ display: 'block', fontWeight: 500 }}>{l.hint}</span></span>
+          <span className="er-value">{signo(l.value)}</span>
+        </div>
+      ))}
+      <div className="er-row sub costo-explica">
+        <span className="er-label">
+          <strong>¿Qué significa un ajuste?</strong> El sistema sabe cuánto debería quedar de cada insumo (compras − recetas − mermas − surtidos).
+          Cuando cuentas y hay <em>menos</em>, esa diferencia es producto que salió sin quedar registrado y su costo entra aquí como ajuste.
+          Causas comunes: consumibles de mesa que no se registraron, recetas que usan menos de lo que realmente se sirve, desperdicio no anotado, o faltantes.
+          Un ajuste pequeño es normal; si crece mes con mes, revisa recetas y registra los surtidos y mermas.
+          <span className="field-hint" style={{ display: 'block', fontWeight: 500, marginTop: 4 }}>No mueve el dinero de Caja ni de Banco: ese dinero salió cuando compraste el insumo. Lo que cambia es la utilidad (y el diezmo) y el valor del inventario.</span>
+        </span>
+      </div>
+    </>
+  );
+}
+
+/* ---------- Ventas cobradas que todavía no traen su costo ----------
+   El inventario (y con él el costo de ventas) se descuenta cuando la línea
+   pasa a "Terminado". Si se cobró pero sigue pendiente, la venta ya suma y el
+   costo todavía no; si se terminó sin receta, el costo nunca llegará. */
+function VentasSinCosto({ cv }) {
+  const [ver, setVer] = useState(null);
+  const bloques = [
+    { id: 'sinTerminar', d: cv.sinTerminar, titulo: 'cobrados que siguen pendientes o en preparación',
+      texto: 'Ya suman en ventas, pero su costo entra hasta que barra o parrilla los marca “Terminado”. Si ya se entregaron, termínalos en la comanda para que el costo y el inventario cuadren.' },
+    { id: 'sinReceta', d: cv.sinReceta, titulo: 'terminados sin costo de insumos',
+      texto: 'Productos sin receta, con insumos a $0 o conceptos libres sin insumo: su costo nunca se registrará y la utilidad sale más alta de lo real. Agrega la receta o el costo en Productos / Inventario.' },
+  ].filter(b => b.d && b.d.lineas > 0);
+  if (!bloques.length) return null;
+  return bloques.map(b => (
+    <div key={b.id} className="promo-summary-card" style={{ borderColor: 'var(--warn)' }}>
+      <AlertTriangle size={13} style={{ verticalAlign: -2, color: 'var(--warn)' }} /> <strong>{money(b.d.venta)}</strong> de ventas sin costo: {b.d.unidades} producto(s) {b.titulo}.
+      <div className="field-hint">{b.texto}</div>
+      <button type="button" className="link-toggle" onClick={() => setVer(v => (v === b.id ? null : b.id))}>{ver === b.id ? 'ocultar' : 'ver cuáles'}</button>
+      {ver === b.id && (
+        <div className="er-table" style={{ marginTop: 6 }}>
+          {b.d.productos.map(x => (
+            <div key={x.producto} className="er-row sub"><span className="er-label">{x.producto} · {x.unidades} u. en {x.pedidos} pedido(s) · desde {fmtFecha(x.desde)}</span><span className="er-value">{money(x.venta)}</span></div>
+          ))}
+          {b.d.lineas > b.d.productos.length && <div className="er-row sub"><span className="er-label">… y {b.d.lineas - b.d.productos.length} producto(s) más</span><span /></div>}
+        </div>
+      )}
+    </div>
+  ));
+}
+
 /* ================================================================
    EGRESOS
    ================================================================ */
@@ -311,11 +478,15 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
   const [traspasos, setTraspasos] = useState([]);
   const [sheet, setSheet] = useState(null); // { tipo: 'egreso'|'recurrente'|'pagar'|'traspaso', item }
   const [filtro, setFiltro] = useState('todos');
+  // ¿De dónde salió el dinero? 'todos' | id de cuenta de dinero | 'por_pagar' | 'sin_cuenta'
+  const [origen, setOrigen] = useState('todos');
+  const [pagadosMes, setPagadosMes] = useState([]);
+  const [flujo, setFlujo] = useState(null);
 
   const cargar = useCallback(async () => {
     try {
-      const [e, r, p, t] = await Promise.all([api.getEgresos({ periodo }), api.getRecurrentes(periodo), api.getEgresos({ pendientes: true }), api.getTraspasos(periodo)]);
-      setEgresos(e); setRecurrentes(r); setPorPagar(p); setTraspasos(t);
+      const [e, r, p, t, pm, f] = await Promise.all([api.getEgresos({ periodo }), api.getRecurrentes(periodo), api.getEgresos({ pendientes: true }), api.getTraspasos(periodo), api.getEgresos({ pagadoPeriodo: periodo }), api.getFlujoDinero(periodo)]);
+      setEgresos(e); setRecurrentes(r); setPorPagar(p); setTraspasos(t); setPagadosMes(pm); setFlujo(f);
     } catch (e) { addToast(e.message, 'warn'); }
   }, [periodo, addToast]);
   useEffect(() => { cargar(); }, [cargar, version]);
@@ -330,9 +501,36 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
     await guardar(() => api.anularEgreso(e.id, motivo), 'Egreso anulado');
   };
   const pendientes = recurrentes.filter(r => !r.registrado);
-  const lista = (egresos || []).filter(e => filtro === 'todos' || (filtro === 'utilidad' ? e.afecta_utilidad : e.grupo === filtro));
-  const totalMes = (egresos || []).reduce((s, e) => s + Number(e.monto), 0);
-  const totalUtilidad = (egresos || []).filter(e => e.afecta_utilidad).reduce((s, e) => s + Number(e.monto), 0);
+  const suma = arr => Math.round(arr.reduce((s, e) => s + Number(e.monto), 0) * 100) / 100;
+  const cuentasDinero = dinero.filter(d => d.activo !== false);
+  const sinCuenta = pagadosMes.filter(e => !e.cuenta_dinero_id);
+  const origenes = [
+    { id: 'todos', label: 'Todos', icono: '', lista: egresos || [] },
+    ...cuentasDinero.map(d => ({ id: d.id, label: d.nombre.replace(/\s*\(.*\)\s*$/, '') || d.nombre, icono: d.tipo === 'efectivo' ? '💵 ' : '🏦 ', cuenta: d, lista: pagadosMes.filter(e => e.cuenta_dinero_id === d.id) })),
+    { id: 'por_pagar', label: 'Por pagar', icono: '⏳ ', lista: porPagar },
+    ...(sinCuenta.length ? [{ id: 'sin_cuenta', label: 'Pagados sin cuenta', icono: '⚠️ ', lista: sinCuenta }] : []),
+  ];
+  const origenSel = origenes.find(o => o.id === origen) || origenes[0];
+  const lista = origenSel.lista.filter(e => filtro === 'todos' || (filtro === 'utilidad' ? e.afecta_utilidad : e.grupo === filtro));
+  const totalLista = suma(lista);
+  const totalMes = suma(egresos || []);
+  const totalUtilidad = suma((egresos || []).filter(e => e.afecta_utilidad));
+  // Contra qué número del estado de resultados debe cuadrar el filtro elegido.
+  const referencia = (() => {
+    if (!flujo || filtro !== 'todos') return null;
+    if (origenSel.cuenta) {
+      const c = flujo.cuentas.find(x => x.id === origenSel.cuenta.id);
+      return c ? { monto: c.egresos, texto: `“− Egresos pagados” de ${c.nombre} en el Flujo de dinero` } : null;
+    }
+    if (origen === 'por_pagar') return { monto: flujo.porPagar.monto, texto: '“Por pagar (todas las fechas)” del Flujo de dinero' };
+    if (origen === 'sin_cuenta') return { monto: flujo.pagadosSinCuenta.monto, texto: 'el aviso de pagados sin cuenta del Flujo de dinero' };
+    return null;
+  })();
+  const descripcionOrigen = origenSel.cuenta
+    ? `Pagados desde ${origenSel.cuenta.nombre} en ${nombreMes(periodo)} (por fecha de pago, aunque el gasto sea de otro mes).`
+    : origen === 'por_pagar' ? 'Todo lo que falta pagar, de cualquier mes. Todavía no sale de Caja ni de Banco.'
+      : origen === 'sin_cuenta' ? `Pagados en ${nombreMes(periodo)} sin decir de qué cuenta salió el dinero: edítalos para que Caja/Banco cuadren.`
+        : `Registrados en ${nombreMes(periodo)} (por fecha del gasto), pagados o no.`;
 
   return (
     <div className="admin-columns">
@@ -343,6 +541,14 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
           <button className="btn-secondary" onClick={() => setSheet({ tipo: 'traspaso' })}><ArrowRightLeft size={15} /> Traspaso caja ↔ banco</button>
         </div>
         <div className="promo-summary-card">Total del mes: <strong>{money(totalMes)}</strong> · de ellos bajan la utilidad: <strong>{money(totalUtilidad)}</strong>. Las compras de insumos, el equipo, los retiros y el diezmo salen del dinero pero no son gasto.</div>
+        <div className="kpi-label" style={{ margin: '4px 0 6px' }}>¿De dónde salió el dinero?</div>
+        <div className="cat-tabs" style={{ marginBottom: 6 }}>
+          {origenes.map(o => (
+            <button key={o.id} className={`cat-tab ${origen === o.id ? 'active' : ''}`} onClick={() => setOrigen(o.id)}>{o.icono}{o.label} · {money(suma(o.lista))}</button>
+          ))}
+        </div>
+        <div className="field-hint" style={{ marginBottom: 8 }}>{descripcionOrigen}</div>
+        <div className="kpi-label" style={{ margin: '4px 0 6px' }}>Tipo de egreso</div>
         <div className="cat-tabs" style={{ marginBottom: 8 }}>
           {[['todos', 'Todos'], ['utilidad', 'Bajan la utilidad'], ['gasto_operacion', 'Operación'], ['gasto_financiero', 'Financieros'], ['inventario', 'Compras de insumos'], ['inversion', 'Equipo'], ['diezmo_ofrenda', 'Diezmo y ofrenda']].map(([id, label]) => (
             <button key={id} className={`cat-tab ${filtro === id ? 'active' : ''}`} onClick={() => setFiltro(id)}>{label}</button>
@@ -368,6 +574,14 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
             </div>
           </div>
         ))}
+        {egresos !== null && lista.length > 0 && (
+          <div className="egresos-total">
+            <div className="egresos-total-fila"><span>Total · {lista.length} egreso(s){origen !== 'todos' ? ` · ${origenSel.cuenta ? origenSel.cuenta.nombre : origenSel.label}` : ''}{filtro !== 'todos' ? ' · con el tipo elegido' : ''}</span><strong>{money(totalLista)}</strong></div>
+            {referencia && (Math.abs(referencia.monto - totalLista) < 0.005
+              ? <div className="egresos-cuadre ok"><Check size={13} /> Cuadra con {referencia.texto}: {money(referencia.monto)}</div>
+              : <div className="egresos-cuadre warn"><AlertTriangle size={13} /> No cuadra con {referencia.texto} ({money(referencia.monto)}): diferencia de {money(Math.abs(referencia.monto - totalLista))}. Revisa la fecha de saldo inicial de la cuenta en Cuentas.</div>)}
+          </div>
+        )}
         {traspasos.length > 0 && (
           <>
             <div className="section-title"><ArrowRightLeft size={15} /> Traspasos del mes</div>

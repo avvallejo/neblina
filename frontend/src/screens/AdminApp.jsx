@@ -19,7 +19,7 @@ import { ConfirmDialog, EmptyState, FormError } from '../components/ui.jsx';
 import { RecipeModal } from '../components/recipe.jsx';
 import {
   PromoConfigSheet, UsuarioFormSheet, ProveedorFormSheet, MateriaFormSheet,
-  ProductoFormSheet, RecetaFormSheet, BrandingEditor, PrecioCostoSheet, CompraSheet, AjusteStockSheet,
+  ProductoFormSheet, RecetaFormSheet, BrandingEditor, PrecioCostoSheet, CompraSheet, AjusteStockSheet, SalidaInternaSheet,
   GastoFijoFormSheet, MargenConfigSheet, GASTO_CATEGORIAS, OpcionFormSheet, PantallaConfigEditor, CortesiasConfigEditor, MesasConfigEditor, CategoriasEditor,
 } from './adminForms.jsx';
 import { Sheet } from '../components/ui.jsx';
@@ -35,7 +35,7 @@ import { Sheet } from '../components/ui.jsx';
 // Para buscar "cafe" y que encuentre "Café": sin acentos y sin mayúsculas.
 const sinAcentos = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste }) {
+function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste, onSurtir }) {
   const [filtro, setFiltro] = useState('Todas');
   const [busqueda, setBusqueda] = useState('');
   const [sinUso, setSinUso] = useState(false);
@@ -121,6 +121,7 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
                   <div className="inv-acciones">
                     <button className="icon-btn small" onClick={() => onEdit(m)} aria-label={`Editar ${m.nombre}`}><Pencil size={14} /></button>
                     <button className="link-toggle" onClick={() => onCompra(m)}>Compra</button>
+                    <button className="link-toggle" onClick={() => onSurtir(m)} title="Salida sin venta: surtir mesas, consumo del personal o uso interno">Surtir</button>
                     <button className="link-toggle" onClick={() => onAjuste(m)}>Ajustar</button>
                     <button className="link-toggle" onClick={() => onToggleActivo(m.id, m.activo)}>{m.activo ? 'Desactivar' : 'Activar'}</button>
                     <button className="link-danger" onClick={() => onDelete(m)}>Eliminar</button>
@@ -1052,6 +1053,7 @@ export default function AdminApp(props) {
   const [precioProducto, setPrecioProducto] = useState(null);
   const [compraMateria, setCompraMateria] = useState(null);
   const [ajusteMateria, setAjusteMateria] = useState(null);
+  const [surtirMateria, setSurtirMateria] = useState(null);
   const [, bump] = useState(0);
 
   const addProducto = async p => {
@@ -1098,6 +1100,15 @@ export default function AdminApp(props) {
       await api.ajustarStock(materia.id, ajuste);
       await recargarAdmin();
       addToast(`Stock de ${materia.nombre} ajustado a ${ajuste.nuevaCantidad}`, 'success');
+      return true;
+    } catch (e) { addToast(e.message, 'warn'); return false; }
+  };
+
+  const registrarSurtido = async (materia, salida) => {
+    try {
+      await api.registrarSalidaInterna(materia.id, salida);
+      await recargarAdmin();
+      addToast(`Surtido de ${materia.nombre} registrado`, 'success');
       return true;
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };
@@ -1293,6 +1304,7 @@ export default function AdminApp(props) {
           onDelete={deleteMateria}
           onCompra={setCompraMateria}
           onAjuste={setAjusteMateria}
+          onSurtir={setSurtirMateria}
         />
       )}
 
@@ -1455,6 +1467,14 @@ export default function AdminApp(props) {
           materia={ajusteMateria}
           onClose={() => setAjusteMateria(null)}
           onSave={ajustarStock}
+        />
+      )}
+
+      {surtirMateria && (
+        <SalidaInternaSheet
+          materia={surtirMateria}
+          onClose={() => setSurtirMateria(null)}
+          onSave={registrarSurtido}
         />
       )}
 

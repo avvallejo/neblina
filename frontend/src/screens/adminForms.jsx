@@ -1447,6 +1447,88 @@ export function CompraSheet({ materia, proveedores, onClose, onSave }) {
 
 // AJUSTAR STOCK: para correcciones de conteo físico (se contó de más o de
 // menos). Deja rastro en el historial y mantiene el saldo de los lotes.
+// SURTIR (salida sin venta). Consumibles de mesa como azúcar, sobres o salsas:
+// no se sabe cuánto toma cada cliente, así que se registra lo que se SURTE al
+// rellenar. Descuenta inventario y entra al costo de ventas como su propia
+// línea ("consumibles de mesa y uso interno"). No mueve Caja ni Banco.
+const MOTIVOS_SALIDA = [
+  ['mesas', 'Surtir mesas', 'azúcar, sobres, salsas, servilletas'],
+  ['personal', 'Consumo del personal', 'lo que toma o come el equipo'],
+  ['interno', 'Uso interno', 'pruebas, limpieza, cortesía no registrada'],
+];
+export function SalidaInternaSheet({ materia, onClose, onSave }) {
+  const unidadMateria = normalizeUnidad(materia.unidad);
+  const pres = materia.presentacion || null;
+  const [porPaquetes, setPorPaquetes] = useState(false);
+  const [cantidad, setCantidad] = useState('');
+  const [motivo, setMotivo] = useState('mesas');
+  const [nota, setNota] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const n = Number(cantidad);
+  const cantidadControl = Number.isFinite(n) && n > 0
+    ? (porPaquetes && pres ? convertirCantidad(n * Number(pres.cantidad), pres.unidad, unidadMateria) : n)
+    : null;
+  const costo = cantidadControl ? cantidadControl * Number(materia.costoUnitario || 0) : null;
+  const quedan = cantidadControl !== null ? Number(materia.stockActual || 0) - cantidadControl : null;
+
+  const submit = async () => {
+    if (cantidadControl === null) { setError('Indica cuánto surtiste.'); return; }
+    if (quedan < -0.0005) { setError(`Solo hay ${materia.stockActual} ${unidadDisplay(unidadMateria)} en el sistema. Registra primero la compra o ajusta el conteo.`); return; }
+    setError(''); setSaving(true);
+    const ok = await onSave(materia, { cantidad: Math.round(cantidadControl * 1000) / 1000, motivo, nota: nota.trim() || undefined });
+    setSaving(false);
+    if (ok !== false) onClose();
+  };
+
+  return (
+    <Sheet title={`Surtir: ${materia.nombre}`} onClose={onClose}>
+      <div className="field-hint" style={{ marginBottom: 14 }}>
+        Úsalo cada vez que <strong>rellenas</strong> un azucarero, un bote de salsa o pones sobres en las mesas: registra lo que sacaste del almacén.
+        No hace falta saber cuánto tomó cada cliente. Sale del inventario y su costo entra al costo de ventas del mes; <strong>no mueve Caja ni Banco</strong> (ese dinero salió cuando lo compraste).
+      </div>
+      <div className="option-group">
+        <div className="option-label">¿Para qué salió?</div>
+        <div className="option-row">
+          {MOTIVOS_SALIDA.map(([id, label, sub]) => (
+            <button key={id} type="button" className={`option-chip ${motivo === id ? 'selected' : ''}`} onClick={() => setMotivo(id)} title={sub}>{label}</button>
+          ))}
+        </div>
+        <div className="field-hint">{MOTIVOS_SALIDA.find(m => m[0] === motivo)[2]}</div>
+      </div>
+      {pres && (
+        <div className="option-group">
+          <div className="option-label">¿Cómo lo cuentas?</div>
+          <div className="option-row">
+            <button type="button" className={`option-chip ${!porPaquetes ? 'selected' : ''}`} onClick={() => setPorPaquetes(false)}>En {unidadDisplay(unidadMateria)}</button>
+            <button type="button" className={`option-chip ${porPaquetes ? 'selected' : ''}`} onClick={() => setPorPaquetes(true)}>Por {pres.nombre} ({pres.cantidad} {unidadDisplay(pres.unidad)})</button>
+          </div>
+        </div>
+      )}
+      <div className="option-group">
+        <div className="option-label">Cantidad que surtiste ({porPaquetes && pres ? pres.nombre : unidadDisplay(unidadMateria)})</div>
+        <input className="text-input" type="number" min="0" step={porPaquetes ? '1' : unidadStep(unidadMateria)} value={cantidad} onChange={e => setCantidad(e.target.value)} autoFocus />
+        {cantidadControl !== null && (
+          <div className="field-hint">
+            Salen <strong>{Number(cantidadControl.toFixed(3))} {unidadDisplay(unidadMateria)}</strong>
+            {costo ? <> · costo aprox. <strong>{money(costo)}</strong></> : ''}
+            {' · '}quedan {Number(Math.max(quedan, 0).toFixed(3))} {unidadDisplay(unidadMateria)} en el sistema
+          </div>
+        )}
+      </div>
+      <div className="option-group">
+        <div className="option-label">Nota (opcional)</div>
+        <input className="text-input" value={nota} onChange={e => setNota(e.target.value)} placeholder="Ej. Relleno de los 6 azucareros" maxLength={200} />
+      </div>
+      <FormError>{error}</FormError>
+      <div className="sheet-footer">
+        <span />
+        <button className="btn-primary" disabled={saving} onClick={submit}>{saving ? 'Guardando…' : 'Registrar surtido'}</button>
+      </div>
+    </Sheet>
+  );
+}
+
 export function AjusteStockSheet({ materia, onClose, onSave }) {
   const unidadMateria = normalizeUnidad(materia.unidad);
   const [nuevaCantidad, setNuevaCantidad] = useState(String(materia.stockActual ?? ''));

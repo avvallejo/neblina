@@ -153,7 +153,8 @@ async function crearEgreso(client, { sucursalId, usuarioId, fecha, cuentaContabl
 
 const egresoSql = `SELECT e.*, c.nombre AS cuenta_nombre, c.grupo, c.clave AS cuenta_clave, fn_grupo_afecta_utilidad(c.grupo) AS afecta_utilidad,
     d.nombre AS cuenta_dinero_nombre, d.clave AS cuenta_dinero_clave, pr.nombre AS proveedor_nombre, u.nombre AS usuario_nombre,
-    g.concepto AS gasto_fijo_concepto, m.nombre AS lote_insumo,
+    g.concepto AS gasto_fijo_concepto, m.nombre AS lote_insumo, m.id AS lote_materia_id,
+    fn_convertir_unidad(l.cantidad_comprada, l.unidad, m.unidad) AS lote_cantidad, m.unidad AS lote_unidad,
     pago_usuario.nombre AS pagado_caja_por,
     pago_caja.valor_nuevo->'comprobantePago'->>'referencia' AS pago_caja_referencia,
     pago_caja.valor_nuevo->'comprobantePago'->>'nota' AS pago_caja_nota
@@ -176,9 +177,12 @@ function normalizarFechas(row, campos = ['fecha', 'pagado_en', 'egreso_fecha']) 
   return out;
 }
 
-async function listarEgresos(queryFn, sucursalId, { periodo, pendientes, cuentaId, incluirAnulados } = {}) {
+async function listarEgresos(queryFn, sucursalId, { periodo, pagadoPeriodo, pendientes, cuentaId, incluirAnulados } = {}) {
   const cond = ['e.sucursal_id = $1']; const values = [sucursalId];
   if (periodo) { const r = rangoPeriodo(validarPeriodo(periodo)); values.push(r.desde, r.hasta); cond.push(`e.fecha BETWEEN $${values.length - 1} AND $${values.length}`); }
+  // Pagados DENTRO del mes (por fecha de pago, como el flujo de dinero), sin
+  // importar a qué mes pertenece el gasto: así Caja/Banco cuadran con el flujo.
+  if (pagadoPeriodo) { const r = rangoPeriodo(validarPeriodo(pagadoPeriodo)); values.push(r.desde, r.hasta); cond.push(`e.pagado AND e.pagado_en BETWEEN $${values.length - 1} AND $${values.length}`); }
   if (pendientes) cond.push('NOT e.pagado');
   if (cuentaId) { values.push(Number(cuentaId)); cond.push(`e.cuenta_contable_id = $${values.length}`); }
   if (!incluirAnulados) cond.push('NOT e.anulado');
@@ -212,13 +216,46 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
        AND (p.creado_en AT TIME ZONE '${TZ}')::date BETWEEN $2 AND $3`, [sucursalId, r.desde, r.hasta]);
   const { rows: [c] } = await queryFn(
     `SELECT COALESCE(SUM(${costoMovimientoSql}) FILTER (WHERE mi.tipo = 'consumo'),0) AS consumo,
+            COALESCE(SUM(${costoMovimientoSql}) FILTER (WHERE mi.tipo = 'consumo' AND mi.pedido_item_id IS NULL AND mi.merma_id IS NULL),0) AS consumo_interno,
             COALESCE(SUM(${costoMovimientoSql}) FILTER (WHERE mi.tipo = 'merma'),0) AS mermas,
-            COALESCE(SUM(${costoMovimientoSql}) FILTER (WHERE mi.tipo = 'ajuste'),0) AS ajustes
+            COALESCE(SUM(${costoMovimientoSql}) FILTER (WHERE mi.tipo = 'ajuste'),0) AS ajustes,
+            COALESCE(SUM(${costoMovimientoSql}) FILTER (WHERE mi.tipo = 'ajuste' AND mi.pedido_item_id IS NOT NULL),0) AS devoluciones
      FROM movimientos_inventario mi
      JOIN materias_primas mp ON mp.id = mi.materia_prima_id
      LEFT JOIN lotes l ON l.id = mi.lote_id
      WHERE mp.sucursal_id = $1 AND mi.tipo IN ('consumo','merma','ajuste')
        AND (mi.creado_en AT TIME ZONE '${TZ}')::date BETWEEN $2 AND $3`, [sucursalId, r.desde, r.hasta]);
+  // Ventas cobradas cuyo costo todavía no entra (o nunca entrará) al costo de
+  // ventas: el inventario se descuenta cuando la línea pasa a 'terminado'
+  // (trigger trg_descontar_inventario). Una línea cobrada que sigue pendiente o
+  // en preparación ya suma a ventas pero aún no a costo; una terminada sin
+  // consumo valorado (producto sin receta o insumos a $0) nunca sumará costo.
+  const { rows: sinCosto } = await queryFn(
+    `SELECT CASE WHEN pi.estado IN ('pendiente','en_preparacion') THEN 'sin_terminar' ELSE 'sin_receta' END AS motivo,
+            COALESCE(pr.nombre, pi.concepto_libre, 'Producto') AS producto,
+            COUNT(DISTINCT p.id) AS pedidos, SUM(pi.cantidad) AS unidades,
+            COALESCE(SUM(pi.precio_unitario * pi.cantidad) FILTER (WHERE NOT pi.es_cortesia),0) AS venta,
+            MIN((p.creado_en AT TIME ZONE '${TZ}')::date) AS desde
+     FROM pedidos p
+     JOIN pedido_items pi ON pi.pedido_id = p.id
+     LEFT JOIN productos pr ON pr.id = pi.producto_id
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(SUM(${costoMovimientoSql}),0) AS costo
+       FROM movimientos_inventario mi JOIN materias_primas mp ON mp.id = mi.materia_prima_id LEFT JOIN lotes l ON l.id = mi.lote_id
+       WHERE mi.pedido_item_id = pi.id AND mi.tipo = 'consumo') cst ON true
+     WHERE p.sucursal_id = $1 AND p.cobrado AND NOT p.cancelado AND NOT p.no_show
+       AND (p.creado_en AT TIME ZONE '${TZ}')::date BETWEEN $2 AND $3
+       AND (pi.estado IN ('pendiente','en_preparacion') OR (pi.estado = 'terminado' AND cst.costo <= 0))
+     GROUP BY 1, 2 ORDER BY 1, venta DESC`, [sucursalId, r.desde, r.hasta]);
+  const resumenSinCosto = motivo => {
+    const filas = sinCosto.filter(x => x.motivo === motivo);
+    return {
+      lineas: filas.length,
+      unidades: filas.reduce((s, x) => s + Number(x.unidades), 0),
+      venta: round2(filas.reduce((s, x) => s + num(x.venta), 0)),
+      productos: filas.slice(0, 12).map(x => ({ producto: x.producto, pedidos: Number(x.pedidos), unidades: Number(x.unidades), venta: round2(x.venta), desde: fechaISO(x.desde) })),
+    };
+  };
   const { rows: cuentas } = await queryFn(
     `SELECT c.id, c.nombre, c.grupo, c.clave, c.orden, COALESCE(SUM(e.monto),0) AS monto, COUNT(e.id) AS movimientos,
             COALESCE(SUM(e.monto) FILTER (WHERE NOT e.pagado),0) AS por_pagar
@@ -243,10 +280,29 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
      FROM egresos e JOIN cuentas_contables c ON c.id = e.cuenta_contable_id
      WHERE e.sucursal_id = $1 AND NOT e.anulado AND e.pagado AND e.periodo = $2 AND c.grupo = 'diezmo_ofrenda'`, [sucursalId, p]);
   const cerrado = await mesCerrado(queryFn, sucursalId, p);
+  // Valor del inventario HOY (lo que está en el almacén, a su costo): lotes a
+  // su costo de compra; insumos sin lotes, al costo de referencia.
+  const { rows: [inv] } = await queryFn(
+    `SELECT COALESCE(SUM(CASE WHEN m.requiere_lote
+              THEN (SELECT COALESCE(SUM(fn_convertir_unidad(l.cantidad_disponible, l.unidad, m.unidad)
+                     * COALESCE(l.costo_total / NULLIF(fn_convertir_unidad(l.cantidad_comprada, l.unidad, m.unidad), 0), 0)), 0)
+                    FROM lotes l WHERE l.materia_prima_id = m.id AND l.cantidad_disponible > 0)
+              ELSE GREATEST(m.stock_actual, 0) * COALESCE(m.costo_unitario, 0) END), 0) AS valor,
+            COUNT(*) FILTER (WHERE m.stock_actual > 0) AS insumos
+     FROM materias_primas m WHERE m.sucursal_id = $1`, [sucursalId]);
   return {
     periodo: p, nombre: r.nombre, desde: r.desde, hasta: r.hasta, cerrado,
     ventas: { total: ventas, pedidos: Number(v.pedidos), efectivo: round2(v.ventas_efectivo), banco: round2(ventas - num(v.ventas_efectivo)), pagosSinDesglose: Number(v.pagos_sin_desglose), cortesias: Number(v.cortesias), cortesiasValor: round2(v.cortesias_valor), descuentos: round2(v.descuentos) },
-    costoVentas: { total: costoVentas, consumo: round2(c.consumo), mermas: round2(c.mermas), ajustes: round2(c.ajustes), manual: round2(porGrupo.costo_ventas) },
+    costoVentas: {
+      // Desglose: lo vendido (neto de insumos que regresaron por tickets
+      // cancelados o devueltos), lo surtido sin venta (mesas, personal),
+      // mermas y ajustes por conteo físico (faltantes/sobrantes).
+      total: costoVentas, consumo: round2(c.consumo),
+      consumoVentas: round2(num(c.consumo) - num(c.consumo_interno) + num(c.devoluciones)), consumoInterno: round2(c.consumo_interno),
+      mermas: round2(c.mermas), ajustes: round2(c.ajustes), ajustesConteo: round2(num(c.ajustes) - num(c.devoluciones)), devoluciones: round2(c.devoluciones), manual: round2(porGrupo.costo_ventas),
+      // Ventas cobradas sin su costo: pendientes de terminar (el costo llegará) y terminadas sin costo (no llegará).
+      sinTerminar: resumenSinCosto('sin_terminar'), sinReceta: resumenSinCosto('sin_receta'),
+    },
     utilidadBruta,
     gastosOperacion: round2(porGrupo.gasto_operacion),
     utilidadOperacion,
@@ -255,6 +311,7 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
     utilidadNeta,
     margenNeto: ventas > 0 ? round2(utilidadNeta / ventas * 100) : null,
     // Salidas que NO bajan la utilidad (para el flujo de dinero y la conciencia del dueño).
+    inventarioHoy: { valor: round2(inv.valor), insumos: Number(inv.insumos) },
     otrasSalidas: { inventario: round2(porGrupo.inventario), inversion: round2(porGrupo.inversion), retiros: round2(porGrupo.retiro), diezmoOfrenda: round2(porGrupo.diezmo_ofrenda) },
     mayordomia: {
       base, diezmoPorcentaje: config.diezmoPorcentaje, ofrendaPorcentaje: config.ofrendaPorcentaje,

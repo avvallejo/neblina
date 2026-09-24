@@ -15,6 +15,7 @@ const { solicitarCancelacion } = require('../services/cancellations');
 const {cashPart}=require('../services/cashDrawer');
 const { preparationTrackingSql, deliveryHistorySql, deliverItem } = require('../services/preparationTracking');
 const { addOrderItems, changeOrderItem } = require('../services/openOrders');
+const { validarClientUuid, pedidoPorClientUuid, buscarPosibleDuplicado, errorPosibleDuplicado } = require('../services/orderIdempotency');
 const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'mixto', 'cortesia'];
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // personal y cliente operan pedidos, siempre dentro de SU sede
@@ -65,8 +66,13 @@ router.post('/', asyncHandler(async (req, res) => {
   if (todoCortesia && !puedeDarCortesia) throw new ApiError(403, 'Solo caja o administración pueden dar cortesías.');
   const descuentoFinal = normalizeDiscount(descuentoPorcentaje);
   if (descuentoFinal) assertDiscountRole(req.auth);
+  const clientUuid = validarClientUuid(req.body.clientUuid);
+  const confirmarDuplicado = req.body.confirmarDuplicado === true;
 
   const resultado = await withTransaction(async client => {
+    // Reintento del mismo cobro (se perdió la respuesta): el mismo pedido, no otro.
+    const previo = await pedidoPorClientUuid(client, clientUuid, req.sucursalId);
+    if (previo) return { ...previo, yaExistia: true };
     let clienteId = req.auth.tipo === 'cliente' ? req.auth.id : null;
     if (esStaff && clienteTelefono) {
       const c = await client.query('SELECT id FROM clientes WHERE telefono = $1 AND sucursal_id = $2', [String(clienteTelefono).replace(/\D/g, ''), req.sucursalId]);
@@ -97,6 +103,14 @@ router.post('/', asyncHandler(async (req, res) => {
 
     const subtotal = lineas.reduce((sum, line) => sum + line.precioUnitario * line.cantidad, 0);
     const total = Math.round(((subtotal - cortesiaValor) * (1 - descuentoFinal / 100)) * 100) / 100;
+    // ¿La misma persona acaba de registrar un pedido idéntico? Se confirma antes de duplicar.
+    if (esStaff && !confirmarDuplicado) {
+      const dup = await buscarPosibleDuplicado(client, {
+        sucursalId: req.sucursalId, cajeroId: ['cajero', 'mostrador', 'admin'].includes(req.auth.rol) ? req.auth.id : null,
+        nombreTicket: nombreTicket?.trim() || null, total, lineas,
+      });
+      if (dup) throw errorPosibleDuplicado(dup, nombreTicket?.trim());
+    }
     const cobradoInicial = !!pago;
     // Un ticket 100 % cortesía se registra con forma de pago 'cortesia' (total
     // 0); si algo se cobra, lleva la forma de pago real. El cupo se resuelve
@@ -112,8 +126,8 @@ router.post('/', asyncHandler(async (req, res) => {
           descuento_porcentaje, descuento_autorizado_por, total, metodo_pago, monto_recibido, cambio,
           cobrado, es_regalo_fidelidad, sucursal_id, importe_efectivo,
           cortesia_estado, cortesia_motivo, cortesia_resuelta_por, cortesia_resuelta_en, destino, mesa_numero,
-          cortesia_valor, cortesia_unidades, nombre_ticket)
-       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          cortesia_valor, cortesia_unidades, nombre_ticket, client_uuid)
+       VALUES (NULL, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        RETURNING *`,
       [origen, clienteId, esStaff && ['cajero', 'mostrador', 'admin'].includes(req.auth.rol) ? req.auth.id : null, horaRecogida || null, subtotal,
         descuentoFinal, autorizadoPor, total,
@@ -121,7 +135,7 @@ router.post('/', asyncHandler(async (req, res) => {
         cobradoInicial && !esCortesia && pago.montoRecibido ? Math.round((pago.montoRecibido - total) * 100) / 100 : null,
         cobradoInicial, esRegaloPedido, req.sucursalId, cobradoInicial ? cashPart(metodoPago, total, pago.importeEfectivo) : null,
         cortesia ? cortesia.estado : null, cortesia ? cortesia.motivo : null, cortesia ? cortesia.resueltaPor : null, cortesia ? cortesia.resueltaEn : null,
-        dest.destino, dest.mesaNumero, cortesiaValor, cortesiaUnidades, nombreTicket?.trim() || null]
+        dest.destino, dest.mesaNumero, cortesiaValor, cortesiaUnidades, nombreTicket?.trim() || null, clientUuid]
     );
     const pedido = pedidoRes.rows[0];
 
@@ -145,7 +159,7 @@ router.post('/', asyncHandler(async (req, res) => {
     return { pedido, items: itemsCreados, cortesia: cortesia ? respuestaCortesia(cortesia) : undefined };
   });
 
-  res.status(201).json(resultado);
+  res.status(resultado.yaExistia ? 200 : 201).json(resultado);
 }));
 
 router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {

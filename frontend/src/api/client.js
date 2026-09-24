@@ -258,7 +258,7 @@ export function crearAprobacionDescuento({ pin, descuentoPorcentaje }) {
   return request('/pedidos/aprobaciones-descuento', { method: 'POST', body: { pin, descuentoPorcentaje } });
 }
 
-export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente, destino, mesa, nombreTicket }) {
+export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, horaRecogida, comoCliente, destino, mesa, nombreTicket, clientUuid, confirmarDuplicado }) {
   return request('/pedidos', {
     method: 'POST',
     useClienteToken: !!comoCliente,
@@ -272,6 +272,8 @@ export function crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescu
       destino, // Caja: 'mesa' | 'barra' | 'llevar' (obligatorio); cliente: no aplica
       mesa,
       nombreTicket,
+      clientUuid, // Caja: misma clave en cada reintento del mismo cobro → el servidor no duplica
+      confirmarDuplicado, // true = "sí, es otro pedido igual" tras el aviso de posible duplicado
     },
   });
 }

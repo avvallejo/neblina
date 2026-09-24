@@ -196,6 +196,45 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
   const [editingOrder, setEditingOrder] = useState(null);
   const [addingToOrder, setAddingToOrder] = useState(null);
 
+  // ---- Protección contra cobros duplicados ----
+  // Una clave por intento de cobro: se conserva mientras el carrito no cambie,
+  // así un reintento (se perdió la respuesta) devuelve el MISMO pedido.
+  const intentoRef = React.useRef(null);
+  React.useEffect(() => { intentoRef.current = null; }, [cart, discount, destino, nombreTicket, addingToOrder]);
+  const claveIntento = () => {
+    if (!intentoRef.current) {
+      intentoRef.current = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); });
+    }
+    return intentoRef.current;
+  };
+  const crearConProteccion = async params => {
+    const clientUuid = claveIntento();
+    try {
+      return await createOrder({ ...params, clientUuid });
+    } catch (e) {
+      if (e.status === 409 && e.details && e.details.codigo === 'posible_duplicado') {
+        if (window.confirm(`${e.message}\n\nAceptar: sí, es OTRO pedido y se registra.\nCancelar: era el mismo, no se vuelve a registrar.`)) {
+          return createOrder({ ...params, clientUuid, confirmarDuplicado: true });
+        }
+        const err = new Error(`No se registró de nuevo. Revisa el pedido ${e.details.folio} en Ventas.`);
+        err.duplicadoDescartado = true;
+        throw err;
+      }
+      if (!e.status) {
+        const err = new Error('Se perdió la conexión antes de confirmar. Vuelve a tocar el botón: si el pedido ya se registró, no se duplicará.');
+        err.conexion = true;
+        throw err;
+      }
+      throw e;
+    }
+  };
+  const descartarDuplicado = e => {
+    setCart([]); setDiscount(null); setDestino(null); setNombreTicket('');
+    setScreen('turno');
+    addToast(e.message, 'warn');
+  };
+
   const authorizeDiscount = async (porcentaje, pin) => {
     if (!porcentaje) { setDiscount(null); return; }
     const approval = await api.crearAprobacionDescuento({ pin, descuentoPorcentaje: porcentaje });
@@ -232,7 +271,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     // métodos siguen avisando con un toast.
     const esCortesia = payInfo.method === 'cortesia' || payInfo.cortesiaUnits > 0;
     try {
-      const order = await createOrder({
+      const order = await crearConProteccion({
         cart,
         descuentoPorcentaje: discount?.porcentaje,
         autorizacionDescuento: discount?.autorizacion,
@@ -247,8 +286,9 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
       setDestino(null); setNombreTicket('');
       setScreen('confirmed');
     } catch (e) {
+      if (e.duplicadoDescartado) { descartarDuplicado(e); return; }
       if (esCortesia) throw e;
-      addToast('No se pudo crear el pedido: ' + e.message, 'warn');
+      addToast(e.conexion ? e.message : 'No se pudo crear el pedido: ' + e.message, 'warn');
     }
   };
 
@@ -265,12 +305,12 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         await pedidoActualizado();
         addToast(`Productos agregados a ${addingToOrder.folio}; sigue pendiente de pago`, 'success');
       } else {
-        const order = await createOrder({ cart, descuentoPorcentaje: discount?.porcentaje,
+        const order = await crearConProteccion({ cart, descuentoPorcentaje: discount?.porcentaje,
           nombreTicket: nombreTicket.trim(), autorizacionDescuento: discount?.autorizacion, destino: destino?.destino, mesa: destino?.mesa ?? undefined });
         setCart([]); setDiscount(null); setDestino(null); setNombreTicket('');
         setLastOrder(order); setScreen('confirmed');
       }
-    } catch (e) { addToast(e.message, 'warn'); }
+    } catch (e) { if (e.duplicadoDescartado) descartarDuplicado(e); else addToast(e.message, 'warn'); }
   });
   const agregarAlTicket = data => {
     if (cart.length) { addToast('Primero envía o vacía el carrito actual para agregar productos a otro ticket.', 'warn'); return; }

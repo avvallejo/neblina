@@ -213,10 +213,10 @@ export default function App() {
     return () => clearInterval(t);
   }, [role, sede, refrescarPedidos, refrescarCola, refrescarTurno]);
 
-  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket }) => {
-    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket });
+  const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket, clientUuid, confirmarDuplicado }) => {
+    const r = await api.crearPedido({ cart, pago, descuentoPorcentaje, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket, clientUuid, confirmarDuplicado });
     await refrescarPedidos(); await refrescarCola();
-    addToast(`Pedido ${r.pedido.folio} enviado a preparación`, 'success');
+    addToast(r.yaExistia ? `El pedido ${r.pedido.folio} ya se había registrado: no se duplicó` : `Pedido ${r.pedido.folio} enviado a preparación`, 'success');
     // `cortesia` viene solo cuando se cobró como cortesía: estado, cupo y leyenda para la Caja.
     return { ...adaptPedido(r.pedido), cortesia: r.cortesia };
   };

@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee } from 'lucide-react';
 import * as api from './api/client.js';
+import { startPolling } from './lib/polling.js';
 import {
   CATEGORIES, PRODUCTS, SIZE_OPTIONS, MILK_OPTIONS, COFFEE_OPTIONS, EXTRA_OPTIONS, MATERIA_CATEGORIAS,
   replaceArray, ICON_BY_CAT, getProduct,
@@ -204,13 +205,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!['cajero', 'barista', 'mostrador', 'admin'].includes(role)) {
-      if (role === 'cliente') { refrescarTurno(); const t = setInterval(refrescarTurno, 5000); return () => clearInterval(t); }
+    if (role === 'admin' || role === 'cliente') return startPolling(refrescarTurno, 10000);
+    if (!['cajero', 'barista', 'mostrador'].includes(role)) {
       return undefined;
     }
-    refrescarTurno(); refrescarPedidos(); refrescarCola();
-    const t = setInterval(() => { refrescarPedidos(); refrescarCola(); refrescarTurno(); }, 3500);
-    return () => clearInterval(t);
+    return startPolling(() => Promise.all([refrescarPedidos(), refrescarCola(), refrescarTurno()]), 3500);
   }, [role, sede, refrescarPedidos, refrescarCola, refrescarTurno]);
 
   const crearPedidoCaja = async ({ cart, descuentoPorcentaje, pago, autorizacionDescuento, clienteTelefono, destino, mesa, nombreTicket, clientUuid, confirmarDuplicado }) => {
@@ -288,7 +287,7 @@ export default function App() {
       api.getFidelidad().then(fid => {
         if (fid) setPromoConfig({ activo: fid.activo, cada: fid.cada_n_pedidos, premioId: fid.producto_premio_id });
       }),
-      api.getReportes().then(setReportes).catch(() => setReportes(null)),
+      api.getReportes().then(setReportes),
       api.getCortesias('pendiente').then(setCortesiasPendientes).catch(() => { /* conserva lo último */ }),
       api.getCancelaciones('pendiente').then(setCancelacionesPendientes).catch(() => { /* conserva lo último */ }),
       api.getPreciosPorRevisar().then(rows => { if (revisionCarga === revisionCargaPrecios.current) setPreciosPorRevisar(rows); }),
@@ -297,10 +296,18 @@ export default function App() {
 
   useEffect(() => {
     if (role !== 'admin') return undefined;
-    recargarAdmin();
-    const t = setInterval(recargarAdmin, 5000);
-    return () => clearInterval(t);
+    return startPolling(recargarAdmin, 30000);
   }, [role, sede, recargarAdmin]);
+
+  // Las autorizaciones siguen llegando pronto; no requieren volver a cargar
+  // usuarios, proveedores, inventario y cuatro reportes cada cinco segundos.
+  useEffect(() => {
+    if (role !== 'admin') return undefined;
+    return startPolling(() => Promise.allSettled([
+      api.getCortesias('pendiente').then(setCortesiasPendientes),
+      api.getCancelaciones('pendiente').then(setCancelacionesPendientes),
+    ]), 5000);
+  }, [role, sede]);
 
   useEffect(() => {
     if (role !== 'admin') return undefined;
@@ -315,12 +322,11 @@ export default function App() {
         const datos = await api.getKpisDia(fechaVentas);
         if (vigente) { setKpis(datos); setVentasError(''); }
       } catch (error) {
-        if (vigente) { setKpis(null); setVentasError(`No se pudieron actualizar las ventas: ${error.message}`); }
+        if (vigente) { setVentasError(`No se pudieron actualizar las ventas: ${error.message}`); }
       } finally { consultando = false; }
     };
-    actualizar();
-    const intervalo = setInterval(actualizar, 5000);
-    return () => { vigente = false; clearInterval(intervalo); };
+    const detener = startPolling(actualizar, 5000);
+    return () => { vigente = false; detener(); };
   }, [role, sede, fechaVentas]);
 
   const recargarRecetas = React.useCallback(async () => {

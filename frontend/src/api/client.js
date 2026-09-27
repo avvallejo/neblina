@@ -1,4 +1,5 @@
 import { productEmoji } from '../lib/productEmojis.js';
+import { createHttpClient } from './http.js';
 // Cliente HTTP de la API de la cafetería — MULTI-SUCURSAL.
 //
 // Centraliza: el token JWT (personal y cliente), la SUCURSAL ACTIVA, el manejo
@@ -15,6 +16,7 @@ import { productEmoji } from '../lib/productEmojis.js';
 //     ADMIN GENERAL cambia de sede con setSucursal() (el switcher del panel).
 
 const LS = typeof localStorage !== 'undefined' ? localStorage : null;
+const http = createHttpClient();
 
 let BASE =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) || '/api';
@@ -52,24 +54,13 @@ async function request(path, { method = 'GET', body, useClienteToken = false } =
   // La sede activa viaja en cada petición; el backend decide si aplica.
   if (sucursal && sucursal.id) headers['X-Sucursal-Id'] = sucursal.id;
 
-  const res = await fetch(`${BASE}${path}`, {
+  return http(`${BASE}${path}`, {
     method,
     cache: method === 'GET' ? 'no-store' : 'default',
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  let data = null;
-  const text = await res.text();
-  if (text) { try { data = JSON.parse(text); } catch { data = text; } }
-
-  if (!res.ok) {
-    const err = new Error((data && data.error) || `Error ${res.status}`);
-    err.status = res.status;
-    err.details = data && data.details;
-    throw err;
-  }
-  return data;
 }
 
 // Endpoints públicos: la sede va en la query (?sucursal=).

@@ -22,7 +22,9 @@ export PGOPTIONS="-c client_min_messages=warning"  # sin NOTICE ruidosos
 
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 PSQL=${PSQL:-"docker exec -i -e PGOPTIONS ${DB_CONTAINER:-cafeteria-db} psql -U postgres -d cafeteria"}
-q()   { $PSQL -X -At -v ON_ERROR_STOP=1 -c "$1"; }
+# Las consultas con -c no necesitan stdin. Docker exec -i podría consumir
+# los comandos restantes si el despliegue se pegó como bash <<'DEPLOY'.
+q()   { $PSQL -X -At -v ON_ERROR_STOP=1 -c "$1" < /dev/null; }
 runf() { $PSQL -X -q -v ON_ERROR_STOP=1 < "$1"; }
 
 q "SELECT 1" >/dev/null || { echo "No pude conectarme a la base (¿está corriendo el contenedor ${DB_CONTAINER:-cafeteria-db}?)"; exit 1; }

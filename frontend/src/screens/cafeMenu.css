@@ -83,3 +83,25 @@
 @media(prefers-reduced-motion:reduce){.cm-showcase-stage,.cm-drink,.cm-slide-track>div,.cm-mist{animation:none}.cm-category-nav button{transition:none}}
 .cm-photo{height:100%;max-height:100%;overflow:hidden}
 .cm-header{z-index:auto}
+/* El QR vive fuera de la escena animada: conserva su posición al pasar de página. */
+.cm-footer{border-top:1px solid #ba985b3b;padding-top:1.2vh;gap:3vw}
+.cm-footer-details{display:flex;flex-direction:column;align-items:flex-start;gap:16px;min-width:0}
+.cm-footer-details>span{max-width:44ch;line-height:1.5}
+.cm-menu-qr{display:flex;align-items:center;gap:1.5vw;flex-shrink:0;text-decoration:none;color:var(--cream)}
+.cm-menu-qr-copy>span{font-size:clamp(9px,.7vw,14px);letter-spacing:.16em;color:var(--gold)}
+.cm-menu-qr-copy strong{display:block;margin:.5vh 0;font:italic 500 clamp(25px,2.1vw,42px)/1.15 var(--font-display);color:var(--cream)}
+.cm-menu-qr-copy p{margin:0;font-size:clamp(11px,.9vw,18px);color:#dfceb4;line-height:1.5}
+.cm-menu-qr-copy small{display:block;margin-top:.6vh;font-size:clamp(9px,.7vw,14px);color:#b5a187}
+.cm-menu-qr-code{width:clamp(144px,11.5vw,220px);aspect-ratio:1;flex-shrink:0;display:grid;place-items:center;background:#fff;border-radius:4px;outline:1px solid #e8b96e66;outline-offset:5px;overflow:hidden}
+.cm-menu-qr-code img{display:block;width:100%;height:100%;object-fit:contain}
+.cm-menu-qr-code>span{text-align:center;color:#322214;font-size:14px;line-height:1.5}
+.cm-menu-qr:focus-visible{outline:2px solid var(--gold);outline-offset:9px;border-radius:4px}
+@media(max-width:699px){
+  .cm-footer{flex-direction:column;align-items:stretch;gap:12px;padding-top:12px}
+  .cm-footer-details{order:2;align-items:center}
+  .cm-footer-details>span{display:none}
+  .cm-menu-qr{justify-content:space-between;gap:12px}
+  .cm-menu-qr-code{width:120px}
+  .cm-menu-qr-copy strong{font-size:25px}
+  .cm-menu-qr-copy p{max-width:20ch}
+}

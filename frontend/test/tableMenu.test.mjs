@@ -1,7 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import QRCode from 'qrcode';
-import {tableMenuUrl,tableNumber} from '../src/lib/tableMenu.js';
+import {publicMenuUrl,tableMenuUrl,tableNumber} from '../src/lib/tableMenu.js';
+test('QR de pantalla abre la carta de la sucursal sin asignar mesa ni conservar controles de TV', async()=>{
+ const url=publicMenuUrl('https://neblinacafe.com/?pantalla=menu&mesa=9&diseno=ilustrado','sucursal-prueba');
+ const parsed=new URL(url);
+ assert.equal(parsed.pathname,'/');
+ assert.deepEqual([...parsed.searchParams], [['pantalla','carta'],['sucursal','sucursal-prueba']]);
+ assert.notEqual(url,publicMenuUrl(parsed.origin,'otra-sucursal'));
+ assert.throws(()=>publicMenuUrl(parsed.origin,''));
+ assert.match(await QRCode.toDataURL(url,{margin:4,errorCorrectionLevel:'M'}),/^data:image\/png;base64,/);
+});
 test('QR por mesa conserva sucursal y destino público, sin sesión',async()=>{
  const url=tableMenuUrl('https://neblinacafe.com','sucursal-prueba',3);
  const parsed=new URL(url);

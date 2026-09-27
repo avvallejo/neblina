@@ -13,6 +13,7 @@ export default function MenuBoard({ sucursalId, carta = false, mesa }) {
   const [estado, setEstado] = useState('cargando'); // cargando | listo | error
   const [brand, setBrand] = useState({ nombre: '', logo: '' });
   const [sedeNombre, setSedeNombre] = useState('');
+  const [menuSucursalId, setMenuSucursalId] = useState('');
   const [categorias, setCategorias] = useState([]);
   const [productos, setProductos] = useState([]);
   const [abierto, setAbierto] = useState(false);
@@ -52,6 +53,7 @@ export default function MenuBoard({ sucursalId, carta = false, mesa }) {
           api.getPromocionesApertura().catch(() => []),
         ]);
         if (!vivo) return;
+        setMenuSucursalId(sede.id);
         setBrand({ nombre: cfg.nombreNegocio || sede.nombre, logo: cfg.logo || '' });
         setCfg(cfg);
         const hoy = new Date().toISOString().slice(0, 10);
@@ -91,7 +93,7 @@ export default function MenuBoard({ sucursalId, carta = false, mesa }) {
   if (carta) return <TableMenu {...{brand, sedeNombre, productos, categorias, opciones, cfg, mesa, desactualizado}}/>;
 
   if (new URLSearchParams(window.location.search).get('diseno') === 'ilustrado' || !cfg.pantallaEstilo || cfg.pantallaEstilo === 'ilustrado') {
-    return <CafeMenu brand={brand} sedeNombre={sedeNombre} productos={productos} opciones={opciones} cfg={cfg} abierto={abierto} desactualizado={desactualizado}/>;
+    return <CafeMenu brand={brand} sedeNombre={sedeNombre} sucursalId={menuSucursalId} productos={productos} opciones={opciones} cfg={cfg} abierto={abierto} desactualizado={desactualizado}/>;
   }
 
   if ((cfg.pantallaEstilo || 'pizarra') === 'pizarra') {

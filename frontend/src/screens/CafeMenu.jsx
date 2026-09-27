@@ -3,6 +3,8 @@ import { Coffee, Snowflake, Sparkles, Flame, Cookie, ChevronLeft, ChevronRight, 
 import { menuIllustration } from '../lib/menuImages.js';
 import { categoryPages, categoryOf } from '../lib/tvMenu.js';
 import { CATEGORIES } from '../lib/catalog.js';
+import QRCode from 'qrcode';
+import { publicMenuUrl } from '../lib/tableMenu.js';
 import './cafeMenu.css';
 
 const dinero = n => `$${Number(n).toLocaleString('es-MX', { maximumFractionDigits: 2 })}`;
@@ -30,15 +32,34 @@ function Bebida({ p, index }) {
 function capacidad() {
   const { innerWidth: width, innerHeight: height } = window;
   const narrow = width < 700;
-  const rows = Math.max(1, Math.min(4, Math.floor((height - 260) / Math.max(100, width * .085))));
-  return { products: narrow ? Math.max(1, Math.floor((height - 340) / 115)) : rows * 2,
-    extras: narrow ? 3 : Math.max(2, Math.floor((height - 270) / Math.max(43, width * .031))) };
+  const qrSpace = narrow ? 150 : Math.min(220, Math.max(144, width * .115));
+  const rows = Math.max(1, Math.min(4, Math.floor((height - 260 - qrSpace) / Math.max(100, width * .085))));
+  return { products: narrow ? Math.max(1, Math.floor((height - 340 - qrSpace) / 115)) : rows * 2,
+    extras: narrow ? 3 : Math.max(2, Math.floor((height - 270 - qrSpace) / Math.max(43, width * .031))) };
+}
+function MenuQr({ sucursalId }) {
+  const url = sucursalId ? publicMenuUrl(window.location.origin, sucursalId) : '';
+  const [qr, setQr] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setQr(null);
+    if (url) QRCode.toDataURL(url, {
+      width: 880, margin: 4, errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' },
+    }).then(image => { if (live) setQr({ url, image }); }).catch(() => {});
+    return () => { live = false; };
+  }, [url]);
+  if (!url) return null;
+  return <a className="cm-menu-qr" href={url} target="_blank" rel="noreferrer" aria-label="Abrir el menú completo en tu celular">
+    <div className="cm-menu-qr-copy"><span>EL MENÚ EN TU CELULAR</span><strong>Elige a tu ritmo.</strong><p>Escanea y descubre cada antojo.</p><small>Menú completo · Sin registro</small></div>
+    <div className="cm-menu-qr-code">{qr?.url === url ? <img src={qr.image} width="220" height="220" alt="Código QR para ver el menú completo"/> : <span>Abrir<br/>menú completo ↗</span>}</div>
+  </a>;
 }
 function iconoCategoria(title) {
   return /frío/i.test(title) ? Snowflake : /frapp|extra|leche|tamaño/i.test(title) ? Sparkles : /parrilla|cocina/i.test(title) ? Flame : /snack|postre/i.test(title) ? Cookie : Coffee;
 }
 const fraseCategoria = title => /frío/i.test(title) ? 'Una pausa refrescante' : /frapp/i.test(title) ? 'Cremosos e irresistibles' : /parrilla|cocina/i.test(title) ? 'Para un antojo de verdad' : /snack|postre/i.test(title) ? 'El acompañamiento perfecto' : 'Tu momento de café';
-export default function CafeMenu({ brand, sedeNombre, productos, opciones, cfg, abierto, desactualizado }) {
+export default function CafeMenu({ brand, sedeNombre, sucursalId, productos, opciones, cfg, abierto, desactualizado }) {
   const [layout, setLayout] = useState(capacidad);
   const [page, setPage] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -123,13 +144,15 @@ export default function CafeMenu({ brand, sedeNombre, productos, opciones, cfg, 
       </> : <p>Pronto encontrarás aquí nuestro menú.</p>}
     </main>
     <footer className="cm-footer">
-      <span>{desactualizado ? 'Reconectando · última información disponible' : cfg.piePantalla || 'Una pausa entre montañas y café · Imágenes ilustrativas'}</span>
+      <div className="cm-footer-details"><span>{desactualizado ? 'Reconectando · última información disponible' : cfg.piePantalla || 'Una pausa entre montañas y café · Imágenes ilustrativas'}</span>
       <nav className="cm-pagination" aria-label="Páginas del menú">
         <button onClick={() => changePage(-1)} aria-label="Página anterior"><ChevronLeft/></button>
         <span className="cm-page-count">{String(current + 1).padStart(2, '0')} <small>/ {String(total).padStart(2, '0')}</small></span>
         <button onClick={() => changePage(1)} aria-label="Página siguiente"><ChevronRight/></button>
         <button onClick={() => setPaused(p => !p)} aria-label={paused ? 'Reanudar menú' : 'Pausar menú'}>{paused ? <Play/> : <Pause/>}</button>
       </nav>
+      </div>
+      <MenuQr sucursalId={sucursalId}/>
       <div className="cm-slide-track" aria-hidden="true"><div key={`${current}-${total}-${paused}`} style={{ animationPlayState: paused || total <= 1 ? 'paused' : 'running' }}/></div>
     </footer>
   </div>;

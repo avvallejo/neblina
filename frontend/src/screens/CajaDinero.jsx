@@ -81,7 +81,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
  const resumenCerrado=!data&&loaded&&<section className="caja-resumen cerrado">
   <div className="caja-resumen-head">
    <span className="caja-estado"><span className="caja-estado-punto"/>Turno cerrado</span>
-   <span className="field-hint">El resumen del efectivo aparece cuando hay un turno abierto. Ábrelo para registrar el fondo inicial y empezar a cobrar.</span>
+   <span className="field-hint">Abre un turno y registra el fondo inicial antes de vender. Sin turno abierto no se pueden crear tickets, registrar ventas directas ni cobrar. Puedes consultar las ventas anteriores y sus cortes.</span>
   </div>
   {onOpen&&<button className="btn-secondary" onClick={onOpen}>Abrir turno</button>}
  </section>;
@@ -93,7 +93,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
  }catch(e){setError(e.message);}finally{setBusy(false);}}
  function closeShift(){onCorte();}
  return <>
- {!open&&<div className="caja-resumen-inline">{metrics||resumenCerrado}</div>}
+ {!open&&<div className={`caja-resumen-inline${!turnoAbierto?' caja-requiere-turno':''}`}>{metrics||resumenCerrado}</div>}
  {!open&&data&&onOpen&&<button className="btn-secondary" onClick={onOpen} style={{marginBottom:12}}>Registrar compra / Gasto / Pago</button>}
  {error&&!open&&<p role="alert" className="form-error">No se pudo actualizar Caja: {error}</p>}
  {open&&<Sheet title={data?'Caja del turno':'Abrir turno'} onClose={onClose}>

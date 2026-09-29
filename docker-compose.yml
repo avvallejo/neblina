@@ -67,6 +67,7 @@ services:
       - ./db/39_nombre_ticket.sql:/docker-entrypoint-initdb.d/39_nombre_ticket.sql:ro
       - ./db/40_preparacion_y_entrega.sql:/docker-entrypoint-initdb.d/40_preparacion_y_entrega.sql:ro
       - ./db/41_cortes_y_folios.sql:/docker-entrypoint-initdb.d/41_cortes_y_folios.sql:ro
+      - ./db/42_turno_obligatorio_ventas.sql:/docker-entrypoint-initdb.d/42_turno_obligatorio_ventas.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

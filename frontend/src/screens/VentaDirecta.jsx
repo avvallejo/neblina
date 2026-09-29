@@ -7,7 +7,7 @@ import * as api from '../api/client';
 import './ventaDirecta.css';
 function fechaLocal(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function horaLocal(){return new Intl.DateTimeFormat('en-GB',{timeZone:'America/Mexico_City',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());}
-export default function VentaDirecta({onBack,addToast}){
+export default function VentaDirecta({onBack,addToast,turnoAbierto}){
  const [fecha,setFecha]=useState(fechaLocal),[hora,setHora]=useState(horaLocal),[motivo,setMotivo]=useState('Venta pendiente de capturar');
  const [items,setItems]=useState([]),[custom,setCustom]=useState(null),[materias,setMaterias]=useState([]),[error,setError]=useState('');
  const [metodo,setMetodo]=useState('efectivo'),[busy,setBusy]=useState(false),[review,setReview]=useState(false),[done,setDone]=useState(null);
@@ -24,6 +24,7 @@ export default function VentaDirecta({onBack,addToast}){
  const saleMethod=allCourtesy?'cortesia':metodo;
  const valid=(saleMethod!=='mixto'||(cashPart.trim()!==''&&Number.isFinite(Number(cashPart))&&Number(cashPart)>=0&&Number(cashPart)<=total))&&items.length>0&&motivo.trim().length>=3&&fecha&&hora&&items.every(x=>Number(x.qty)>=1&&Number.isInteger(Number(x.qty))&&x.unitPrice!==''&&Number(x.unitPrice)>=0&&(x.productId||(x.concepto?.trim().length>=3&&x.inventarioElegido))&&((x.productId&&Number(x.unitPrice)===x.originalPrice)||x.motivoPrecio?.trim().length>=3)&&Number.isFinite(Number(x.descuentoPorcentaje||0))&&Number(x.descuentoPorcentaje||0)>=0&&Number(x.descuentoPorcentaje||0)<100&&(!(x.cortesia||Number(x.descuentoPorcentaje)>0)||x.motivoBeneficio?.trim().length>=3)&&(!x.insumoId||Number(x.cantidadInsumo)>0));
  async function save(){
+  if(!turnoAbierto){setError('Abre un turno y registra el fondo inicial antes de vender.');return;}
   if(busy)return;setBusy(true);setError('');
   try{const r=await api.registrarVentaDirecta({cart:items,fecha,hora,motivo,metodoPago:saleMethod,importeEfectivo:saleMethod==='mixto'?Number(cashPart):undefined,montoRecibido:total,claveRegistro:key});setDone({...r.pedido,leyendaCortesia:r.cortesia?.leyenda});addToast('Venta registrada e inventario descontado','success');}
   catch(e){setError(e.message);}finally{setBusy(false);}
@@ -32,6 +33,8 @@ export default function VentaDirecta({onBack,addToast}){
  return <div className="direct-sale">
   <button className="btn-ghost" onClick={onBack} disabled={busy}>← Volver a Caja</button>
   <h2>Venta directa o atrasada</h2><p>Registra lo que ya vendiste y entregaste, con el precio realmente cobrado. No se enviará a preparación.</p>
+  <p className="direct-note">Necesitas un turno abierto para registrar. Si la venta es atrasada, su fecha debe corresponder a un turno registrado que aún no tenga corte guardado.</p>
+  <fieldset className="venta-turno-fields" disabled={!turnoAbierto||busy}>
   <div className="direct-grid"><label>Fecha de venta<input type="date" className="text-input" max={fechaLocal()} value={fecha} onChange={e=>{setFecha(e.target.value);setReview(false);}}/></label><label>Hora de venta<input type="time" className="text-input" value={hora} onChange={e=>{setHora(e.target.value);setReview(false);}}/></label></div>
   <label>Motivo de la captura<input className="text-input" maxLength={300} value={motivo} onChange={e=>{setMotivo(e.target.value);setReview(false);}} placeholder="Venta de ayer que no se registró"/></label>
   <div className="direct-grid"><label>Agregar del catálogo<select className="text-input" value="" onChange={e=>{const p=getProduct(e.target.value);if(p){if(p.tipo==='snack')add({productId:p.id,qty:1,unitPrice:p.price,originalPrice:p.price,extras:[]});else setCustom(p);}}}><option value="">Elige un producto…</option>{PRODUCTS.filter(p=>p.activo!==false).map(p=><option key={p.id} value={p.id}>{productEmoji(p)} {p.name}</option>)}</select></label><button className="btn-ghost" onClick={()=>add({concepto:'',qty:1,unitPrice:'',extras:[],sinInsumo:true})}>+ Venta fuera del catálogo</button></div>
@@ -56,6 +59,7 @@ export default function VentaDirecta({onBack,addToast}){
   <div className="direct-summary"><span>Total de la venta</span><strong>{money(total)}</strong></div>
   {error&&<p role="alert" className="direct-error">{error}</p>}
   {review?<div className="direct-review"><h3>Confirma esta captura</h3><p>{fecha} · {hora} · {items.reduce((n,x)=>n+Number(x.qty),0)} unidad(es) · {money(total)} · {saleMethod}</p><p>Se registrará como pagada y entregada. Se descontarán las recetas e insumos vinculados.</p><button className="btn-primary" disabled={busy||!valid} onClick={save}>{busy?'Guardando…':'Registrar venta y descontar inventario'}</button><button className="btn-ghost" disabled={busy} onClick={()=>setReview(false)}>Seguir editando</button></div>:<button className="btn-primary" disabled={!valid} onClick={()=>setReview(true)}>Revisar venta</button>}
-  {custom&&<CustomizeSheet allowPriceOverride product={custom} onClose={()=>setCustom(null)} onAdd={add}/>}
+  </fieldset>
+  {custom&&turnoAbierto&&<CustomizeSheet allowPriceOverride product={custom} onClose={()=>setCustom(null)} onAdd={add}/>}
  </div>;
 }

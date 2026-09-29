@@ -47,7 +47,7 @@ const { closingPreview, saveClosing } = require('../src/services/cashClosing');
     assert.equal((await saveClosing(c,{...ctx,id:t.id,body})).folio,saved.folio);
     await assert.rejects(()=>saveClosing(c,{...ctx,id:t.id,body:{...body,solicitudId:randomUUID()}}),e=>e.status===409);
     await assert.rejects(()=>cashExpense(c,{...ctx,body:{...expenseBody,solicitudId:randomUUID()}}),e=>e.status===409);
-    await dbReject(()=>sale(5,'efectivo'),/turno está cerrado/);
+    await dbReject(()=>sale(5,'efectivo'),/Abre un turno/);
     // Una corrección posterior no reescribe el comprobante histórico del corte.
     await q('UPDATE egresos SET anulado=true WHERE id=$1',[n.id]);
     assert.equal((await closingPreview(q,s,t.id)).resumen.salidas,100);

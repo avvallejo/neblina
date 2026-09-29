@@ -6,6 +6,7 @@ const { validateDate } = require('./dailySales');
 const {cashPart}=require('./cashDrawer');
 const {resolverCortesia,respuestaCortesia}=require('./courtesies');
 const {exigirMesAbierto}=require('./accounting');
+const {requireOpenShift}=require('./openShift');
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function texto(v, nombre) {
   if(typeof v!=='string'||v.trim().length<3||v.trim().length>300) throw new ApiError(400,`${nombre}: escribe entre 3 y 300 caracteres.`);
@@ -26,6 +27,7 @@ async function registrarVenta(client, body, auth, sucursalId) {
     if(prev.rows[0].captura_hash!==hash) throw new ApiError(409,`La captura ya fue guardada con el folio ${prev.rows[0].folio}. Revísala en Ventas antes de iniciar otra.`);
     return {pedido:prev.rows[0],repetido:true};
   }
+  await requireOpenShift(client,sucursalId);
   const fecha=validateDate(body.fecha);
   if(!fecha||!/^([01]\d|2[0-3]):[0-5]\d$/.test(body.hora||'')) throw new ApiError(400,'Indica fecha y hora de la venta.');
   const {rows:[tiempo]}=await client.query("SELECT $1::timestamp AT TIME ZONE 'America/Mexico_City' AS venta, ($1::timestamp AT TIME ZONE 'America/Mexico_City') > now()+interval '1 minute' AS futuro",[`${fecha} ${body.hora}`]);

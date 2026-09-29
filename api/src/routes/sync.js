@@ -4,6 +4,7 @@ const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, resolveSucursal } = require('../middleware/auth');
 const { prepareOrderLines } = require('../services/orderValidation');
 const { entregarItemsDeCaja } = require('../services/stations');
+const { requireOpenShift } = require('../services/openShift');
 
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // cada lote se procesa en la sede del dispositivo
@@ -87,6 +88,7 @@ async function procesarCrearPedido(op, auth, idMap, sucursalId) {
   return withTransaction(async client => {
     const existente = await client.query('SELECT id FROM pedidos WHERE client_uuid = $1 FOR UPDATE', [op.clientUuid]);
     if (existente.rows.length > 0) return { id: existente.rows[0].id, yaExistia: true };
+    await requireOpenShift(client, sucursalId);
 
     const esStaff = auth.tipo === 'staff';
     const origen = esStaff ? 'mostrador' : 'app';

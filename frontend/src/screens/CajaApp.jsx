@@ -196,6 +196,12 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
   const [chargingOrder, setChargingOrder] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [addingToOrder, setAddingToOrder] = useState(null);
+  const pedirTurno = () => {
+    if (turnoAbierto) return true;
+    setDrawerOpen(true);
+    addToast('Abre un turno y registra el fondo inicial antes de vender o cobrar.', 'warn');
+    return false;
+  };
 
   // ---- Protección contra cobros duplicados ----
   // Una clave por intento de cobro: se conserva mientras el carrito no cambie,
@@ -243,6 +249,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
   };
 
   const quickAdd = product => {
+    if (!pedirTurno()) return;
     if (enviando) return;
     setCart(c => [...c, { uid: `${product.id}-${Date.now()}`, productId: product.id, qty: 1, unitPrice: product.price, extras: [] }]);
     if (product.agotado) addToast(`${product.name}: sin existencias registradas. Se agrega de todos modos; registra la compra en Inventario.`, 'warn');
@@ -256,6 +263,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
 
   const [cortesiaAviso, setCortesiaAviso] = useState(null);
   const handleConfirmPay = async payInfo => {
+    if (!pedirTurno()) throw new Error('Abre un turno antes de cobrar.');
     if (chargingOrder) {
       // totalEsperado es el total que la Caja vio al abrir el cobro (antes de
       // marcar cortesías): así el servidor detecta si el ticket cambió.
@@ -298,6 +306,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     await onOrderChanged();
   };
   const [enviando, enviarComanda] = useAccionUnica(async () => {
+    if (!pedirTurno()) return;
     try {
       if (addingToOrder) {
         await api.agregarItemsPedido(addingToOrder.id, cart);
@@ -314,6 +323,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     } catch (e) { if (e.duplicadoDescartado) descartarDuplicado(e); else addToast(e.message, 'warn'); }
   });
   const agregarAlTicket = data => {
+    if (!pedirTurno()) return;
     if (cart.length) { addToast('Primero envía o vacía el carrito actual para agregar productos a otro ticket.', 'warn'); return; }
     setAddingToOrder(data); setEditingOrder(null); setDiscount(null); setScreen('menu');
   };
@@ -324,6 +334,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
 
   const [entregando, entregar] = useAccionUnica(confirmarEntrega);
   const handleCobrarClick = async previous => {
+    if (!pedirTurno()) return;
     if (addingToOrder?.id === previous.id && cart.length) {
       addToast('Primero envía los productos pendientes al ticket o cancela esa selección.', 'warn'); return;
     }
@@ -421,7 +432,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
       </div>}
       {screen!=='corte'&&<CajaDinero onMovementsChanged={onCashChanged} onCorte={()=>{setDrawerOpen(false);setScreen('corte');}} open={drawerOpen} onOpen={()=>setDrawerOpen(true)} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>}
       {screen==='corte'&&<CorteCaja addToast={addToast} currentUser={currentUser} onChanged={onCashChanged}/>}
-      {screen === 'menu' && (
+      {screen === 'menu' && turnoAbierto && (
         <div className="pos-layout">
           <div>
             <button className="btn-ghost" style={{marginBottom:16}} onClick={()=>setScreen('directa')}>Registrar venta atrasada / precio especial / venta libre</button>
@@ -433,9 +444,9 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         </div>
       )}
       {screen === 'comandas' && <CajaComandas />}
-      {screen === 'directa' && <VentaDirecta onBack={()=>setScreen('menu')} addToast={addToast}/>}
-      {screen === 'cart' && <div style={{ maxWidth: 640 }}>{cartPanel}</div>}
-      {screen === 'checkout' && <CheckoutView amounts={amounts} items={chargingOrder && !chargingOrder.registroManual && !chargingOrder.esRecompensaPura ? chargingOrder.items : null} onBack={backFromCheckout} onConfirm={handleConfirmPay} allowCortesia destinoTexto={destinoTexto} />}
+      {screen === 'directa' && <VentaDirecta turnoAbierto={turnoAbierto} onBack={()=>setScreen('menu')} addToast={addToast}/>}
+      {screen === 'cart' && turnoAbierto && <div style={{ maxWidth: 640 }}>{cartPanel}</div>}
+      {screen === 'checkout' && turnoAbierto && <CheckoutView amounts={amounts} items={chargingOrder && !chargingOrder.registroManual && !chargingOrder.esRecompensaPura ? chargingOrder.items : null} onBack={backFromCheckout} onConfirm={handleConfirmPay} allowCortesia destinoTexto={destinoTexto} />}
       {cortesiaAviso && (
         <Sheet title="Cortesía fuera del plan" onClose={() => setCortesiaAviso(null)}>
           <CortesiaAviso cortesia={cortesiaAviso} />
@@ -453,12 +464,12 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         />
       )}
 
-      {editingOrder && <OpenTicketSheet order={editingOrder} onClose={() => setEditingOrder(null)} onAdd={agregarAlTicket} onChanged={pedidoActualizado} />}
-      {customizing && (
+      {editingOrder && turnoAbierto && <OpenTicketSheet order={editingOrder} onClose={() => setEditingOrder(null)} onAdd={agregarAlTicket} onChanged={pedidoActualizado} />}
+      {customizing && turnoAbierto && (
         <CustomizeSheet
           product={customizing}
           onClose={() => setCustomizing(null)}
-          onAdd={item => { if (enviando) return; setCart(c => [...c, item]); addToast(`Agregado: ${getProduct(item.productId).name}`, 'success'); }}
+          onAdd={item => { if (enviando || !pedirTurno()) return; setCart(c => [...c, item]); addToast(`Agregado: ${getProduct(item.productId).name}`, 'success'); }}
         />
       )}
 

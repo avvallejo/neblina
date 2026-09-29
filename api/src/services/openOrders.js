@@ -3,6 +3,7 @@ const { prepareOrderLines } = require('./orderValidation');
 const { correctCashItem } = require('./cashItemReturns');
 const { entregarItemsDeCaja } = require('./stations');
 const { recalcularImportes } = require('./orderAmounts');
+const { requireOpenShift } = require('./openShift');
 
 async function lockOpenOrder(client, id, sucursalId) {
   const { rows: [order] } = await client.query('SELECT * FROM pedidos WHERE id=$1 AND sucursal_id=$2 FOR UPDATE', [id, sucursalId]);
@@ -24,6 +25,7 @@ async function audit(client, auth, order, action, before, after) {
 
 async function addOrderItems(client, { id, sucursalId, auth, items }) {
   const order = await lockOpenOrder(client, id, sucursalId);
+  await requireOpenShift(client, sucursalId);
   if (Array.isArray(items) && items.some(i => i.esRegalo === true)) throw new ApiError(400, 'Las recompensas se registran en un pedido separado.');
   // Las líneas agregadas pueden venir marcadas como cortesía (solo caja/admin
   // llegan aquí); el cupo se resuelve al cobrar el ticket.
@@ -54,6 +56,7 @@ async function changeOrderItem(client, { id, itemId, sucursalId, auth, cantidad,
   if (!esCaja && item.estado !== 'pendiente') throw new ApiError(409,'Este producto ya comenzó a prepararse, fue entregado o retirado. Actualiza el ticket.');
   if (cantidadEsperada !== Number(item.cantidad)) throw new ApiError(409,'La cantidad cambió desde que abriste el ticket. Revisa el detalle actualizado.');
   if (cantidad === Number(item.cantidad)) return order;
+  if (cantidad > Number(item.cantidad)) await requireOpenShift(client, sucursalId);
   if (esCaja) {
     await correctCashItem(client,{item,cantidad,auth,motivo,devuelto});
     const updated = await recalculate(client,id);

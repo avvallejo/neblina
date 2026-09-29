@@ -324,6 +324,22 @@ Requiere **`db/41_cortes_y_folios.sql`** antes de publicar la API y el frontend.
 En desarrollo, `npm run test:corte:live` en `api/` prueba los movimientos dentro
 de una transacción que se revierte al terminar.
 
+Antes de vender se debe **abrir turno y registrar el fondo inicial** (0 si no
+hay dinero para cambio). Sin turno abierto en esa sucursal se bloquean los
+tickets nuevos, los productos adicionales y los cobros, incluidas las ventas
+directas y la sincronización. El historial y los cortes siguen disponibles.
+El servidor mantiene el turno bloqueado durante la operación para que un
+cierre simultáneo no deje un cobro fuera del arqueo. Los cobros de tickets
+pendientes se asignan al turno abierto en el momento de cobrar.
+
+Una venta atrasada requiere además un turno registrado para su fecha y hora,
+sin corte guardado; así no queda sin turno ni altera un corte finalizado.
+Este control requiere **`db/42_turno_obligatorio_ventas.sql`**. La prueba
+`npm run test:turno:live` en `api/` necesita una base de desarrollo desechable,
+con el esquema migrado y `PGDATABASE=codex_turno_guard_<sufijo>`; crea datos de
+prueba y verifica también el cierre concurrente. No se ejecuta sobre la base
+de uso habitual.
+
 ## Contabilidad y mayordomía (diezmo y ofrenda)
 
 **Admin → Contabilidad** convierte las ventas y el inventario en una

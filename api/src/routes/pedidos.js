@@ -13,6 +13,7 @@ const { resolverDestino, entregarItemsDeCaja } = require('../services/stations')
 const { solicitarCancelacion } = require('../services/cancellations');
 
 const {cashPart}=require('../services/cashDrawer');
+const { requireOpenShift } = require('../services/openShift');
 const { preparationTrackingSql, deliveryHistorySql, deliverItem } = require('../services/preparationTracking');
 const { addOrderItems, changeOrderItem } = require('../services/openOrders');
 const { validarClientUuid, pedidoPorClientUuid, buscarPosibleDuplicado, errorPosibleDuplicado } = require('../services/orderIdempotency');
@@ -73,6 +74,7 @@ router.post('/', asyncHandler(async (req, res) => {
     // Reintento del mismo cobro (se perdió la respuesta): el mismo pedido, no otro.
     const previo = await pedidoPorClientUuid(client, clientUuid, req.sucursalId);
     if (previo) return { ...previo, yaExistia: true };
+    await requireOpenShift(client, req.sucursalId);
     let clienteId = req.auth.tipo === 'cliente' ? req.auth.id : null;
     if (esStaff && clienteTelefono) {
       const c = await client.query('SELECT id FROM clientes WHERE telefono = $1 AND sucursal_id = $2', [String(clienteTelefono).replace(/\D/g, ''), req.sucursalId]);
@@ -252,6 +254,7 @@ router.patch('/:id/cobrar', requireRole('cajero', 'admin'), asyncHandler(async (
     const actual = await client.query('SELECT total, cobrado, es_regalo_fidelidad, cancelado, no_show, cancelacion_estado, cortesia_unidades, registro_manual FROM pedidos WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [req.params.id, req.sucursalId]);
     if (actual.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
     if (actual.rows[0].cobrado) throw new ApiError(409, 'Este pedido ya estaba cobrado.');
+    await requireOpenShift(client, req.sucursalId);
     if (actual.rows[0].cancelado || actual.rows[0].no_show || actual.rows[0].cancelacion_estado === 'pendiente') throw new ApiError(409, 'El ticket está cancelado, no recogido o pendiente de cancelación.');
     if (totalEsperado !== undefined && (!Number.isFinite(Number(totalEsperado)) || Number(totalEsperado) !== Number(actual.rows[0].total))) {
       throw new ApiError(409, 'El total cambió. Regresa al ticket y revisa el importe antes de cobrar.');

@@ -1,5 +1,6 @@
 import CajaComandas from './CajaComandas.jsx';
 import ProductImage from '../components/ProductImage.jsx';
+import SalesDateFilter from '../components/SalesDateFilter.jsx';
 // PANEL ADMINISTRATIVO. Barra lateral con secciones; el ADMIN GENERAL además
 // tiene el switcher de sucursal, la administración de sucursales y el
 // comparativo entre sedes.
@@ -1208,11 +1209,7 @@ export default function AdminApp(props) {
               <span>Estado del turno{sedeNombre ? ` — ${sedeNombre}` : ''}</span>
               <span className={turnoAbierto ? 'status-open-text' : 'status-closed-text'}>{turnoAbierto ? 'Abierto' : 'Cerrado'}</span>
             </div>
-            <label>Fecha de ventas (hora de Ciudad de México)
-              <input type="date" value={fechaVentas} onChange={e => setFechaVentas(e.target.value)} />
-            </label>
-            <button className="link-toggle" onClick={() => setFechaVentas('')}>Hoy</button>
-            <p>Pedidos registrados el {kpis?.fecha || fechaVentas || 'día de hoy'}. Solo las ventas cobradas se suman; no hace falta cerrar turno.</p>
+            <SalesDateFilter value={fechaVentas} reportDate={kpis?.fecha} onChange={setFechaVentas}/>
             {ventasError && <p role="alert">{ventasError}</p>}
             {!kpis && !ventasError && <p role="status">Cargando ventas…</p>}
             <div className="kpi-grid">

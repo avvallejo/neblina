@@ -316,6 +316,11 @@ por sí solo que dos papeles sin número son la misma nota.
 notas revisadas, con el usuario y la hora. Los nombres de entrega y recepción
 son declaraciones de quien registra, no firmas autenticadas. El historial
 permite consultar cortes guardados y completar turnos antiguos pendientes.
+Las diferencias y notas pendientes se señalan antes de confirmar. Si falta
+una explicación, el aviso aparece junto al botón y enfoca Observaciones.
+Al guardar se muestra el folio y **Turno cerrado**, y desaparece el formulario.
+Si se pierde la respuesta, se consulta el comprobante; un reintento conserva
+el mismo identificador y no crea otro corte.
 Cambios contables posteriores no reescriben un corte guardado. Las compras
 pendientes de pago no disminuyen el efectivo; los pagos mixtos antiguos se
 muestran por separado cuando no distinguen tarjeta y transferencia.

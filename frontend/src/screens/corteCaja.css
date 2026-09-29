@@ -29,6 +29,16 @@
 .corte-diferencia small { display:block; margin-top:6px; }
 .corte-guardado { display:flex; gap:12px; padding:20px; border-radius:12px; background:var(--ok-soft); }
 .corte-guardado p { margin:6px 0; }
+.corte-guardado h3 { margin:0 0 8px; }
+.corte-guardado strong { font-size:24px; }
+.corte-guardado:focus { outline:2px solid var(--ok); outline-offset:4px; }
+.corte-feedback { padding:16px; margin:16px 0; border-radius:12px; background:var(--warn-soft); border:1px solid var(--line); }
+.corte-feedback.error { border-color:var(--danger); background:var(--danger-soft); }
+.corte-feedback p { margin:6px 0; }
+.corte-feedback:focus { outline:2px solid var(--accent); outline-offset:3px; }
+.corte-panel [aria-invalid=true] { border-color:var(--danger); }
+.corte-acciones { display:flex; flex-wrap:wrap; gap:12px; }
+.corte-captura { border:0; padding:0; margin:0; min-width:0; }
 .corte-importes { display:grid; grid-template-columns:1fr auto; gap:14px; }
 .corte-importes dd { margin:0; font-weight:700; text-align:right; }
 .nota-folio { padding:20px; margin:16px 0; border:1px solid var(--accent); background:var(--accent-soft); border-radius:12px; }

@@ -222,6 +222,10 @@ export async function getOpciones() {
 export function getTurnoEstado() { return request(pub('/turnos/estado')); } // { abierto, turno }
 export function abrirTurno(fondoInicial) { return request('/turnos/abrir', { method: 'POST',body:{fondoInicial} }); }
 export function getCajaTurno(){return request('/turnos/actual/caja');}
+export function getCortes(fecha=''){return request(`/turnos/cortes${fecha?`?fecha=${encodeURIComponent(fecha)}`:''}`);}
+export function getCorte(id){return request(`/turnos/${id}/corte`);}
+export function guardarCorte(id,body){return request(`/turnos/${id}/corte`,{method:'POST',body});}
+export function buscarNotas(q){return request(`/turnos/notas?q=${encodeURIComponent(q)}`);}
 export function registrarFondoTurno(id,fondoInicial){return request(`/turnos/${id}/fondo`,{method:'PATCH',body:{fondoInicial}});}
 export function cerrarTurno() { return request('/turnos/cerrar', { method: 'POST' }); }
 export function getKpisTurno() { return request('/turnos/actual/kpis'); }

@@ -557,7 +557,7 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
         {egresos === null ? <EmptyState icon={Receipt} title="Cargando…" /> : lista.length === 0 ? <EmptyState icon={Receipt} title="Sin egresos con este filtro" subtitle="Registra gastos con “Nuevo egreso”; las compras de insumos llegan solas desde Inventario." /> : lista.map(e => (
           <div key={e.id} className={`egreso-row ${e.pagado ? '' : 'por-pagar'}`}>
             <div className="egreso-main">
-              <div className="list-row-title">{e.concepto}</div>
+              <div className="list-row-title">{e.folio} · {e.concepto}</div>
               <div className="list-row-sub">
                 {fmtFecha(e.fecha)} · <span className={`egreso-tag ${e.afecta_utilidad ? 'gasto' : 'otro'}`}>{e.cuenta_nombre}</span>
                 {e.proveedor_nombre ? ` · ${e.proveedor_nombre}` : ''}{e.turno_id ? ' · salida de caja' : ''}{e.lote_id ? ' · compra' : ''}{e.periodo && e.grupo === 'diezmo_ofrenda' ? ` · aplica a ${nombreMes(e.periodo)}` : ''}
@@ -617,7 +617,7 @@ function EgresosTab({ periodo, version, cuentas, dinero, proveedores, addToast, 
         <div className="section-title"><AlertTriangle size={15} /> Por pagar</div>
         {porPagar.length === 0 ? <div className="field-hint">Nada pendiente de pago.</div> : porPagar.map(e => (
           <div key={e.id} className="egreso-row por-pagar">
-            <div className="egreso-main"><div className="list-row-title">{e.concepto}</div><div className="list-row-sub">{fmtFecha(e.fecha)} · {e.cuenta_nombre}{e.proveedor_nombre ? ` · ${e.proveedor_nombre}` : ''}</div></div>
+            <div className="egreso-main"><div className="list-row-title">{e.folio} · {e.concepto}</div><div className="list-row-sub">{fmtFecha(e.fecha)} · {e.cuenta_nombre}{e.proveedor_nombre ? ` · ${e.proveedor_nombre}` : ''}</div></div>
             <strong className="egreso-monto">{money(e.monto)}</strong>
             <button className="btn-secondary" onClick={() => setSheet({ tipo: 'pagar', item: e })}>Pagar</button>
           </div>

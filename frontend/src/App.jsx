@@ -506,6 +506,7 @@ export default function App() {
           brand={brand}
           sedeNombre={sede ? sede.nombre : ''}
           onOrderChanged={async () => { await refrescarPedidos(); await refrescarCola(); }}
+          onCashChanged={async () => { await refrescarTurno(); await cargarCatalogo(); }}
           orders={pedidos} createOrder={crearPedidoCaja} cancelOrderFn={cancelarPedidoApi}
           confirmarEntrega={cobrarPedidoApi} marcarNoShow={noShowPedidoApi} addToast={addToast}
           onLogout={logout} turnoAbierto={turnoAbierto} onToggleTurno={toggleTurno} currentUser={currentUser} now={now}

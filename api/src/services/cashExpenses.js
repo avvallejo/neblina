@@ -8,8 +8,10 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function proof(body){
  const referencia=cleanText(body.referencia,{field:'folio de comprobante',max:80})||null;
  const nota=cleanText(body.nota,{field:'nota o motivo sin comprobante',max:300})||null;
- if(!referencia&&!nota)throw new ApiError(400,'Indica el folio del comprobante o explica por qué no se tiene.');
- return {referencia,nota};
+ if(body.tieneComprobante!==undefined&&typeof body.tieneComprobante!=='boolean')throw new ApiError(400,'Indica si tienes comprobante.');
+ const tieneComprobante=body.tieneComprobante??Boolean(referencia);
+ if(!tieneComprobante&&!nota)throw new ApiError(400,'Explica por qué no se tiene comprobante.');
+ return {referencia,nota,tieneComprobante};
 }
 async function cashExpense(c,{sucursalId,usuarioId,body,purchaseId=null,materiaId=null}){
  if(!UUID.test(body.solicitudId||''))throw new ApiError(400,'Falta el identificador del registro. Actualiza Caja.');
@@ -59,6 +61,7 @@ async function cashExpense(c,{sucursalId,usuarioId,body,purchaseId=null,materiaI
   egreso=await A.crearEgreso(c,{sucursalId,usuarioId,fecha:hoy,cuentaContable:cuenta,concepto:body.concepto,monto:body.monto,cuentaDineroId:caja.id,pagado:true,proveedorId:body.proveedorId||null,turnoId:turno.id,...comprobante});
  }
  await q(`INSERT INTO auditoria(entidad,entidad_id,accion,valor_anterior,valor_nuevo,motivo,usuario_id,sucursal_id) VALUES('egresos',$1,$2,$3::jsonb,$4::jsonb,$5,$6,$7)`,[egreso.id,materiaId?(egreso.pagado?'pago_caja':'compra_caja'):purchaseId?'pago_caja':'gasto_caja',anterior?JSON.stringify(anterior):null,JSON.stringify({...egreso,comprobantePago:comprobante}),materiaId?'Compra de Inventario registrada por Caja':'Salida de efectivo registrada por Caja',usuarioId,sucursalId]);
+ await q('UPDATE egresos SET tiene_comprobante=$3,referencia=COALESCE($4,referencia),nota=COALESCE($5,nota) WHERE id=$1 AND sucursal_id=$2',[egreso.id,sucursalId,comprobante.tieneComprobante,comprobante.referencia,comprobante.nota]);
  await q(`INSERT INTO auditoria(entidad,entidad_id,accion,valor_nuevo,usuario_id,sucursal_id) VALUES('salidas_caja',$1,'registrar',$2::jsonb,$3,$4)`,[body.solicitudId,JSON.stringify({egresoId:egreso.id,signature}),usuarioId,sucursalId]);
  return A.obtenerEgreso(q,sucursalId,egreso.id);
 }

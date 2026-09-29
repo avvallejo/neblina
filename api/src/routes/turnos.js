@@ -6,6 +6,7 @@ const { requireAuth, requireRole, resolveSucursal, resolveSucursalPublico } = re
 const {moneyAmount,setOpeningFund,drawerSql}=require('../services/cashDrawer');
 const A = require('../services/accounting');
 const {cashExpense}=require('../services/cashExpenses');
+const {closingPreview,saveClosing}=require('../services/cashClosing');
 
 const router = express.Router();
 
@@ -20,6 +21,30 @@ router.get('/estado', resolveSucursalPublico, asyncHandler(async (req, res) => {
 }));
 
 router.use(requireAuth, requireRole('cajero', 'admin'), resolveSucursal);
+
+router.get('/cortes', asyncHandler(async(req,res)=>{
+  const fecha=req.query.fecha?A.validarFecha(req.query.fecha):null;
+  const {rows}=await query(`SELECT t.id,t.abierto_en,t.cerrado_en,t.corte->>'folio' AS folio,
+    t.corte->>'registradoEn' AS corte_en,u.nombre AS abierto_por_nombre
+    FROM turnos t LEFT JOIN usuarios u ON u.id=t.abierto_por WHERE t.sucursal_id=$1
+      AND ($2::date IS NULL OR (t.abierto_en AT TIME ZONE 'America/Mexico_City')::date=$2)
+    ORDER BY t.abierto_en DESC LIMIT 100`,[req.sucursalId,fecha]);
+  res.json(rows);
+}));
+router.get('/notas', asyncHandler(async(req,res)=>{
+  const busqueda=String(req.query.q||'').trim().slice(0,100);
+  if(!busqueda)return res.json([]);
+  const {rows}=await query(`SELECT e.id,e.folio,e.fecha,e.concepto,e.monto,e.referencia,e.pagado,e.anulado,
+    e.turno_id,u.nombre AS usuario_nombre,p.nombre AS proveedor_nombre
+    FROM egresos e LEFT JOIN usuarios u ON u.id=e.usuario_id LEFT JOIN proveedores p ON p.id=e.proveedor_id
+    WHERE e.sucursal_id=$1 AND (e.folio ILIKE $2 OR e.referencia ILIKE $2 OR e.concepto ILIKE $2)
+    ORDER BY e.creado_en DESC LIMIT 50`,[req.sucursalId,`%${busqueda}%`]);
+  res.json(rows.map(r=>A.normalizarFechas(r)));
+}));
+router.get('/:id/corte',asyncHandler(async(req,res)=>res.json(await closingPreview(query,req.sucursalId,req.params.id))));
+router.post('/:id/corte',asyncHandler(async(req,res)=>res.json(await withTransaction(c=>saveClosing(c,{
+  sucursalId:req.sucursalId,usuarioId:req.auth.id,nombreUsuario:req.auth.nombre,id:req.params.id,body:req.body,
+})))));
 
 router.post('/abrir', asyncHandler(async (req, res) => {
   const fondo=moneyAmount(req.body.fondoInicial,'Fondo inicial');
@@ -80,7 +105,7 @@ router.get('/actual/salidas', asyncHandler(async (req, res) => {
   const { rows: [t] } = await query('SELECT id FROM turnos WHERE sucursal_id = $1 AND cerrado_en IS NULL', [req.sucursalId]);
   if (!t) return res.json([]);
   const { rows } = await query(
-    `SELECT e.id,e.fecha,e.concepto,e.monto,e.creado_en,e.lote_id,c.nombre AS cuenta_nombre,
+    `SELECT e.id,e.folio,e.tiene_comprobante,e.fecha,e.concepto,e.monto,e.creado_en,e.lote_id,c.nombre AS cuenta_nombre,
       COALESCE(pagador.nombre,u.nombre) AS usuario_nombre,p.nombre AS proveedor_nombre,
       COALESCE(a.valor_nuevo->'comprobantePago'->>'referencia',e.referencia) AS referencia,
       COALESCE(a.valor_nuevo->'comprobantePago'->>'nota',e.nota) AS nota

@@ -2,27 +2,29 @@ import React,{useEffect,useRef,useState} from 'react';
 import * as api from '../api/client';
 import {money} from '../lib/helpers';
 import './cajaGastos.css';
+import './corteCaja.css';
 export default function CajaGastos({turnoId,onChanged,addToast}){
  const [rows,setRows]=useState([]),[accounts,setAccounts]=useState([]),[suppliers,setSuppliers]=useState([]),[pending,setPending]=useState([]),[materials,setMaterials]=useState([]);
  const [mode,setMode]=useState(''),[form,setForm]=useState({}),[error,setError]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
+ const [saved,setSaved]=useState(null);
  const request=useRef(null),locked=useRef(false);
  async function load(){
   const [a,b,c,d,f]=await Promise.all([api.getSalidasTurno(),api.getCuentasSalidaTurno(),api.getProveedoresSalidaTurno(),api.getComprasPendientesCaja(),api.getInsumosCompraCaja()]);
   setRows(a);setAccounts(b);setSuppliers(c);setPending(d);setMaterials(f);setLoading(false);
  }
  useEffect(()=>{let alive=true;setLoading(true);setError('');Promise.all([api.getSalidasTurno(),api.getCuentasSalidaTurno(),api.getProveedoresSalidaTurno(),api.getComprasPendientesCaja(),api.getInsumosCompraCaja()]).then(([a,b,c,d,f])=>{if(alive){setRows(a);setAccounts(b);setSuppliers(c);setPending(d);setMaterials(f);setLoading(false);}}).catch(e=>{if(alive){setError(e.message);setLoading(false);}});return()=>{alive=false};},[turnoId]);
- function start(next){setMode(next);setForm({pagado:true});setError('');request.current=null;}
+ function start(next){setMode(next);setForm({pagado:true,tieneComprobante:true});setError('');request.current=null;}
  function change(key,value){setForm(f=>({...f,[key]:value}));}
  const material=materials.find(m=>m.id===form.materiaId);
  const selected=pending.find(p=>p.id===form.purchaseId);
  async function save(e){
   e.preventDefault();if(locked.current)return;
-  if(!form.referencia?.trim()&&!form.nota?.trim()){setError('Escribe el folio o el motivo por el que no tienes comprobante.');return;}
+  if(form.tieneComprobante===false&&!form.nota?.trim()){setError('Explica por qué no tienes comprobante.');return;}
   if(mode==='proveedor'&&!selected){setError('Selecciona una compra pendiente.');return;}
   if(mode==='compra'&&!material){setError('Selecciona qué compraste.');return;}
   locked.current=true;setBusy(true);setError('');
   try{
-   const body={referencia:form.referencia?.trim()||null,nota:form.nota?.trim()||null,monto:mode==='proveedor'?Number(selected.monto):Number(form.monto)};
+   const body={tieneComprobante:form.tieneComprobante!==false,referencia:form.referencia?.trim()||null,nota:form.nota?.trim()||null,monto:mode==='proveedor'?Number(selected.monto):Number(form.monto)};
    if(mode==='gasto')Object.assign(body,{concepto:form.concepto?.trim(),cuentaContableId:form.cuenta?Number(form.cuenta):undefined,proveedorId:form.proveedorId||null});
    if(mode==='compra')Object.assign(body,{materiaId:material.id,costoTotal:Number(form.costoTotal),pagado:form.pagado!==false,proveedorId:form.proveedorId||null,numeroLote:form.numeroLote||null,fechaCaducidad:form.fechaCaducidad||null,...(form.porPaquetes?{paquetes:Number(form.cantidad)}:{cantidadComprada:Number(form.cantidad),unidad:form.unidad||material.unidad})});
    if(mode==='compra')delete body.monto;
@@ -31,13 +33,15 @@ export default function CajaGastos({turnoId,onChanged,addToast}){
    if(request.current&&JSON.stringify(request.current.payload)!==JSON.stringify(payload))throw new Error('Primero reintenta el registro anterior sin cambiar los datos, o actualiza la lista para comprobar si se guardó.');
    if(!request.current)request.current={id:crypto.randomUUID(),payload};
    const send={...body,solicitudId:request.current.id};
-   if(mode==='compra')await api.registrarCompraCaja(send);else if(mode==='proveedor')await api.pagarCompraCaja(selected.id,send);else await api.registrarSalidaTurno(send);
+   const result=mode==='compra'?await api.registrarCompraCaja(send):mode==='proveedor'?await api.pagarCompraCaja(selected.id,send):await api.registrarSalidaTurno(send);
+   setSaved(result);
    setMode('');request.current=null;setForm({});addToast(mode==='compra'?(body.pagado?'Compra agregada al inventario y descontada de caja':'Compra agregada al inventario; queda por pagar'):'Pago registrado y descontado del efectivo de caja','success');
    await Promise.all([load(),onChanged()]);
   }catch(e){if(e.status>=400&&e.status<500)request.current=null;setError(e.message);}finally{locked.current=false;setBusy(false);}
  }
  return <section className="salidas-caja">
-  <div className="section-title">Compras, gastos y pagos</div><p className="field-hint">Las compras aumentan el inventario. Solo lo pagado en efectivo se descuenta de caja.</p>
+  <div className="section-title">Compras, gastos y pagos</div>
+  {saved&&<div className="nota-folio" role="status">Nota registrada. Escribe este folio en el comprobante:<strong>{saved.folio}</strong><span>{saved.concepto} · {money(saved.monto)}</span><p>Si el papel ya tiene un folio N-…, búscalo en Corte de caja antes de volver a registrarlo.</p><button className="btn-ghost" onClick={()=>setSaved(null)}>Entendido</button></div>}<p className="field-hint">Las compras aumentan el inventario. Solo lo pagado en efectivo se descuenta de caja.</p>
   <div className="option-row" style={{margin:'12px 0',flexWrap:'wrap'}}><button className="btn-primary" disabled={busy||loading} onClick={()=>start('compra')}>Registrar compra de Inventario</button><button className="btn-secondary" disabled={busy||loading} onClick={()=>start('gasto')}>Registrar gasto pequeño</button><button className="btn-secondary" disabled={busy||loading} onClick={()=>start('proveedor')}>Pagar proveedor ({pending.length})</button></div>
   {loading&&<p role="status">Cargando movimientos…</p>}
   {mode&&<form className="salida-form" onSubmit={save}>
@@ -69,13 +73,15 @@ export default function CajaGastos({turnoId,onChanged,addToast}){
     {!pending.length&&<p>No hay compras pendientes. Si el proveedor acaba de entregar, usa Registrar compra de Inventario.</p>}
     {selected&&<p><strong>Se descontarán {money(selected.monto)} del efectivo de caja.</strong>{selected.referencia&&<small> · Folio de compra: {selected.referencia}</small>}</p>}
    </>}
-   <label className="option-label">Folio de nota, remisión o comprobante<input className="text-input" maxLength={80} value={form.referencia||''} onChange={e=>change('referencia',e.target.value)} placeholder="Ej. remisión 125"/></label>
+   <p className="field-hint">El sistema asignará un folio único al guardar, aunque la nota no tenga número. Escríbelo en el papel.</p>
+   <label className="option-label"><input type="checkbox" checked={form.tieneComprobante!==false} onChange={e=>change('tieneComprobante',e.target.checked)}/> Tengo nota, remisión o comprobante</label>
+   <label className="option-label">Referencia del proveedor (si la nota ya trae número)<input className="text-input" maxLength={80} value={form.referencia||''} onChange={e=>change('referencia',e.target.value)} placeholder="Ej. remisión 125"/></label>
    <label className="option-label">Notas / motivo si no tienes comprobante<textarea className="text-input" maxLength={300} value={form.nota||''} onChange={e=>change('nota',e.target.value)} placeholder="Qué se compró, dónde y por qué no hay comprobante"/></label>
    <div className="option-row"><button type="submit" className="btn-primary" disabled={busy||loading||(mode==='proveedor'&&!selected)||(mode==='compra'&&!material)}>{busy?'Registrando…':mode==='compra'?'Registrar compra':'Registrar pago en efectivo'}</button><button type="button" className="btn-ghost" disabled={busy} onClick={()=>start('')}>Cancelar</button></div>
   </form>}
   {error&&<p role="alert" className="form-error">{error}</p>}
   <button className="btn-ghost" disabled={busy} onClick={()=>load().then(()=>setError('')).catch(e=>setError(e.message))}>Actualizar movimientos</button>
   {!loading&&!rows.length&&<p className="field-hint">Sin salidas registradas en este turno.</p>}
-  {rows.map(r=><details key={r.id} style={{padding:'12px 0',borderBottom:'1px solid var(--line)'}}><summary>{r.concepto} · <strong>− {money(r.monto)}</strong></summary><p>{r.lote_id?'Pago de Inventario':'Gasto'} · {r.cuenta_nombre}</p><p>Registró el pago: {r.usuario_nombre||'Sin identificar'}</p>{r.proveedor_nombre&&<p>Proveedor: {r.proveedor_nombre}</p>}<p>Folio: {r.referencia||'Sin comprobante'}</p>{r.nota&&<p>{r.nota}</p>}</details>)}
+  {rows.map(r=><details key={r.id} style={{padding:'12px 0',borderBottom:'1px solid var(--line)'}}><summary>{r.folio} · {r.concepto} · <strong>− {money(r.monto)}</strong></summary><p>{r.lote_id?'Pago de Inventario':'Gasto'} · {r.cuenta_nombre}</p><p>Registró el pago: {r.usuario_nombre||'Sin identificar'}</p>{r.proveedor_nombre&&<p>Proveedor: {r.proveedor_nombre}</p>}<p>Folio para escribir en la nota: <strong>{r.folio}</strong></p><p>Referencia del proveedor: {r.referencia||'Sin referencia'}</p>{r.nota&&<p>{r.nota}</p>}</details>)}
  </section>;
 }

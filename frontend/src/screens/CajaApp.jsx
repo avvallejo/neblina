@@ -5,6 +5,7 @@ import CoffeeGuide from '../components/CoffeeGuide.jsx';
 import React, { useState } from 'react';
 import VentaDirecta from './VentaDirecta';
 import CajaDinero from './CajaDinero';
+import CorteCaja from './CorteCaja';
 import CajaComandas from './CajaComandas.jsx';
 import OpenTicketSheet from './OpenTicketSheet.jsx';
 import { adaptPedido } from '../lib/adapters';
@@ -175,7 +176,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
 
 // mostrador: { irA, pendientes } cuando la misma persona también es barista
 // (rol "mostrador"): agrega el acceso "Barra" a la navegación.
-export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrderChanged, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null, mesas = 4 }) {
+export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrderChanged, onCashChanged, cancelOrderFn, confirmarEntrega, marcarNoShow, addToast, onLogout, turnoAbierto, onToggleTurno, currentUser, now, mostrador = null, mesas = 4 }) {
   const [screen, setScreen] = useState('menu');
   React.useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -360,6 +361,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     { id: 'cart', label: 'Carrito', Icon: ShoppingCart, badge: cartCount },
     { id: 'comandas', label: 'Comandas', Icon: Droplets },
     { id: 'turno', label: 'Ventas', Icon: Receipt },
+    { id: 'corte', label: 'Corte de caja', Icon: Receipt },
     ...(mostrador ? [{ id: 'barra', label: 'Barra', Icon: Droplets, badge: mostrador.pendientes }] : []),
   ];
 
@@ -369,6 +371,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     checkout: ['Cobro', chargingOrder ? `Pedido ${chargingOrder.folio}` : 'Venta de mostrador'],
     confirmed: ['Pedido registrado', ''],
     comandas: ['Comandas y entregas', 'Avance por producto e historial de preparación'],
+    corte: ['Corte de caja', 'Entrega de efectivo y revisión de notas'],
     turno: ['Ventas', 'Consulta por fecha y pedidos en curso'],
     directa: ['Venta directa o atrasada', 'Precio real y salida de inventario'],
   };
@@ -416,7 +419,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
         Agregando productos al ticket <strong>{addingToOrder.folio} · {adaptPedido(addingToOrder).nombreTicket || 'Sin nombre'}</strong> · {destinoLabel(adaptPedido(addingToOrder))}.
         <button className="link-toggle" disabled={enviando} onClick={cancelarAgregado}>Cancelar selección</button>
       </div>}
-      <CajaDinero open={drawerOpen} onOpen={()=>setDrawerOpen(true)} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>
+      {screen!=='corte'&&<CajaDinero onMovementsChanged={onCashChanged} onCorte={()=>{setDrawerOpen(false);setScreen('corte');}} open={drawerOpen} onOpen={()=>setDrawerOpen(true)} onClose={()=>setDrawerOpen(false)} turnoAbierto={turnoAbierto} onToggleTurno={onToggleTurno} addToast={addToast}/>}
+      {screen==='corte'&&<CorteCaja addToast={addToast} currentUser={currentUser} onChanged={onCashChanged}/>}
       {screen === 'menu' && (
         <div className="pos-layout">
           <div>

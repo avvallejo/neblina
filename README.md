@@ -292,6 +292,38 @@ se siembra con el que hoy deja su precio de lista y el de cada categoría con la
 mediana de sus productos (el que heredan los productos nuevos). Migración
 `db/34_margen_contribucion.sql`.
 
+## Corte de caja y folios de notas
+
+En **Administración → Corte de caja** (también disponible en **Caja → Corte de
+caja**) se revisa la entrega del turno con la administradora. El resumen separa
+ventas en efectivo, transferencias, tarjeta y notas pagadas con efectivo. Se
+captura efectivo recibido, fondo que queda en caja, transferencias y tarjeta
+verificadas, quién entrega, quién recibe y observaciones. Las notas se marcan
+individualmente como revisadas. Diferencias, importes antiguos sin desglose o
+notas sin revisar requieren una explicación y quedan visibles; no se corrigen
+los importes para forzar que cuadren.
+
+Cada compra o gasto recibe un **folio único `N-…`** para escribirlo en el papel.
+Se muestra al guardar, en los movimientos, en Contabilidad y en el corte.
+**Buscar una nota ya registrada** consulta por folio, referencia o concepto en
+todos los turnos de la sucursal. Una misma referencia del mismo proveedor (o
+sin proveedor) no se registra dos veces; usar como referencia un folio interno
+ya registrado también se rechaza. Si el papel no trae referencia, el control
+consiste en escribir y consultar el folio asignado: el sistema no puede reconocer
+por sí solo que dos papeles sin número son la misma nota.
+
+**Guardar corte y cerrar turno** conserva una fotografía de los importes y
+notas revisadas, con el usuario y la hora. Los nombres de entrega y recepción
+son declaraciones de quien registra, no firmas autenticadas. El historial
+permite consultar cortes guardados y completar turnos antiguos pendientes.
+Cambios contables posteriores no reescriben un corte guardado. Las compras
+pendientes de pago no disminuyen el efectivo; los pagos mixtos antiguos se
+muestran por separado cuando no distinguen tarjeta y transferencia.
+
+Requiere **`db/41_cortes_y_folios.sql`** antes de publicar la API y el frontend.
+En desarrollo, `npm run test:corte:live` en `api/` prueba los movimientos dentro
+de una transacción que se revierte al terminar.
+
 ## Contabilidad y mayordomía (diezmo y ofrenda)
 
 **Admin → Contabilidad** convierte las ventas y el inventario en una

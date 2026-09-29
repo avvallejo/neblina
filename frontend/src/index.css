@@ -376,6 +376,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .caja-ficha .caja-ficha-resta { color: var(--warn); }
 .caja-ficha .field-hint { margin-top: 4px; }
 .caja-ficha-alerta { color: var(--danger); font-weight: 700; }
+.caja-medios { display: grid; gap: 6px; margin: 10px 0 0; font-size: 12px; }
+.caja-medios div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.caja-medios dt { color: var(--ink-soft); }
+.caja-medios dd { margin: 0; font-family: var(--font-mono); white-space: nowrap; }
+.caja-turno-aviso { margin: 0 0 14px; padding: 10px 12px; border-radius: var(--radius); background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.6; }
 
 /* Ventas — barra de fecha: día anterior/siguiente, atajos y calendario. */
 .ventas-fecha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 10px 12px; margin-bottom: 12px; box-shadow: var(--shadow-1); }

@@ -16,6 +16,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
  const unknown=Number(data?.pagos_sin_desglose||0)>0;
  const expected=data&&!missing&&!unknown?Number(data.fondo_inicial)+Number(data.ventas_efectivo)-Number(data.salidas_turno||0):null;
  const abiertoTexto=data&&new Date(data.abierto_en).toLocaleString('es-MX',{timeZone:'America/Mexico_City',weekday:'long',day:'numeric',month:'long',hour:'numeric',minute:'2-digit'});
+ const fechaVentas=data?.fecha_ventas&&new Date(`${data.fecha_ventas}T12:00:00`).toLocaleDateString('es-MX',{day:'numeric',month:'long'});
  const salidas_=Number(data?.salidas_turno||0), cortesias_=Number(data?.cortesias_turno||0);
  // Resumen del turno: primero el dato que el cajero necesita (cuánto efectivo
  // debe haber en el cajón) y con qué cuentas sale; lo demás, en fichas.
@@ -24,6 +25,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
    <span className="caja-estado abierto"><span className="caja-estado-punto"/>Turno abierto</span>
    <span className="field-hint">Desde el {abiertoTexto}</span>
   </header>
+  {data.turno_de_otro_dia&&<p className="caja-turno-aviso">Este turno sigue abierto desde una fecha anterior: su total puede incluir ventas de días anteriores. Para separar cada jornada, guarda el corte al terminar y abre un turno nuevo al comenzar.</p>}
   <div className="caja-hero">
    <span className="caja-hero-icono"><Wallet size={19}/></span>
    <div>
@@ -32,7 +34,7 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
     <span className="caja-hero-cuenta">
      {missing?'Falta registrar el fondo inicial de este turno.'
       :unknown?`${data.pagos_sin_desglose} pago(s) mixto(s) sin desglose: el cálculo queda pendiente.`
-      :`Fondo ${money(data.fondo_inicial)} + efectivo ${money(data.ventas_efectivo)}${salidas_>0?` − salidas ${money(salidas_)}`:''}`}
+      :`Fondo inicial ${money(data.fondo_inicial)} + ventas en efectivo ${money(data.ventas_efectivo)}${salidas_>0?` − salidas de caja ${money(salidas_)}`:''}`}
     </span>
    </div>
   </div>
@@ -41,13 +43,22 @@ export default function CajaDinero({open,onOpen,onClose,turnoAbierto,onToggleTur
     <span className="caja-ficha-icono"><Receipt size={15}/></span>
     <span className="footer-label">Ventas del turno</span>
     <strong>{money(data.ventas_turno)}</strong>
-    <span className="field-hint">Efectivo {money(data.ventas_efectivo)} · otros {money(data.ventas_no_efectivo)}</span>
+    <span className="field-hint">Cobros acumulados desde la apertura</span>
+    <dl className="caja-medios">
+     <div><dt>Efectivo</dt><dd>{money(data.ventas_efectivo)}</dd></div>
+     <div><dt>Tarjeta</dt><dd>{money(data.ventas_tarjeta)}</dd></div>
+     <div><dt>Transferencia</dt><dd>{money(data.ventas_transferencia)}</dd></div>
+     {Number(data.ventas_mixto_no_efectivo)>0&&<div><dt>Mixto · parte no efectiva</dt><dd>{money(data.ventas_mixto_no_efectivo)}</dd></div>}
+     {unknown&&<div><dt>Pagos sin desglose</dt><dd>{money(data.ventas_sin_desglose)}</dd></div>}
+    </dl>
+    {Number(data.ventas_mixto_no_efectivo)>0&&<span className="field-hint">En los pagos mixtos, el efectivo ya está incluido arriba; el resto no distingue tarjeta de transferencia.</span>}
    </div>
    <div className="caja-ficha">
     <span className="caja-ficha-icono"><CalendarDays size={15}/></span>
-    <span className="footer-label">Ventas del día</span>
+    <span className="footer-label">Ventas de hoy</span>
     <strong>{money(data.ventas_dia)}</strong>
-    <span className="field-hint">Todos los medios del día</span>
+    <span className="field-hint">{fechaVentas} · tickets de hoy que ya se cobraron, de todos los turnos y medios de pago.</span>
+    <span className="field-hint">No se suman a las ventas del turno: son otra forma de consultar las ventas.</span>
    </div>
    <div className="caja-ficha">
     <span className="caja-ficha-icono"><ArrowDownLeft size={15}/></span>

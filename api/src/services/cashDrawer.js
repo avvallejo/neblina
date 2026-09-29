@@ -16,12 +16,18 @@ async function setOpeningFund(c,{id,sucursalId,usuarioId,monto}){
  await c.query("INSERT INTO auditoria(entidad,entidad_id,accion,valor_nuevo,usuario_id,sucursal_id) VALUES('turnos',$1,'fondo_inicial',$2,$3,$4)",[id,{fondoInicial:amount},usuarioId,sucursalId]);return turno;
 }
 const drawerSql=`SELECT t.id,t.abierto_en,t.fondo_inicial,
+ ((now() AT TIME ZONE 'America/Mexico_City')::date)::text fecha_ventas,
+ (t.abierto_en AT TIME ZONE 'America/Mexico_City')::date < (now() AT TIME ZONE 'America/Mexico_City')::date turno_de_otro_dia,
  (SELECT COALESCE(sum(d.total),0) FROM pedidos d WHERE d.sucursal_id=t.sucursal_id AND d.cobrado AND NOT d.cancelado AND NOT d.no_show
  AND d.creado_en >= ((now() AT TIME ZONE 'America/Mexico_City')::date)::timestamp AT TIME ZONE 'America/Mexico_City'
  AND d.creado_en < (((now() AT TIME ZONE 'America/Mexico_City')::date)+1)::timestamp AT TIME ZONE 'America/Mexico_City') ventas_dia,
  COALESCE(SUM(p.total),0) ventas_turno,
  COALESCE(SUM(p.importe_efectivo),0) ventas_efectivo,
  COALESCE(SUM(p.total-p.importe_efectivo) FILTER(WHERE p.importe_efectivo IS NOT NULL),0) ventas_no_efectivo,
+ COALESCE(SUM(p.total) FILTER(WHERE p.metodo_pago='tarjeta'),0) ventas_tarjeta,
+ COALESCE(SUM(p.total) FILTER(WHERE p.metodo_pago='transferencia'),0) ventas_transferencia,
+ COALESCE(SUM(p.total-p.importe_efectivo) FILTER(WHERE p.metodo_pago='mixto' AND p.importe_efectivo IS NOT NULL),0) ventas_mixto_no_efectivo,
+ COALESCE(SUM(p.total) FILTER(WHERE p.importe_efectivo IS NULL),0) ventas_sin_desglose,
  COUNT(p.id) FILTER(WHERE p.importe_efectivo IS NULL) pagos_sin_desglose,
  COUNT(p.id) FILTER(WHERE p.cortesia_estado IS NOT NULL) cortesias_turno,
  COALESCE(SUM(p.cortesia_unidades),0)::int cortesias_unidades_turno,

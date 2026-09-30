@@ -451,7 +451,12 @@ export function getTraspasos(periodo) { return request(`/contabilidad/traspasos?
 export function crearTraspaso(body) { return request('/contabilidad/traspasos', { method: 'POST', body }); }
 export function anularTraspaso(id) { return request(`/contabilidad/traspasos/${id}/anular`, { method: 'POST' }); }
 export function getEstadoResultados(periodo) { return request(`/contabilidad/estado-resultados?periodo=${periodo}`); }
-export function getRegularizacionCostos(periodo) { return request(`/contabilidad/regularizacion-costos?periodo=${periodo}`); }
+export async function getRegularizacionCostos(periodo) {
+  const plan = await request(`/contabilidad/regularizacion-costos?periodo=${periodo}&modo=solo_costo`);
+  // Impide usar accidentalmente el modo anterior durante un despliegue parcial.
+  if (plan.modo !== 'solo_costo') throw new Error('La actualización de costos históricos todavía no está disponible. Completa el despliegue antes de continuar.');
+  return plan;
+}
 export function regularizarCostos(body) { return request('/contabilidad/regularizacion-costos', { method: 'POST', body }); }
 export function getEstadoConsolidado(periodo) { return request(`/contabilidad/consolidado/estado-resultados?periodo=${periodo}`); }
 export function getFlujoDinero(periodo) { return request(`/contabilidad/flujo?periodo=${periodo}`); }

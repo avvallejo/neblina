@@ -242,7 +242,7 @@ router.get('/estado-resultados', asyncHandler(async (req, res) => res.json(await
 router.get('/regularizacion-costos', asyncHandler(async (req, res) => {
   res.json(await withTransaction(async c => {
     await c.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
-    return Costos.preview(c, req.sucursalId, req.query.periodo);
+    return Costos.preview(c, req.sucursalId, req.query.periodo, req.query.modo);
   }));
 }));
 router.post('/regularizacion-costos', asyncHandler(async (req, res) => {

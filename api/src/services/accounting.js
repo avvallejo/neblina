@@ -198,7 +198,11 @@ async function obtenerEgreso(queryFn, sucursalId, id) {
 // ---- Estado de resultados ---------------------------------------------------
 // Valor de un movimiento de inventario: el costo congelado al registrarlo
 // (migración 32); si faltara, el del lote o el costo de referencia del insumo.
-const costoMovimientoSql = `(-mi.cantidad) * COALESCE(mi.costo_unitario, l.costo_total / NULLIF(fn_convertir_unidad(l.cantidad_comprada, l.unidad, mp.unidad), 0), mp.costo_unitario, 0)`;
+// Para una partida regularizada sin inventario, el valor está en su registro
+// monetario. Sus consumos y devoluciones físicos permanecen intactos, en cero.
+const costoMovimientoSql = `CASE WHEN (mi.tipo='consumo' OR mi.revierte_movimiento_id IS NOT NULL)
+  AND EXISTS (SELECT 1 FROM regularizacion_costo_items rc WHERE rc.pedido_item_id=mi.pedido_item_id AND rc.modo='solo_costo')
+  THEN 0 ELSE (-mi.cantidad) * COALESCE(mi.costo_unitario, l.costo_total / NULLIF(fn_convertir_unidad(l.cantidad_comprada, l.unidad, mp.unidad), 0), mp.costo_unitario, 0) END`;
 
 async function estadoResultados(queryFn, sucursalId, periodo, cfg, { incluirPrecision = false } = {}) {
   const p = validarPeriodo(periodo);
@@ -245,7 +249,9 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg, { incluirPrec
        WHERE mi.pedido_item_id = pi.id AND mi.tipo = 'consumo') cst ON true
      WHERE p.sucursal_id = $1 AND p.cobrado AND NOT p.cancelado AND NOT p.no_show
        AND (p.creado_en AT TIME ZONE '${TZ}')::date BETWEEN $2 AND $3
-       AND (pi.estado IN ('pendiente','en_preparacion') OR (pi.estado = 'terminado' AND cst.costo <= 0))
+       AND (pi.estado IN ('pendiente','en_preparacion') OR (pi.estado = 'terminado' AND cst.costo <= 0
+         AND NOT EXISTS (SELECT 1 FROM regularizacion_costo_items rc WHERE rc.pedido_item_id=pi.id
+           AND rc.modo='solo_costo' AND rc.revertido_en IS NULL)))
      GROUP BY 1, 2 ORDER BY 1, venta DESC`, [sucursalId, r.desde, r.hasta]);
   const resumenSinCosto = motivo => {
     const filas = sinCosto.filter(x => x.motivo === motivo);
@@ -267,10 +273,18 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg, { incluirPrec
   for (const row of cuentas) porGrupo[row.grupo] += num(row.monto);
 
   const ventas = round2(v.ventas);
-  const costoVentas = round2(num(c.consumo) + num(c.mermas) + num(c.ajustes) + porGrupo.costo_ventas);
-  const { rows: [regularizado] } = await queryFn(`SELECT COUNT(*) AS n, COALESCE(SUM(rc.costo_agregado),0) AS costo
+  const { rows: [regularizado] } = await queryFn(`SELECT
+      COUNT(*) FILTER (WHERE r.periodo=$2) AS n,
+      COALESCE(SUM(rc.costo_agregado) FILTER (WHERE r.periodo=$2),0) AS costo,
+      COALESCE(SUM(rc.costo_agregado) FILTER (WHERE rc.modo='solo_costo' AND r.periodo=$2),0) AS solo_costo,
+      COALESCE(SUM(rc.costo_agregado) FILTER (WHERE rc.modo='solo_costo'
+        AND to_char(rc.revertido_en AT TIME ZONE '${TZ}','YYYY-MM')=$2),0) AS reversion_solo_costo
     FROM regularizacion_costo_items rc JOIN regularizaciones_costo r ON r.id=rc.regularizacion_id
-    WHERE r.sucursal_id=$1 AND r.periodo=$2`, [sucursalId, p]);
+    WHERE r.sucursal_id=$1 AND (r.periodo=$2 OR (rc.modo='solo_costo'
+      AND to_char(rc.revertido_en AT TIME ZONE '${TZ}','YYYY-MM')=$2))`, [sucursalId, p]);
+  const historicoSinInventario = num(regularizado.solo_costo) - num(regularizado.reversion_solo_costo);
+  const costoSinRedondear = num(c.consumo) + num(c.mermas) + num(c.ajustes) + porGrupo.costo_ventas + historicoSinInventario;
+  const costoVentas = round2(costoSinRedondear);
   const utilidadBruta = round2(ventas - costoVentas);
   const utilidadOperacion = round2(utilidadBruta - porGrupo.gasto_operacion);
   const utilidadNeta = round2(utilidadOperacion - porGrupo.gasto_financiero - porGrupo.impuesto);
@@ -295,12 +309,13 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg, { incluirPrec
      FROM materias_primas m WHERE m.sucursal_id = $1`, [sucursalId]);
   return {
     periodo: p, nombre: r.nombre, desde: r.desde, hasta: r.hasta, cerrado,
-    ...(incluirPrecision ? { costoVentasSinRedondear: num(c.consumo) + num(c.mermas) + num(c.ajustes) + porGrupo.costo_ventas } : {}),
+    ...(incluirPrecision ? { costoVentasSinRedondear: costoSinRedondear } : {}),
     ventas: { total: ventas, pedidos: Number(v.pedidos), efectivo: round2(v.ventas_efectivo), banco: round2(ventas - num(v.ventas_efectivo)), pagosSinDesglose: Number(v.pagos_sin_desglose), cortesias: Number(v.cortesias), cortesiasValor: round2(v.cortesias_valor), descuentos: round2(v.descuentos) },
     costoVentas: {
       // Desglose: lo vendido (neto de insumos que regresaron por tickets
       // cancelados o devueltos), lo surtido sin venta (mesas, personal),
       // mermas y ajustes por conteo físico (faltantes/sobrantes).
+      historicoSinInventario: round2(historicoSinInventario),
       total: costoVentas, consumo: round2(c.consumo),
       regularizado: { lineas: Number(regularizado.n), costo: round2(regularizado.costo) },
       consumoVentas: round2(num(c.consumo) - num(c.consumo_interno) + num(c.devoluciones)), consumoInterno: round2(c.consumo_interno),

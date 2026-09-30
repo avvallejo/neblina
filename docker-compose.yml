@@ -71,6 +71,7 @@ services:
       - ./db/43_descuentos_autorizaciones.sql:/docker-entrypoint-initdb.d/43_descuentos_autorizaciones.sql:ro
       - ./db/44_separar_cuentas.sql:/docker-entrypoint-initdb.d/44_separar_cuentas.sql:ro
       - ./db/45_regularizacion_costos.sql:/docker-entrypoint-initdb.d/45_regularizacion_costos.sql:ro
+      - ./db/46_costos_sin_inventario.sql:/docker-entrypoint-initdb.d/46_costos_sin_inventario.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

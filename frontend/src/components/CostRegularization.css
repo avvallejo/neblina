@@ -25,7 +25,9 @@
 .cost-recovery-summary small { font-size: 11px; color: var(--ink-soft); }
 .cost-recovery-summary .cost-recovery-main { background: var(--brand-soft); }
 .cost-recovery-main strong { color: var(--brand-deep); font-size: 28px; }
-.cost-recovery-inventory { padding: 0 2px; background: transparent; }
+.cost-recovery-inventory { padding: 16px; background: var(--brand-soft); border: 1px solid var(--line); }
+.cost-recovery-inventory strong { display: block; margin-bottom: 5px; color: var(--ink); font-size: 13px; }
+.cost-recovery-inventory svg { color: var(--brand); }
 .cost-recovery-products h4 { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin: 5px 0 12px; font-size: 14px; }
 .cost-recovery-products h4 > span { font-weight: 500; font-size: 11px; color: var(--ink-soft); }
 .cost-recovery-product { border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; overflow: hidden; }

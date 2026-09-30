@@ -291,7 +291,7 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
             <strong>¿Dónde quedó lo que compraste?</strong>
             <div className="flujo-grid" style={{ marginTop: 6 }}>
               <span>Compraste de insumos en {er.nombre}</span><span>{money(er.otrasSalidas.inventario)}</span>
-              <span>− Salió del almacén (costo de ventas)</span><span>{money(er.costoVentas.total)}</span>
+              <span>− Costo de ventas registrado</span><span>{money(er.costoVentas.total)}</span>
               <span><strong>{er.otrasSalidas.inventario - er.costoVentas.total >= 0 ? '= Se quedó de más en el almacén' : '= Se usó de lo que ya había'}</strong></span><span><strong>{money(Math.abs(er.otrasSalidas.inventario - er.costoVentas.total))}</strong></span>
             </div>
             <div className="field-hint" style={{ marginTop: 6 }}>
@@ -407,11 +407,13 @@ function DetalleEgresos({ egresos, grupo, total, periodo, titulo, porInsumo = fa
 }
 
 /* ---------- De dónde sale el costo de ventas ----------
-   Todo es inventario que salió del almacén este mes, valuado a lo que costó. */
+   Incluye consumos del mes y costos históricos recuperados sin mover stock. */
 function CostoVentasDetalle({ cv }) {
   const lineas = [
     { label: 'Insumos de lo vendido', value: cv.consumoVentas ?? cv.consumo,
       hint: 'Lo que marcan las recetas de cada producto terminado (menos lo que regresó al almacén por tickets cancelados o devueltos).' },
+    ...(cv.historicoSinInventario ? [{ label: 'Costos históricos sin mover inventario', value: cv.historicoSinInventario,
+      hint: 'Insumos ya consumidos cuyo costo se recuperó con las recetas y costos corregidos. Incluye las reversiones por devolución; no cambia el almacén actual ni Caja o Banco.' }] : []),
     { label: 'Consumibles de mesa y uso interno', value: cv.consumoInterno || 0,
       hint: 'Azúcar, salsas, servilletas… lo que surtes en mesas, más consumo del personal. Se registra en Inventario → “Surtir” cada vez que rellenas.' },
     { label: 'Mermas', value: cv.mermas, hint: 'Desperdicio que sí se anotó: se cayó, se echó a perder, salió mal y se tiró.' },

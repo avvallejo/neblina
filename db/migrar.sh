@@ -80,6 +80,7 @@ ya_tiene() {
     43) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'solicitudes_descuento'" ;;
     44) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'separaciones_cuenta'" ;;
     45) q "SELECT 1 FROM pg_proc WHERE proname = 'fn_insumos_regularizacion'" ;;
+    46) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'regularizacion_costo_items' AND column_name = 'modo'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

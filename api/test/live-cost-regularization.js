@@ -174,5 +174,98 @@ let server;
   } finally { await c.query('ROLLBACK'); c.release(); }
   assert.equal(await stock(scarceMat), 1);
   assert.equal((await one('SELECT id FROM regularizaciones_costo WHERE id=$1', [rollbackId])), undefined);
+  // Consumos históricos: no se exigen existencias de hoy ni se crean movimientos.
+  const emptyMat = await material('Ya agotado', 2.3456789, 'pieza', 0, true), emptyProd = await product('Consumo histórico agotado');
+  const emptyItem = await sale(emptyProd, 2); await recipe(emptyProd, emptyMat);
+  const oldLotMat = await material('Lote antiguo sin valor', 0, 'pieza', 1, true), oldLotProd = await product('Lote histórico vacío');
+  const oldLot = await lot(oldLotMat, 1); await recipe(oldLotProd, oldLotMat);
+  const oldLotItem = await sale(oldLotProd);
+  await query('UPDATE movimientos_inventario SET costo_unitario=NULL WHERE pedido_item_id=$1', [oldLotItem.id]);
+  await query('UPDATE materias_primas SET costo_unitario=3 WHERE id=$1', [oldLotMat.id]);
+  const historicalPath = `${path}&modo=solo_costo`;
+  const loadHistorical = async () => { const r = await req('GET', historicalPath); assert.equal(r.status, 200, JSON.stringify(r.data)); return r.data; };
+  assert.equal((await req('GET', `${path}&modo=desconocido`)).status, 400);
+  assert.equal((await req('GET', historicalPath, undefined, cashier)).status, 403);
+  assert.equal((await req('GET', historicalPath, undefined, foreign)).data.lineas.length, 0);
+  const snapshot = async () => ({
+    materials: (await query('SELECT * FROM materias_primas ORDER BY id')).rows,
+    lots: (await query('SELECT * FROM lotes ORDER BY id')).rows,
+    movements: (await query('SELECT * FROM movimientos_inventario ORDER BY id')).rows,
+    expenses: (await query('SELECT * FROM egresos ORDER BY id')).rows,
+    flow: await A.flujoDinero(query, s.id, period),
+  });
+  let historical = await loadHistorical();
+  assert.equal(historical.modo, 'solo_costo');
+  assert.equal(historical.resumen.lineas, 6);
+  assert.equal(historical.resumen.costoAgregar, 29.69); // 4 + 8 + 5 + 5 + 4.6914 + 3
+  assert.equal(historical.resumen.conDescuentoInventario, 0);
+  for (const readyItem of [shortage, otherMonth, emptyItem, oldLotItem]) assert.equal(historical.lineas.find(l => l.itemId === readyItem.id).listo, true);
+  for (const blocked of [noCost, noRecipe, adjusted, badItem]) assert.equal(historical.lineas.find(l => l.itemId === blocked.id).listo, false);
+  for (const prior of [missing, used, partial, lotsItem, kgItem]) assert.ok(!historical.lineas.find(l => l.itemId === prior.id));
+  // Vender inventario actual no invalida un costo monetario que no lo necesita.
+  await query('UPDATE materias_primas SET stock_actual=0 WHERE id=$1', [scarceMat.id]);
+  assert.equal((await loadHistorical()).huella, historical.huella);
+  const historicalBody = { periodo: period, modo: 'solo_costo', huella: historical.huella, clientUuid: randomUUID(), confirmado: true };
+  assert.equal((await req('POST', '/regularizacion-costos', { ...historicalBody, modo: 'inventario' })).status, 409);
+  assert.equal((await req('POST', '/regularizacion-costos', { ...historicalBody, modo: 'cualquiera' })).status, 400);
+  assert.equal((await req('POST', '/regularizacion-costos', historicalBody, foreign)).status, 409);
+  assert.equal((await req('POST', '/regularizacion-costos', historicalBody, cashier)).status, 403);
+  await req('POST', '/cierres', { periodo: period });
+  assert.equal((await req('POST', '/regularizacion-costos', historicalBody)).status, 409);
+  await req('DELETE', `/cierres/${period}`, { motivo: 'QA costo histórico' });
+  historical = await loadHistorical(); historicalBody.huella = historical.huella;
+  const beforeHistorical = await snapshot();
+  const julyBefore = await A.estadoResultados(query, s.id, '2026-07');
+  // Ni un fallo posterior al guardado deja partidas, importes o auditorías a medias.
+  const transaction = await pool.connect(), abortedId = randomUUID();
+  try {
+    await transaction.query('BEGIN');
+    await require('../src/services/costRegularization').apply(transaction, { sucursalId: s.id, usuarioId: admin.id, body: { ...historicalBody, clientUuid: abortedId } });
+  } finally { await transaction.query('ROLLBACK'); transaction.release(); }
+  assert.deepEqual(await snapshot(), beforeHistorical);
+  assert.equal(await one('SELECT id FROM regularizaciones_costo WHERE id=$1', [abortedId]), undefined);
+  const historicalSaves = await Promise.all([req('POST', '/regularizacion-costos', historicalBody), req('POST', '/regularizacion-costos', historicalBody)]);
+  assert.deepEqual(historicalSaves.map(x => x.status).sort(), [200, 201], JSON.stringify(historicalSaves));
+  assert.equal(historicalSaves[0].data.folio, historicalSaves[1].data.folio);
+  assert.deepEqual(await snapshot(), beforeHistorical, 'Sin cambios físicos, compras, egresos o caja/banco');
+  const historicalState = await A.estadoResultados(query, s.id, period);
+  assert.equal(historicalState.costoVentas.total, historical.resumen.costoDespues);
+  assert.equal(historicalState.utilidadNeta, historical.resumen.utilidadDespues);
+  assert.equal(historicalState.costoVentas.historicoSinInventario, 29.69);
+  assert.equal(historicalState.costoVentas.regularizado.lineas, 11);
+  assert.deepEqual(await A.estadoResultados(query, s.id, '2026-07'), julyBefore, 'No reescribe el consumo cero de otro mes');
+  assert.ok(!historicalState.costoVentas.sinReceta.productos.some(p => p.producto === 'Consumo histórico agotado'));
+  assert.equal(Number((await one('SELECT costo_real AS n FROM vw_costo_real_por_venta WHERE pedido_item_id=$1', [emptyItem.id])).n), 4.6914);
+  assert.equal((await loadHistorical()).resumen.lineas, 0);
+  assert.equal((await req('POST', '/regularizacion-costos', { ...historicalBody, modo: 'inventario' })).status, 409);
+  // Congela el costo aunque cambie un lote cuyo movimiento anterior tenía NULL.
+  await query('UPDATE lotes SET costo_total=31 WHERE id=$1', [oldLot.id]);
+  await query('UPDATE materias_primas SET costo_unitario=88 WHERE id=$1', [emptyMat.id]);
+  assert.equal((await A.estadoResultados(query, s.id, period)).costoVentas.total, historicalState.costoVentas.total);
+  assert.equal(Number((await one('SELECT costo_real AS n FROM vw_costo_real_por_venta WHERE pedido_item_id=$1', [oldLotItem.id])).n), 3);
+  // Devolver una venta sin consumo físico revierte su costo, nunca crea stock.
+  const currentPeriod = A.hoyMx().slice(0, 7);
+  const currentBefore = (await A.estadoResultados(query, s.id, currentPeriod)).costoVentas.total;
+  await query('SELECT fn_revertir_consumo_pedido($1,$2,$3)', [emptyItem.pedidoId, admin.id, 'QA devolución histórica']);
+  const reversal = await one('SELECT revertido_en,revertido_por,motivo_reversion FROM regularizacion_costo_items WHERE pedido_item_id=$1', [emptyItem.id]);
+  assert.equal(reversal.revertido_por, admin.id);
+  assert.equal(reversal.motivo_reversion, 'QA devolución histórica');
+  assert.equal(await stock(emptyMat), 0);
+  await query('SELECT fn_revertir_consumo_pedido($1,$2,$3)', [emptyItem.pedidoId, admin.id, 'QA reintento']);
+  assert.deepEqual(await one('SELECT revertido_en,revertido_por,motivo_reversion FROM regularizacion_costo_items WHERE pedido_item_id=$1', [emptyItem.id]), reversal);
+  assert.equal((await A.estadoResultados(query, s.id, currentPeriod)).costoVentas.total, A.round2(currentBefore - 4.6914));
+  assert.equal((await A.estadoResultados(query, s.id, period)).costoVentas.total, historicalState.costoVentas.total);
+  assert.equal(Number((await one('SELECT costo_real AS n FROM vw_costo_real_por_venta WHERE pedido_item_id=$1', [emptyItem.id])).n), 0);
+  // La devolución por partida también revierte el costo una sola vez.
+  await query('SELECT fn_revertir_consumo_item($1,$2,$3)', [otherMonth.id, admin.id, 'QA devolución por partida']);
+  assert.equal(await stock(otherMonthMat), 100);
+  await query('SELECT fn_revertir_consumo_item($1,$2,$3)', [otherMonth.id, admin.id, 'QA reintento partida']);
+  assert.equal(await stock(otherMonthMat), 100);
+  assert.equal((await A.estadoResultados(query, s.id, currentPeriod)).costoVentas.total, A.round2(currentBefore - 4.6914 - 8));
+  // Cancelar sin devolver mercancía conserva el costo de lo realmente gastado.
+  await query('UPDATE pedidos SET cancelado=true WHERE id=$1', [shortage.pedidoId]);
+  assert.equal((await A.estadoResultados(query, s.id, period)).costoVentas.total, historicalState.costoVentas.total);
+  assert.equal((await one('SELECT revertido_en FROM regularizacion_costo_items WHERE pedido_item_id=$1', [shortage.id])).revertido_en, null);
+  console.log('PASS: costo histórico con stock cero y lotes agotados; sin movimientos de inventario, compras ni caja/banco; utilidad y reportes conciliados; precisión monetaria; sin duplicados; costo congelado; reversas idempotentes en su mes; cancelación sin devolución conserva costo.');
   console.log('PASS: vista previa sin escrituras; costo cero, receta faltante/parcial, lotes y g/kg; histórico positivo intacto; caja/banco iguales; fechas históricas; mes cerrado; permisos; cambios concurrentes; doble envío y devolución sin duplicados.');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(async () => { if (server) await new Promise(r => server.close(r)); await pool.end(); });

@@ -477,11 +477,13 @@ Validación integral nueva: `node api/test/live-discounts-split.js`, exclusivame
 
 ## Recuperar costos de ventas anteriores
 
-En **Admin → Contabilidad → Estado de resultados → Revisar costos**, el administrador puede regularizar las líneas cobradas y terminadas que no tienen costo. La vista previa muestra tickets, recetas, costo a recuperar, existencias que se descontarán y el efecto en la utilidad del mes.
+En **Admin → Contabilidad → Estado de resultados → Revisar costos**, el administrador puede completar el costo de insumos que ya se consumieron en ventas cobradas y terminadas. La vista previa muestra tickets, recetas, costo a recuperar y efecto en la utilidad del mes.
 
-- Usa las recetas y los costos de referencia **actuales**; queda identificado como una estimación, no como el costo histórico de compra. Los costos históricos positivos no se revalorizan.
-- A los consumos ya registrados en cero se les completa el costo sin volver a descontar existencias. Si falta consumo de receta, se registra únicamente la cantidad faltante, con sus lotes y en el mes de la venta.
-- No registra nuevas compras, egresos, cobros ni movimientos de Caja/Banco. Las partidas sin receta/costo, sin existencia suficiente, con ajustes posteriores, devoluciones o consumos en otro mes quedan pendientes para revisión individual.
-- El mes debe estar abierto. La vista previa se valida otra vez al guardar; cambios en recetas, ventas o inventario obligan a actualizarla. El guardado tiene folio, detalle auditable y protección frente a reintentos/doble clic.
-- Migración: `db/45_regularizacion_costos.sql`. Solo instala estructura y funciones: **no regulariza automáticamente** ninguna venta. Una regularización bloquea brevemente las escrituras de las tablas implicadas mientras valida y aplica el conjunto de cambios; espera como máximo cinco segundos por un bloqueo.
-- Prueba integral: `npm --prefix api run test:regularizacion:live`, exclusivamente con `NODE_ENV=development` y `PGDATABASE=codex_costos_*` (base desechable).
+- Usa las recetas y costos de referencia **actuales**; queda identificado como estimación. Los costos históricos positivos y las regularizaciones ya guardadas se conservan.
+- Registra **solo el costo**, en el mes de la venta. No exige existencias actuales ni lotes disponibles: no agrega mercancía ni descuenta nuevamente inventario. Tampoco modifica los movimientos físicos anteriores, incluidos consumos que quedaron en cero.
+- No registra compras, egresos, cobros ni movimientos de Caja/Banco. Las partidas sin receta/costo, con ajustes posteriores que podrían duplicar el costo o consumos devueltos quedan pendientes. No hay que ingresar inventario ficticio para desbloquearlas.
+- El estado de resultados desglosa “Costos históricos sin mover inventario”; el reporte de costo por venta incluye el importe congelado. Una cancelación con devolución revierte ese costo en el mes de la devolución, una sola vez; cancelar sin devolver insumos conserva su costo.
+- El mes debe estar abierto. Al guardar se revalidan recetas, costos y ventas. El registro tiene folio, detalle auditable y protección frente a reintentos/doble clic.
+- Migraciones: `db/45_regularizacion_costos.sql` y `db/46_costos_sin_inventario.sql`. Instalan estructura y funciones: **no regularizan automáticamente** ninguna venta. Aplicar con `bash db/migrar.sh` antes de actualizar API y frontend.
+- La API mantiene el modo `inventario` para clientes anteriores. La pantalla actual exige `modo=solo_costo` y bloquea el guardado si la API todavía no soporta esta actualización. Una regularización bloquea brevemente las escrituras implicadas; espera como máximo cinco segundos por un bloqueo.
+- Prueba integral: `npm --prefix api run test:regularizacion:live`, exclusivamente con `NODE_ENV=development` y `PGDATABASE=codex_costos_*` (base desechable). Cubre ambos modos, stock cero, lotes agotados, importes congelados, permisos, meses cerrados, concurrencia y devoluciones.

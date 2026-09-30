@@ -3,11 +3,17 @@ const { ApiError } = require('../utils/asyncHandler');
 const A = require('./accounting');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const round = (n, digits = 7) => Number(Number(n).toFixed(digits));
+const modeOf = (value = 'inventario') => {
+  if (!['inventario', 'solo_costo'].includes(value)) throw new ApiError(400, 'Modo de regularización inválido.');
+  return value;
+};
 const folio = (id, periodo) => `RC-${periodo.replace('-', '')}-${id.slice(0, 8).toUpperCase()}`;
 
 // Solo líneas cobradas y terminadas cuyo consumo completo sigue sin valor.
 // No reemplaza costos históricos positivos ni vuelve a ejecutar una comanda.
-async function preview(client, sucursalId, value) {
+async function preview(client, sucursalId, value, mode) {
+  const modo = modeOf(mode);
+  const soloCosto = modo === 'solo_costo';
   const periodo = A.validarPeriodo(value);
   if (periodo > A.hoyMx().slice(0, 7)) throw new ApiError(400, 'Elige un mes que ya haya comenzado.');
   const r = A.rangoPeriodo(periodo);
@@ -42,7 +48,7 @@ async function preview(client, sucursalId, value) {
   for (const i of items) {
     const reasons = [];
     if (i.movimientos.some(m => m.revertido)) reasons.push('Tiene consumos devueltos; requiere revisión individual.');
-    if (i.movimientos.some(m => m.periodo !== periodo)) reasons.push('Su consumo está registrado en otro mes; requiere revisión individual.');
+    if (!soloCosto && i.movimientos.some(m => m.periodo !== periodo)) reasons.push('Su consumo está registrado en otro mes; requiere revisión individual.');
     if (i.movimientos.some(m => m.costo !== null && Number(m.costo) !== 0 || Number(m.cantidad) <= 0)) reasons.push('Tiene movimientos atípicos; requiere revisión individual.');
     const requirements = new Map();
     for (const part of i.receta || []) {
@@ -61,10 +67,10 @@ async function preview(client, sucursalId, value) {
       const cost = Number(m.costo_unitario);
       if (!(cost > 0)) reasons.push(`${m.nombre}: todavía no tiene costo.`);
       if (m.ultimo_ajuste && new Date(m.ultimo_ajuste) >= new Date(i.fecha)) reasons.push(`${m.nombre}: tuvo un ajuste de inventario posterior; revisa si el costo ya está incluido.`);
-      if (missing > (available.get(id) || 0) + 0.00001) reasons.push(`${m.nombre}: faltan existencias registradas para descontar ${missing} ${m.unidad}.`);
+      if (!soloCosto && missing > (available.get(id) || 0) + 0.00001) reasons.push(`${m.nombre}: faltan existencias registradas para descontar ${missing} ${m.unidad}.`);
       // El plan guarda lotes y cantidades exactos. No toma de nuevo lo ya consumido.
       const lots = [];
-      if (m.requiere_lote && missing > 0) {
+      if (!soloCosto && m.requiere_lote && missing > 0) {
         const totalLots = round(m.lotes.reduce((sum, l) => sum + Number(l.saldo) / Number(l.factor), 0), 3);
         if (Math.abs(totalLots - Number(m.stock_actual)) > 0.00051) reasons.push(`${m.nombre}: los lotes no coinciden con la existencia.`);
         let remaining = missing;
@@ -82,7 +88,7 @@ async function preview(client, sucursalId, value) {
         }
         if (remaining > 0.00001) reasons.push(`${m.nombre}: sus lotes no alcanzan o necesitan revisar sus unidades.`);
       }
-      ingredients.push({ id, nombre: m.nombre, unidad: m.unidad, costoUnitario: cost, yaConsumido: used, porDescontar: missing,
+      ingredients.push({ id, nombre: m.nombre, unidad: m.unidad, costoUnitario: cost, yaConsumido: used, cantidadCosteada: round(used + missing, 3), porDescontar: soloCosto ? 0 : missing,
         costo: round((used + missing) * cost), movimientos: previous, lotes: lots });
     }
     if (!ingredients.length) reasons.push('Falta vincular una receta o un insumo a este producto.');
@@ -104,19 +110,23 @@ async function preview(client, sucursalId, value) {
   const { rows: history } = await client.query(`SELECT r.id,r.creado_en,r.resumen,u.nombre AS usuario
     FROM regularizaciones_costo r JOIN usuarios u ON u.id=r.usuario_id
     WHERE r.sucursal_id=$1 AND r.periodo=$2 ORDER BY r.creado_en DESC LIMIT 20`, [sucursalId, periodo]);
-  const result = { periodo, nombre: r.nombre, cerrado: !!state.cerrado, lineas: lines,
+  const result = { periodo, modo, nombre: r.nombre, cerrado: !!state.cerrado, lineas: lines,
     resumen: { productos: ready.reduce((sum, l) => sum + l.cantidad, 0), tickets: new Set(ready.map(l => l.pedidoId)).size,
       lineas: ready.length, pendientes: lines.length - ready.length, costoAgregar: total,
       costoAntes: state.costoVentas.total, costoDespues: costAfter,
       utilidadAntes: state.utilidadNeta, utilidadDespues: A.round2(state.utilidadNeta - total),
       conDescuentoInventario: ready.filter(l => l.insumos.some(x => x.porDescontar > 0)).length },
     historial: history.map(h => ({ ...h, folio: folio(h.id, periodo) })) };
-  result.huella = createHash('sha256').update(JSON.stringify({ sucursalId, periodo, cerrado: result.cerrado, lines, materials, resumen: result.resumen })).digest('hex');
+  // El stock de hoy puede cambiar mientras se revisa un costo histórico. Solo
+  // el modo que descuenta inventario depende de existencias y lotes actuales.
+  const relevantMaterials = soloCosto ? materials.map(({ stock_actual, requiere_lote, lotes, ...m }) => m) : materials;
+  result.huella = createHash('sha256').update(JSON.stringify({ sucursalId, periodo, modo, cerrado: result.cerrado, lines, materials: relevantMaterials, resumen: result.resumen })).digest('hex');
   return result;
 }
 
 async function apply(client, { sucursalId, usuarioId, body }) {
   const { clientUuid, huella } = body;
+  const modo = modeOf(body.modo);
   const periodo = A.validarPeriodo(body.periodo);
   if (!UUID.test(clientUuid || '') || !/^[a-f0-9]{64}$/.test(huella || '')) throw new ApiError(400, 'Abre la vista previa antes de regularizar.');
   if (body.confirmado !== true) throw new ApiError(400, 'Confirma que revisaste los costos y que no se registraron antes como ajuste o egreso.');
@@ -124,7 +134,7 @@ async function apply(client, { sucursalId, usuarioId, body }) {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`regularizar:${clientUuid}`]);
   const { rows: [previous] } = await client.query('SELECT * FROM regularizaciones_costo WHERE id=$1', [clientUuid]);
   if (previous) {
-    if (previous.sucursal_id !== sucursalId || previous.usuario_id !== usuarioId || previous.huella !== huella || previous.periodo !== periodo) throw new ApiError(409, 'Ese identificador corresponde a otra regularización.');
+    if (previous.sucursal_id !== sucursalId || previous.usuario_id !== usuarioId || previous.huella !== huella || previous.periodo !== periodo || (previous.resumen.modo || 'inventario') !== modo) throw new ApiError(409, 'Ese identificador corresponde a otra regularización.');
     return { ...previous.resumen, repetido: true };
   }
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`costos-mes:${sucursalId}:${periodo}`]);
@@ -134,15 +144,15 @@ async function apply(client, { sucursalId, usuarioId, body }) {
   await client.query(`LOCK TABLE pedidos,pedido_items,materias_primas,lotes,movimientos_inventario,
     productos,recetas,receta_insumos_fijos,pedido_item_extras,opciones_extra,opciones_cafe,opciones_leche,
     opciones_tamano,tamano_empaque,tamano_leche_cantidad,cierres_mes IN SHARE ROW EXCLUSIVE MODE`);
-  const plan = await preview(client, sucursalId, periodo);
+  const plan = await preview(client, sucursalId, periodo, modo);
   if (plan.cerrado) throw new ApiError(409, 'Ese mes está cerrado. Reábrelo en Contabilidad antes de corregir sus costos.');
   if (plan.huella !== huella) throw new ApiError(409, 'Cambiaron las ventas, recetas o existencias. Actualiza la vista previa y revisa los nuevos importes.');
   if (!plan.resumen.lineas) throw new ApiError(409, 'No hay costos listos para regularizar. Revisa los pendientes.');
-  const result = { id: clientUuid, folio: folio(clientUuid, periodo), periodo, ...plan.resumen };
+  const result = { id: clientUuid, folio: folio(clientUuid, periodo), periodo, modo, ...plan.resumen };
   await client.query('INSERT INTO regularizaciones_costo(id,sucursal_id,usuario_id,periodo,huella,resumen) VALUES($1,$2,$3,$4,$5,$6)',
     [clientUuid, sucursalId, usuarioId, periodo, huella, result]);
   for (const line of plan.lineas.filter(l => l.listo)) {
-    for (const ingredient of line.insumos) {
+    for (const ingredient of modo === 'inventario' ? line.insumos : []) {
       if (ingredient.movimientos.length) {
         await client.query('UPDATE movimientos_inventario SET costo_unitario=$2 WHERE id=ANY($1::uuid[])',
           [ingredient.movimientos.map(m => m.id), ingredient.costoUnitario]);
@@ -158,12 +168,12 @@ async function apply(client, { sucursalId, usuarioId, body }) {
         await client.query('UPDATE materias_primas SET stock_actual=stock_actual-$2 WHERE id=$1', [ingredient.id, ingredient.porDescontar]);
       }
     }
-    await client.query('INSERT INTO regularizacion_costo_items(pedido_item_id,regularizacion_id,costo_agregado,detalle) VALUES($1,$2,$3,$4)',
-      [line.itemId, clientUuid, line.costo, line]);
+    await client.query('INSERT INTO regularizacion_costo_items(pedido_item_id,regularizacion_id,costo_agregado,detalle,modo) VALUES($1,$2,$3,$4,$5)',
+      [line.itemId, clientUuid, line.costo, line, modo]);
   }
   await client.query(`INSERT INTO auditoria(entidad,entidad_id,accion,valor_nuevo,motivo,usuario_id,sucursal_id)
     VALUES('regularizaciones_costo',$1,'regularizar',$2,$3,$4,$5)`,
-    [clientUuid, result, 'Costos estimados con recetas y costos actuales. El administrador confirmó que no fueron registrados como ajustes o egresos.', usuarioId, sucursalId]);
+    [clientUuid, result, `Costos estimados con recetas y costos actuales. ${modo === 'solo_costo' ? 'Consumo histórico: sin modificar existencias ni movimientos de inventario. ' : ''}El administrador confirmó que no fueron registrados como ajustes o egresos.`, usuarioId, sucursalId]);
   return result;
 }
 module.exports = { preview, apply };

@@ -64,7 +64,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   let encontrado = null;
   for (const u of rows) {
     // eslint-disable-next-line no-await-in-loop
-    if (await bcrypt.compare(pin, u.pin_hash)) { encontrado = u; break; }
+    if ((!req.body.usuarioId || req.body.usuarioId === u.id) && await bcrypt.compare(pin, u.pin_hash)) { encontrado = u; break; }
   }
 
   if (!encontrado) throw new ApiError(401, 'PIN incorrecto.');

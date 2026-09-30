@@ -1,3 +1,4 @@
+import { DiscountSheet } from '../components/Discounts.jsx';
 import { productEmoji } from '../lib/productEmojis.js';
 import CoffeeGuide from '../components/CoffeeGuide.jsx';
 // PUNTO DE VENTA (Caja). En escritorio: menú + carrito lado a lado; en móvil:
@@ -134,6 +135,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
                 {o.destino && ` • ${destinoLabel(o)}`}
                 {o.origen === 'app' && o.cliente && ` • 🌐 En línea — ${o.cliente.nombre} ${o.cliente.apellido}`}
               </div>
+              {o.cuentaOrigenFolio && <small>Separada de {o.cuentaOrigenFolio}</small>}
               <DetalleVenta key={`${o.id}-${recargar}-${o.total}-${o.numItems}`} id={o.id}/>
               {vencido && <div className="vencido-warning"><AlertTriangle size={11} /> Pasada la hora de recogida sin cobrarse</div>}
             </div>
@@ -159,7 +161,7 @@ function TurnoView({ orders: liveOrders, now, onCancel, onCobrar, onEdit, onNoSh
                 </div>
               )}
               {!o.cobrado && !o.cancelado && !o.noShow && !o.esRecompensaPura && o.cancelacionEstado !== 'pendiente' && (
-                <button className="btn-secondary small" onClick={() => onEdit(o)}>Agregar / editar</button>
+                <button className="btn-secondary small" onClick={() => onEdit(o)}>Editar / separar cuenta</button>
               )}
               {/* Cualquier ticket se puede cancelar (con motivo), de cualquier
                   fecha: los duplicados también se cobran y se preparan. */}
@@ -242,11 +244,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     addToast(e.message, 'warn');
   };
 
-  const authorizeDiscount = async (porcentaje, pin) => {
-    if (!porcentaje) { setDiscount(null); return; }
-    const approval = await api.crearAprobacionDescuento({ pin, descuentoPorcentaje: porcentaje });
-    setDiscount({ porcentaje, autorizacion: approval.token });
-  };
+  const [checkoutDiscount,setCheckoutDiscount]=useState(false);
+  const authorizeDiscount = async value => setDiscount(value);
 
   const quickAdd = product => {
     if (!pedirTurno()) return;
@@ -348,7 +347,7 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
     if (order.cobrado || order.cancelado || order.noShow || order.cancelacionEstado === 'pendiente') { addToast('El ticket ya no está disponible para cobro.', 'warn'); return; }
     if (order.total > 0 || order.cortesiaUnidades > 0) {
       setChargingOrder(order);
-      setAmounts({ subtotal: order.subtotal, cortesiaAmt: order.cortesiaValor, cortesiaUnits: order.cortesiaUnidades, discountPct: order.descuentoPct, discountAmt: 0, total: order.total });
+      setAmounts({ subtotal: order.subtotal, cortesiaAmt: order.cortesiaValor, cortesiaUnits: order.cortesiaUnidades, roundingAdjustment:order.ajusteRedondeo, discountPct: order.descuentoPct, discountAmt: 0, total: order.total });
       setScreen('checkout');
     } else {
       // Entrega sin cobro: también un solo toque (ver useAccionUnica).
@@ -446,7 +445,8 @@ export default function CajaApp({ brand, sedeNombre, orders, createOrder, onOrde
       {screen === 'comandas' && <CajaComandas />}
       {screen === 'directa' && <VentaDirecta turnoAbierto={turnoAbierto} onBack={()=>setScreen('menu')} addToast={addToast}/>}
       {screen === 'cart' && turnoAbierto && <div style={{ maxWidth: 640 }}>{cartPanel}</div>}
-      {screen === 'checkout' && turnoAbierto && <CheckoutView amounts={amounts} items={chargingOrder && !chargingOrder.registroManual && !chargingOrder.esRecompensaPura ? chargingOrder.items : null} onBack={backFromCheckout} onConfirm={handleConfirmPay} allowCortesia destinoTexto={destinoTexto} />}
+      {checkoutDiscount && chargingOrder && <DiscountSheet pedidoId={chargingOrder.id} baseAmount={chargingOrder.subtotal-chargingOrder.cortesiaValor} current={chargingOrder.descuentoPct?{porcentaje:chargingOrder.descuentoPct}:null} onClose={()=>setCheckoutDiscount(false)} onApply={async d=>{await api.aplicarDescuentoPedido(chargingOrder.id,{descuentoPorcentaje:d?.porcentaje||0,autorizacionDescuento:d?.autorizacion,totalEsperado:chargingOrder.total});await handleCobrarClick(chargingOrder);await pedidoActualizado();}}/>}
+      {screen === 'checkout' && turnoAbierto && <CheckoutView onDiscount={chargingOrder&&!chargingOrder.registroManual&&!chargingOrder.esRecompensaPura?()=>setCheckoutDiscount(true):null} amounts={amounts} items={chargingOrder && !chargingOrder.registroManual && !chargingOrder.esRecompensaPura ? chargingOrder.items : null} onBack={backFromCheckout} onConfirm={handleConfirmPay} allowCortesia destinoTexto={destinoTexto} />}
       {cortesiaAviso && (
         <Sheet title="Cortesía fuera del plan" onClose={() => setCortesiaAviso(null)}>
           <CortesiaAviso cortesia={cortesiaAviso} />

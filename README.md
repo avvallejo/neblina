@@ -461,3 +461,27 @@ dentro). Validé la sintaxis de los YAML y el JSON del devcontainer
 estándar y probados de la comunidad — pero te recomiendo que la primera vez
 que hagas `docker compose up` en tu máquina, te quedes viendo los logs por si
 algo necesita un ajuste fino que solo se ve corriendo de verdad.
+
+
+### Descuentos, cuentas separadas y sesión del personal
+
+Requiere las migraciones **43** y **44** (`bash db/migrar.sh` antes de reconstruir los servicios).
+
+- **Administración → Configuración → Descuentos sin autorización en Caja**: permite Empleado al 50% y porcentajes exactos adicionales por sucursal. Sin configuración, requieren autorización. Los porcentajes deben ser mayores que 0 y menores que 100; los regalos se registran como cortesías.
+- **Caja → Aplicar descuento** (en carrito, detalle del ticket o cobro): captura empleado/motivo. Un descuento fuera de los permisos se autoriza con PIN de administrador de la sede/general, o mediante una solicitud a **Administración → Autorizaciones → Descuentos**. La solicitud pendiente no reduce el cobro; después de autorizarla, Caja elige **Aplicar autorizado**. El historial registra solicitante, porcentaje, vía, autorizador y ticket al aplicarlo. Las autorizaciones son de un solo uso, ligadas a solicitante, sucursal, porcentaje y ticket cuando existe; vencen a las 12 horas. El PIN conserva su bloqueo tras cinco fallos por hora. Elegir **Con PIN** siempre comprueba que sea de un administrador activo de la sucursal o general, incluso si el solicitante es administrador o el descuento permite aplicarse sin PIN. Un PIN enviado nunca se sustituye por permisos configurados; los reintentos también lo validan.
+- **Caja → Ventas del turno → Editar / separar cuenta → Separar cuenta**: elige productos/cantidades y nombre. El original conserva al menos un producto. Se puede repetir para más personas; cada cuenta tiene folio y cobro propio. Solo tickets abiertos, sin cancelación pendiente y no manuales/recompensas. Se conservan precios, opciones, descuento, cortesías, preparación y entregas. Las cuentas se vinculan al folio original; no se generan puntos de fidelidad adicionales por separar.
+- Una separación parcial reparte los movimientos de consumo con sus lotes, costos y fechas originales, sin modificar existencias. Las devoluciones posteriores afectan únicamente a la cuenta cancelada. Los centavos se distribuyen proporcionalmente y la suma de cuentas permanece igual al importe original.
+- Las sesiones válidas se renuevan cuando les queda menos de una hora; siguen verificándose usuario activo y versión de sesión. Una sesión vencida/revocada solicita el PIN de la misma persona sobre la pantalla actual. Las escrituras no se reintentan automáticamente. La captura montada se conserva; después de confirmar el PIN, el usuario revisa y repite la acción pendiente. Una falla de red al arrancar ya no elimina una sesión guardada válida.
+
+Validación integral nueva: `node api/test/live-discounts-split.js`, exclusivamente con `NODE_ENV=development` y `PGDATABASE` que empiece por `codex_cuentas_`. Crear esa base desechable con el esquema vigente, sin datos de producción; verificar permisos, PIN/módulo, cobro de diferencia, separación concurrente, preparación, lotes/devoluciones y sesiones. La prueba deja únicamente datos ficticios en esa base para poder inspeccionarlos y eliminarla al terminar.
+
+## Recuperar costos de ventas anteriores
+
+En **Admin → Contabilidad → Estado de resultados → Revisar costos**, el administrador puede regularizar las líneas cobradas y terminadas que no tienen costo. La vista previa muestra tickets, recetas, costo a recuperar, existencias que se descontarán y el efecto en la utilidad del mes.
+
+- Usa las recetas y los costos de referencia **actuales**; queda identificado como una estimación, no como el costo histórico de compra. Los costos históricos positivos no se revalorizan.
+- A los consumos ya registrados en cero se les completa el costo sin volver a descontar existencias. Si falta consumo de receta, se registra únicamente la cantidad faltante, con sus lotes y en el mes de la venta.
+- No registra nuevas compras, egresos, cobros ni movimientos de Caja/Banco. Las partidas sin receta/costo, sin existencia suficiente, con ajustes posteriores, devoluciones o consumos en otro mes quedan pendientes para revisión individual.
+- El mes debe estar abierto. La vista previa se valida otra vez al guardar; cambios en recetas, ventas o inventario obligan a actualizarla. El guardado tiene folio, detalle auditable y protección frente a reintentos/doble clic.
+- Migración: `db/45_regularizacion_costos.sql`. Solo instala estructura y funciones: **no regulariza automáticamente** ninguna venta. Una regularización bloquea brevemente las escrituras de las tablas implicadas mientras valida y aplica el conjunto de cambios; espera como máximo cinco segundos por un bloqueo.
+- Prueba integral: `npm --prefix api run test:regularizacion:live`, exclusivamente con `NODE_ENV=development` y `PGDATABASE=codex_costos_*` (base desechable).

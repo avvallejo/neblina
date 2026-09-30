@@ -1,3 +1,4 @@
+import { newerSameSession } from './session.js';
 import { productEmoji } from '../lib/productEmojis.js';
 import { createHttpClient } from './http.js';
 // Cliente HTTP de la API de la cafetería — MULTI-SUCURSAL.
@@ -16,18 +17,27 @@ import { createHttpClient } from './http.js';
 //     ADMIN GENERAL cambia de sede con setSucursal() (el switcher del panel).
 
 const LS = typeof localStorage !== 'undefined' ? localStorage : null;
-const http = createHttpClient();
+const SS = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+const http = createHttpClient({onResponse:(res,options)=>{
+  const renewed=res.headers.get('X-Session-Token');
+  if(renewed && options.headers?.Authorization===`Bearer ${token}` && newerSameSession(token,renewed)) {
+    const saved=LS?.getItem('cafeteria_token');
+    token=renewed;SS?.setItem('cafeteria_token',renewed);
+    if(newerSameSession(saved,renewed)) LS?.setItem('cafeteria_token',renewed);
+  }
+}});
 
 let BASE =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) || '/api';
 export function setBaseUrl(u) { BASE = u; }
 
-let token = LS ? LS.getItem('cafeteria_token') : null;
+let token = SS?.getItem('cafeteria_token') || LS?.getItem('cafeteria_token') || null;
 let tokenCliente = LS ? LS.getItem('cafeteria_token_cliente') : null;
 let sucursal = null;
 try { sucursal = LS && LS.getItem('cafeteria_sucursal') ? JSON.parse(LS.getItem('cafeteria_sucursal')) : null; } catch { sucursal = null; }
 
 export function setToken(t) {
+  if(SS) t ? SS.setItem('cafeteria_token',t) : SS.removeItem('cafeteria_token');
   token = t || null;
   if (LS) { t ? LS.setItem('cafeteria_token', t) : LS.removeItem('cafeteria_token'); }
 }
@@ -49,18 +59,22 @@ export function getSucursalId() { return sucursal ? sucursal.id : null; }
 async function request(path, { method = 'GET', body, useClienteToken = false } = {}) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const saved=LS?.getItem('cafeteria_token');
+  if(newerSameSession(token,saved)){token=saved;SS?.setItem('cafeteria_token',saved);}
   const tk = useClienteToken ? tokenCliente : token;
   if (tk) headers.Authorization = `Bearer ${tk}`;
   // La sede activa viaja en cada petición; el backend decide si aplica.
   if (sucursal && sucursal.id) headers['X-Sucursal-Id'] = sucursal.id;
 
-  return http(`${BASE}${path}`, {
+  try { return await http(`${BASE}${path}`, {
     method,
     cache: method === 'GET' ? 'no-store' : 'default',
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
+  }); } catch(e) {
+    if(!useClienteToken && tk && e.details?.codigo==='sesion_requerida' && typeof window!=='undefined') window.dispatchEvent(new Event('cafeteria:session-required'));
+    throw e;
+  }
 }
 
 // Endpoints públicos: la sede va en la query (?sucursal=).
@@ -437,6 +451,8 @@ export function getTraspasos(periodo) { return request(`/contabilidad/traspasos?
 export function crearTraspaso(body) { return request('/contabilidad/traspasos', { method: 'POST', body }); }
 export function anularTraspaso(id) { return request(`/contabilidad/traspasos/${id}/anular`, { method: 'POST' }); }
 export function getEstadoResultados(periodo) { return request(`/contabilidad/estado-resultados?periodo=${periodo}`); }
+export function getRegularizacionCostos(periodo) { return request(`/contabilidad/regularizacion-costos?periodo=${periodo}`); }
+export function regularizarCostos(body) { return request('/contabilidad/regularizacion-costos', { method: 'POST', body }); }
 export function getEstadoConsolidado(periodo) { return request(`/contabilidad/consolidado/estado-resultados?periodo=${periodo}`); }
 export function getFlujoDinero(periodo) { return request(`/contabilidad/flujo?periodo=${periodo}`); }
 export function getMayordomia(anio) { return request(`/contabilidad/mayordomia?anio=${anio}`); }
@@ -590,3 +606,18 @@ export function getInsumosVenta(){return request('/ventas-directas/insumos');}
 export function registrarVentaDirecta({cart,...body}){return request('/ventas-directas',{method:'POST',body:{...body,items:cart.map(x=>({...itemToApi(x),precioUnitario:x.unitPrice,descuentoPorcentaje:x.descuentoPorcentaje||0,motivoBeneficio:x.motivoBeneficio,motivoPrecio:x.motivoPrecio,concepto:x.concepto,insumoId:x.insumoId,cantidadInsumo:x.cantidadInsumo,unidadInsumo:x.unidadInsumo}))}});}
 
 export function eliminarOpcion(tipo,id){return request(`/opciones/${tipo}/${id}`,{method:'DELETE'});}
+
+export const getDescuentosConfig = () => request('/descuentos/config');
+export const guardarDescuentosConfig = body => request('/descuentos/config',{method:'PUT',body});
+export const getDescuentos = () => request('/descuentos');
+export const solicitarDescuento = body => request('/descuentos',{method:'POST',body});
+export const resolverDescuento = (id,decision) => request(`/descuentos/${id}/${decision}`,{method:'PATCH'});
+export const aplicarDescuentoPedido = (id,body) => request(`/pedidos/${id}/descuento`,{method:'PATCH',body});
+
+export async function reauthenticate(pin,usuarioId) {
+  const r=await request('/auth/login',{method:'POST',body:{pin,usuarioId,sucursalId:getSucursalId()}});
+  if(r.usuario.id!==usuarioId) throw new Error('Confirma el PIN del usuario que inició esta captura.');
+  setToken(r.token);return r.usuario;
+}
+
+export const separarCuenta = (id,body) => request(`/pedidos/${id}/separar`,{method:'POST',body});

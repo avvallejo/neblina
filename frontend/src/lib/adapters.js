@@ -10,6 +10,8 @@ export function adaptPedido(p) {
     folio: p.folio || p.id,
     total: Number(p.total || 0),
     subtotal: Number(p.subtotal || 0),
+    ajusteRedondeo: Number(p.ajuste_redondeo || 0),
+    cuentaOrigenFolio: p.cuenta_origen_folio || null,
     payMethod: p.metodo_pago ? (PAY_METHOD_LABELS[p.metodo_pago] || p.metodo_pago) : 'Por cobrar',
     esCortesia: p.metodo_pago === 'cortesia',          // todo el ticket fue cortesía (total $0)
     tieneCortesia: !!p.cortesia_estado,                 // regaló al menos un producto (completo o parcial)

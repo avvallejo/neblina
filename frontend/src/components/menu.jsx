@@ -1,3 +1,4 @@
+import { DiscountSheet } from './Discounts.jsx';
 import ProductImage from './ProductImage.jsx';
 // Piezas del menú/POS compartidas por Caja y Cliente.
 import React, { useState } from 'react';
@@ -134,40 +135,6 @@ export function CustomizeSheet({ product, onClose, onAdd, onPreviewRecipe, allow
   );
 }
 
-function DiscountSheet({ onClose, onApply, current }) {
-  const [pct, setPct] = useState(current?.porcentaje || 10);
-  const [code, setCode] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const apply = async () => {
-    setLoading(true); setError('');
-    try { await onApply(pct, code); onClose(); }
-    catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-  return (
-    <Sheet title="Aplicar descuento" onClose={onClose}>
-      <div className="option-group">
-        <div className="option-label">Porcentaje</div>
-        <div className="option-row">
-          {[5, 10, 15, 20].map(p => (
-            <button key={p} className={`option-chip ${pct === p ? 'selected' : ''}`} onClick={() => setPct(p)}>{p}%</button>
-          ))}
-        </div>
-      </div>
-      <div className="option-group">
-        <div className="option-label">PIN de autorización (administrador de esta sucursal)</div>
-        <input className="text-input" placeholder="Ej. 1234" value={code} onChange={e => setCode(e.target.value)} />
-        <FormError>{error}</FormError>
-      </div>
-      <div className="sheet-footer">
-        {current ? <button className="btn-ghost" onClick={() => { onApply(null); onClose(); }}>Quitar descuento</button> : <span />}
-        <button className="btn-primary" disabled={!/^\d{4}$/.test(code) || loading} onClick={apply}>{loading ? 'Autorizando…' : `Aplicar ${pct}%`}</button>
-      </div>
-    </Sheet>
-  );
-}
-
 // Destino del pedido (solo Caja): Mesa 1..N, Barra o Para llevar. Es
 // obligatorio antes de cobrar para que la comanda siempre sepa a dónde va.
 export function DestinoPicker({ mesas = 4, value, onChange }) {
@@ -258,7 +225,7 @@ export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDis
         {onDestino && <DestinoPicker mesas={mesas} value={destino} onChange={onDestino} />}
         {allowDiscount && (
           <button className="discount-link" onClick={() => setDiscountOpen(true)}>
-            {discount ? `Descuento aplicado: ${discountPct}% — editar` : '+ Aplicar descuento (requiere autorización)'}
+            {discount ? `Descuento aplicado: ${discountPct}% — editar` : '+ Aplicar descuento'}
           </button>
         )}
         {allowCortesia && (
@@ -274,7 +241,7 @@ export function CartView({ busy = false, cart, setCart, discount, onAuthorizeDis
         <button className="btn-primary full" style={{ marginTop: 10 }} disabled={(!!onDestino && !destino) || (!!onNombreTicket && !nombreTicket?.trim())} onClick={() => onCheckout({ subtotal, cortesiaAmt, cortesiaUnits, discountPct, discountAmt, total })}>{ctaLabel || (total === 0 && cortesiaUnits > 0 ? 'Registrar cortesía' : `Cobrar ${money(total)}`)}</button>
       </div>
 
-      {allowDiscount && discountOpen && <DiscountSheet current={discount} onClose={() => setDiscountOpen(false)} onApply={onAuthorizeDiscount} />}
+      {allowDiscount && discountOpen && <DiscountSheet baseAmount={subtotal-cortesiaAmt} current={discount} onClose={() => setDiscountOpen(false)} onApply={onAuthorizeDiscount} />}
     </fieldset>
   );
 }
@@ -328,7 +295,7 @@ export function CortesiaPanel({ unidades, valor, motivo, onMotivo }) {
 // carrito). Para cobrar un ticket ya abierto o un pedido en línea llega
 // `items` (líneas del pedido): la Caja puede marcar ahí cuáles son cortesía y
 // el total se recalcula igual que en el servidor.
-export function CheckoutView({ amounts, items = null, onConfirm, onBack, allowCortesia = false, destinoTexto = '' }) {
+export function CheckoutView({ onDiscount, amounts, items = null, onConfirm, onBack, allowCortesia = false, destinoTexto = '' }) {
   // Un solo cobro por más veces que se toque el botón (ver useAccionUnica).
   const [cobrando, cobrar] = useAccionUnica(onConfirm);
   const [method, setMethod] = useState('efectivo');
@@ -344,6 +311,8 @@ export function CheckoutView({ amounts, items = null, onConfirm, onBack, allowCo
   const calc = items
     ? calcCartAmounts(lineas.map(i => ({ unitPrice: Number(i.precio_unitario), qty: Number(i.cantidad), cortesia: cortesiaIds.has(i.id), isReward: i.es_regalo })), discountPct)
     : { subtotal: amounts.subtotal, cortesiaAmt: amounts.cortesiaAmt || 0, cortesiaUnits: amounts.cortesiaUnits || 0, discountAmt: amounts.discountAmt || 0, total: amounts.total };
+  const courtesiesChanged=items && lineas.some(i=>Boolean(i.es_cortesia)!==cortesiaIds.has(i.id));
+  if(items && !courtesiesChanged && calc.total>0) calc.total=Math.round((calc.total+Number(amounts.roundingAdjustment||0))*100)/100;
   const { total, cortesiaAmt, cortesiaUnits } = calc;
   const soloCortesia = total === 0 && cortesiaUnits > 0;
 
@@ -371,9 +340,12 @@ export function CheckoutView({ amounts, items = null, onConfirm, onBack, allowCo
         <span className="footer-label" style={{ color: '#C9BCA8' }}>{soloCortesia ? 'Todo el ticket es cortesía' : 'Total a cobrar'}</span>
         <span className="price-total big">{money(total)}</span>
         {cortesiaUnits > 0 && <span className="field-hint checkout-cortesia-hint">Incluye cortesía de {cortesiaUnits} producto{cortesiaUnits === 1 ? '' : 's'} por {money(cortesiaAmt)}{calc.discountAmt > 0 ? ` y descuento de ${money(calc.discountAmt)}` : ''}</span>}
+        {calc.discountAmt>0 && <span className="field-hint checkout-cortesia-hint">Descuento {discountPct}%: −{money(calc.discountAmt)} · Resta por pagar {money(total)}</span>}
+        {!courtesiesChanged && Number.isFinite(Number(amounts.roundingAdjustment)) && Number(amounts.roundingAdjustment)!==0 && <small>Ajuste de redondeo: {money(amounts.roundingAdjustment)}</small>}
         {destinoTexto && <span className="checkout-destino">{destinoTexto}</span>}
       </div>
 
+      {onDiscount && <button className="btn-secondary" disabled={cobrando} onClick={onDiscount}>{discountPct?`Editar descuento ${discountPct}%`:'+ Aplicar descuento'}</button>}
       {allowCortesia && items && lineas.length > 0 && (
         <div className="option-group checkout-lineas">
           <div className="option-label">Productos del ticket · toca el regalo para dar uno de cortesía</div>

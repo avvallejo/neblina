@@ -15,13 +15,13 @@ function createRequireAuth({ verifyToken = jwt.verify, queryFn = query } = {}) {
   return function requireAuthMiddleware(req, res, next) {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-    if (!token) return next(new ApiError(401, 'Falta el token de autenticación'));
+    if (!token) return next(new ApiError(401, 'Confirma tu sesión para continuar.', {codigo:'sesion_requerida'}));
 
     let decoded;
     try {
       decoded = verifyToken(token, JWT_SECRET);
     } catch (err) {
-      return next(new ApiError(401, 'Token inválido o expirado'));
+      return next(new ApiError(401, 'Tu sesión venció. Confirma tu PIN para continuar sin perder la captura.', {codigo:'sesion_requerida'}));
     }
 
     if (decoded.tipo === 'cliente' && decoded.id) {
@@ -37,7 +37,7 @@ function createRequireAuth({ verifyToken = jwt.verify, queryFn = query } = {}) {
       .then(result => {
         const current = result.rows[0];
         if (!current?.activo || Number(decoded.ver) !== Number(current.token_version)) {
-          throw new ApiError(401, 'La sesión de personal fue revocada. Inicia sesión otra vez.');
+          throw new ApiError(401, 'Tu sesión cambió. Confirma tu PIN para continuar.', {codigo:'sesion_requerida'});
         }
         // La sede se lee SIEMPRE de la base (no del token): si el admin
         // reasigna a alguien de sucursal, surte efecto en su siguiente
@@ -52,6 +52,11 @@ function createRequireAuth({ verifyToken = jwt.verify, queryFn = query } = {}) {
           // Comanda que ve (barista/mostrador): barra, parrilla o ambas.
           estaciones: Array.isArray(current.estaciones) && current.estaciones.length ? current.estaciones : ['barra', 'parrilla'],
         };
+        // Renueva actividad válida antes de vencer; nunca acepta tokens expirados
+        // ni omite la comprobación de revocación que antecede este bloque.
+        if (Number(decoded.exp) - Math.floor(Date.now()/1000) < 3600) {
+          res.setHeader('X-Session-Token', jwt.sign({tipo:'staff',id:current.id,nombre:current.nombre,rol:current.rol,ver:current.token_version,suc:current.sucursal_id||null}, JWT_SECRET, {expiresIn:'12h'}));
+        }
         next();
       })
       .catch(err => next(err instanceof ApiError ? err : new ApiError(503, 'No se pudo validar la sesión de personal.')));
@@ -99,7 +104,7 @@ function requireCliente(req, res, next) {
 // ----------------------------------------------------------------------------
 function createResolveSucursal({ queryFn = query } = {}) {
   return function resolveSucursalMiddleware(req, res, next) {
-    if (!req.auth) return next(new ApiError(401, 'Falta el token de autenticación'));
+    if (!req.auth) return next(new ApiError(401, 'Confirma tu sesión para continuar.', {codigo:'sesion_requerida'}));
 
     if (req.auth.sucursalId) {
       req.sucursalId = req.auth.sucursalId;

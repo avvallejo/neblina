@@ -1,3 +1,4 @@
+import { DiscountsConfig, DiscountsPanel } from '../components/Discounts.jsx';
 import CajaComandas from './CajaComandas.jsx';
 import ProductImage from '../components/ProductImage.jsx';
 import SalesDateFilter from '../components/SalesDateFilter.jsx';
@@ -483,9 +484,10 @@ function CancelacionesPanel({ pendientes, addToast, onResolved }) {
 
 // Dos colas con el mismo peso: cortesías fuera de cupo y cancelaciones de
 // tickets. La pestaña trae su propio contador de pendientes.
-function AutorizacionesSection({ cortesias, cancelaciones, addToast, onResolved }) {
-  const [tab, setTab] = useState(() => ((cancelaciones || []).length && !(cortesias || []).length ? 'cancelaciones' : 'cortesias'));
+function AutorizacionesSection({ descuentos, cortesias, cancelaciones, addToast, onResolved }) {
+  const [tab, setTab] = useState(() => (descuentos?.length ? 'descuentos' : (cancelaciones || []).length && !(cortesias || []).length ? 'cancelaciones' : 'cortesias'));
   const tabs = [
+    { id: 'descuentos', label: 'Descuentos', Icon: BadgeCheck, n: (descuentos || []).length },
     { id: 'cortesias', label: 'Cortesías', Icon: Gift, n: (cortesias || []).length },
     { id: 'cancelaciones', label: 'Cancelaciones', Icon: Ban, n: (cancelaciones || []).length },
   ];
@@ -498,7 +500,7 @@ function AutorizacionesSection({ cortesias, cancelaciones, addToast, onResolved 
           </button>
         ))}
       </div>
-      {tab === 'cortesias'
+      {tab === 'descuentos' ? <DiscountsPanel onResolved={onResolved}/> : tab === 'cortesias'
         ? <CortesiasPanel pendientes={cortesias} addToast={addToast} onResolved={onResolved} />
         : <CancelacionesPanel pendientes={cancelaciones} addToast={addToast} onResolved={onResolved} />}
     </div>
@@ -1041,7 +1043,7 @@ export default function AdminApp(props) {
     proveedores, addProveedor, updateProveedor, deleteProveedor,
     productosAdmin, recetaOverrides, setRecetaOverride,
     recargarCatalogo, recargarAdmin, onSedesChanged, preciosPorRevisar,
-    cortesiasMes = 0, cortesiasPendientes = [], cancelacionesPendientes = [], mesas = 4,
+    descuentosPendientes = [], cortesiasMes = 0, cortesiasPendientes = [], cancelacionesPendientes = [], mesas = 4,
   } = props;
 
   const [screen, setScreen] = useState('dashboard');
@@ -1154,7 +1156,7 @@ export default function AdminApp(props) {
     { id: 'usuarios', label: 'Personal', Icon: Lock },
     { id: 'reportes', label: 'Reportes', Icon: Receipt },
     { id: 'comandas', label: 'Comandas / personal', Icon: ClipboardList },
-    { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: (cortesiasPendientes || []).length + (cancelacionesPendientes || []).length },
+    { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: descuentosPendientes.length + (cortesiasPendientes || []).length + (cancelacionesPendientes || []).length },
     ...(esGeneral ? [
       { id: 'comparativo', label: 'Comparativo', Icon: BarChart3 },
       { id: 'sucursales', label: 'Sucursales', Icon: Building2 },
@@ -1175,7 +1177,7 @@ export default function AdminApp(props) {
     opciones: ['Opciones y extras', 'Tamaños, tipos de café, leches y extras con su precio'],
     reportes: ['Reportes', sedeNombre ? `Histórico acumulado de ${sedeNombre}` : 'Histórico acumulado'],
     comandas: ['Preparación por empleado', 'Historial de productos preparados y seguimiento de entregas'],
-    autorizaciones: ['Autorizaciones', `${(cortesiasPendientes || []).length} cortesía(s) y ${(cancelacionesPendientes || []).length} cancelación(es) por resolver`],
+    autorizaciones: ['Autorizaciones', `${descuentosPendientes.length} descuento(s), ${(cortesiasPendientes || []).length} cortesía(s) y ${(cancelacionesPendientes || []).length} cancelación(es) por resolver`],
     comparativo: ['Comparativo de sucursales', 'Todas las sedes'],
     sucursales: ['Sucursales', 'Administración del negocio completo'],
     config: ['Configuración', sedeNombre ? `De ${sedeNombre}` : 'De la sucursal'],
@@ -1335,7 +1337,7 @@ export default function AdminApp(props) {
       {screen === 'corte' && <CorteCaja key={sedeActivaId} addToast={addToast} currentUser={currentUser} onChanged={async()=>{await recargarCatalogo();await recargarAdmin();}}/>}
       {screen === 'contabilidad' && <ContabilidadSection addToast={addToast} esGeneral={esGeneral} sedeNombre={sedeNombre} proveedores={proveedores} />}
       {screen === 'reportes' && <ReportesSection data={reportes} />}
-      {screen === 'autorizaciones' && <AutorizacionesSection cortesias={cortesiasPendientes} cancelaciones={cancelacionesPendientes} addToast={addToast} onResolved={recargarAdmin} />}
+      {screen === 'autorizaciones' && <AutorizacionesSection descuentos={descuentosPendientes} cortesias={cortesiasPendientes} cancelaciones={cancelacionesPendientes} addToast={addToast} onResolved={recargarAdmin} />}
       {screen === 'comparativo' && esGeneral && <ComparativoSection addToast={addToast} />}
       {screen === 'sucursales' && esGeneral && <SucursalesSection addToast={addToast} onSedesChanged={onSedesChanged} />}
 
@@ -1393,6 +1395,7 @@ export default function AdminApp(props) {
                 ? `La Caja puede regalar ${cortesiasMes} producto(s) al mes sin autorización (se marcan en el mismo ticket); un ticket cuyos productos ya no caben queda pendiente en Autorizaciones.`
                 : 'Sin cupo: toda cortesía que dé la Caja queda pendiente de autorización.'}
             </div>
+            <DiscountsConfig/>
             <CortesiasConfigEditor cupo={cortesiasMes} onSave={onSaveBranding} />
             <div className="section-title">Fidelidad</div>
             <div className="promo-summary-card">

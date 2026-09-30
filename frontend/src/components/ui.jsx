@@ -65,14 +65,14 @@ export function Stepper({ value, min = 1, max = 99, onChange }) {
 }
 
 // Hoja inferior en móvil, modal centrado en pantallas grandes (vía CSS).
-export function Sheet({ title, onClose, children }) {
+export function Sheet({ title, onClose, children, closable = true, className = '' }) {
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+    <div className="overlay" onClick={closable ? onClose : undefined}>
+      <div className={`sheet ${className}`} onClick={e => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="sheet-header">
           <h3>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button>
+          {closable && <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button>}
         </div>
         <div className="sheet-body">{children}</div>
       </div>

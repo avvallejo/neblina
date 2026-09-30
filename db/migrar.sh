@@ -77,6 +77,9 @@ ya_tiene() {
     38) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'pedido_items' AND column_name = 'es_cortesia'" ;;
     41) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'turnos' AND column_name = 'folio_corte'" ;;
     42) q "SELECT 1 FROM pg_proc WHERE proname = 'fn_turno_abierto_requerido'" ;;
+    43) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'solicitudes_descuento'" ;;
+    44) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'separaciones_cuenta'" ;;
+    45) q "SELECT 1 FROM pg_proc WHERE proname = 'fn_insumos_regularizacion'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

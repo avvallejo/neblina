@@ -68,6 +68,9 @@ services:
       - ./db/40_preparacion_y_entrega.sql:/docker-entrypoint-initdb.d/40_preparacion_y_entrega.sql:ro
       - ./db/41_cortes_y_folios.sql:/docker-entrypoint-initdb.d/41_cortes_y_folios.sql:ro
       - ./db/42_turno_obligatorio_ventas.sql:/docker-entrypoint-initdb.d/42_turno_obligatorio_ventas.sql:ro
+      - ./db/43_descuentos_autorizaciones.sql:/docker-entrypoint-initdb.d/43_descuentos_autorizaciones.sql:ro
+      - ./db/44_separar_cuentas.sql:/docker-entrypoint-initdb.d/44_separar_cuentas.sql:ro
+      - ./db/45_regularizacion_costos.sql:/docker-entrypoint-initdb.d/45_regularizacion_costos.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

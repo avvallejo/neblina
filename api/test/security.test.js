@@ -191,7 +191,7 @@ test('stale staff JWT role and version are rejected', async () => {
   });
   const err = await runMiddleware(middleware, { headers: { authorization: 'Bearer stale' } });
   assert.equal(err.status, 401);
-  assert.match(err.message, /revocada/);
+  assert.equal(err.details.codigo, 'sesion_requerida');
 });
 
 test('login issues a versioned token and security changes increment that version', () => {
@@ -235,7 +235,7 @@ test('discount approval is single-use and bound to requester and percentage', as
   );
   const route = fs.readFileSync(path.join(apiRoot, 'src/routes/pedidos.js'), 'utf8');
   assert.doesNotMatch(route, /bcrypt\.compare/);
-  assert.match(route, /consumeDiscountApproval/);
+  assert.match(route, /await consumeDiscount\(client,/);
 });
 
 test('discount PIN verification locks after five failed attempts', async () => {

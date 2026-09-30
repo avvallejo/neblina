@@ -200,7 +200,7 @@ async function obtenerEgreso(queryFn, sucursalId, id) {
 // (migración 32); si faltara, el del lote o el costo de referencia del insumo.
 const costoMovimientoSql = `(-mi.cantidad) * COALESCE(mi.costo_unitario, l.costo_total / NULLIF(fn_convertir_unidad(l.cantidad_comprada, l.unidad, mp.unidad), 0), mp.costo_unitario, 0)`;
 
-async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
+async function estadoResultados(queryFn, sucursalId, periodo, cfg, { incluirPrecision = false } = {}) {
   const p = validarPeriodo(periodo);
   const r = rangoPeriodo(p);
   const config = cfg || await leerConfigContabilidad(queryFn, sucursalId);
@@ -268,6 +268,9 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
 
   const ventas = round2(v.ventas);
   const costoVentas = round2(num(c.consumo) + num(c.mermas) + num(c.ajustes) + porGrupo.costo_ventas);
+  const { rows: [regularizado] } = await queryFn(`SELECT COUNT(*) AS n, COALESCE(SUM(rc.costo_agregado),0) AS costo
+    FROM regularizacion_costo_items rc JOIN regularizaciones_costo r ON r.id=rc.regularizacion_id
+    WHERE r.sucursal_id=$1 AND r.periodo=$2`, [sucursalId, p]);
   const utilidadBruta = round2(ventas - costoVentas);
   const utilidadOperacion = round2(utilidadBruta - porGrupo.gasto_operacion);
   const utilidadNeta = round2(utilidadOperacion - porGrupo.gasto_financiero - porGrupo.impuesto);
@@ -292,12 +295,14 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg) {
      FROM materias_primas m WHERE m.sucursal_id = $1`, [sucursalId]);
   return {
     periodo: p, nombre: r.nombre, desde: r.desde, hasta: r.hasta, cerrado,
+    ...(incluirPrecision ? { costoVentasSinRedondear: num(c.consumo) + num(c.mermas) + num(c.ajustes) + porGrupo.costo_ventas } : {}),
     ventas: { total: ventas, pedidos: Number(v.pedidos), efectivo: round2(v.ventas_efectivo), banco: round2(ventas - num(v.ventas_efectivo)), pagosSinDesglose: Number(v.pagos_sin_desglose), cortesias: Number(v.cortesias), cortesiasValor: round2(v.cortesias_valor), descuentos: round2(v.descuentos) },
     costoVentas: {
       // Desglose: lo vendido (neto de insumos que regresaron por tickets
       // cancelados o devueltos), lo surtido sin venta (mesas, personal),
       // mermas y ajustes por conteo físico (faltantes/sobrantes).
       total: costoVentas, consumo: round2(c.consumo),
+      regularizado: { lineas: Number(regularizado.n), costo: round2(regularizado.costo) },
       consumoVentas: round2(num(c.consumo) - num(c.consumo_interno) + num(c.devoluciones)), consumoInterno: round2(c.consumo_interno),
       mermas: round2(c.mermas), ajustes: round2(c.ajustes), ajustesConteo: round2(num(c.ajustes) - num(c.devoluciones)), devoluciones: round2(c.devoluciones), manual: round2(porGrupo.costo_ventas),
       // Ventas cobradas sin su costo: pendientes de terminar (el costo llegará) y terminadas sin costo (no llegará).

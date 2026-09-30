@@ -1,6 +1,6 @@
 // Comparte únicamente lecturas en curso; los cobros y demás escrituras nunca
 // se reintentan automáticamente. Cada sesión y sucursal tiene su propia clave.
-export function createHttpClient({ fetchImpl = (...args) => fetch(...args), now = Date.now } = {}) {
+export function createHttpClient({ fetchImpl = (...args) => fetch(...args), now = Date.now, onResponse = () => {} } = {}) {
   const pendingReads = new Map();
   const cooldowns = new Map();
   const scopeOf = (url, method) => {
@@ -17,6 +17,7 @@ export function createHttpClient({ fetchImpl = (...args) => fetch(...args), now 
   }
   async function send(url, options, scope) {
     const res = await fetchImpl(url, options);
+    onResponse(res, options);
     const text = await res.text();
     let data = null;
     if (text) { try { data = JSON.parse(text); } catch { data = text; } }

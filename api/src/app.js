@@ -10,7 +10,7 @@ const trustProxyHops = parseTrustProxyHops(process.env.TRUST_PROXY_HOPS, { requi
 if (trustProxyHops !== null) app.set('trust proxy', trustProxyHops);
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*', exposedHeaders: ['X-Session-Token'] }));
 app.use(express.json({ limit: '2mb' })); // 2mb: holgura para el logo del negocio (base64)
 
 // Límite general — suficientemente holgado para el refresco automático del
@@ -45,6 +45,7 @@ app.use('/api/pedido-items', require('./routes/pedidoItems'));
 app.use('/api/mermas', require('./routes/mermas'));
 app.use('/api/reportes', require('./routes/reportes'));
 app.use('/api/config', require('./routes/config'));
+app.use('/api/descuentos', require('./routes/descuentos'));
 app.use('/api/cortesias', require('./routes/cortesias'));
 app.use('/api/cancelaciones', require('./routes/cancelaciones'));
 app.use('/api/contabilidad', require('./routes/contabilidad'));

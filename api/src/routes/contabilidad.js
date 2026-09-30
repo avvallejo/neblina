@@ -4,6 +4,7 @@ const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
 const { cleanText, parseNumber } = require('../utils/catalogValidation');
 const A = require('../services/accounting');
+const Costos = require('../services/costRegularization');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
@@ -238,6 +239,16 @@ router.post('/traspasos/:id/anular', asyncHandler(async (req, res) => {
 
 // ---- Estado de resultados, flujo, mayordomía --------------------------------------
 router.get('/estado-resultados', asyncHandler(async (req, res) => res.json(await A.estadoResultados(query, req.sucursalId, req.query.periodo))));
+router.get('/regularizacion-costos', asyncHandler(async (req, res) => {
+  res.json(await withTransaction(async c => {
+    await c.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
+    return Costos.preview(c, req.sucursalId, req.query.periodo);
+  }));
+}));
+router.post('/regularizacion-costos', asyncHandler(async (req, res) => {
+  const result = await withTransaction(c => Costos.apply(c, { sucursalId: req.sucursalId, usuarioId: req.auth.id, body: req.body }));
+  res.status(result.repetido ? 200 : 201).json(result);
+}));
 router.get('/flujo', asyncHandler(async (req, res) => res.json(await A.flujoDinero(query, req.sucursalId, req.query.periodo))));
 router.get('/mayordomia', asyncHandler(async (req, res) => res.json(await A.mayordomiaAnual(query, req.sucursalId, req.query.anio || A.hoyMx().slice(0, 4)))));
 
@@ -251,6 +262,7 @@ router.post('/cierres', asyncHandler(async (req, res) => {
   if (periodo > A.hoyMx().slice(0, 7)) throw new ApiError(400, 'No se puede cerrar un mes futuro.');
   const out = await withTransaction(async c => {
     const q = c.query.bind(c);
+    await q('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`costos-mes:${req.sucursalId}:${periodo}`]);
     if (await A.mesCerrado(q, req.sucursalId, periodo)) throw new ApiError(409, 'Ese mes ya está cerrado.');
     const estado = await A.estadoResultados(q, req.sucursalId, periodo);
     const flujo = await A.flujoDinero(q, req.sucursalId, periodo);
@@ -267,6 +279,7 @@ router.delete('/cierres/:periodo', asyncHandler(async (req, res) => {
   const motivo = cleanText(req.body.motivo === undefined ? '' : req.body.motivo, { required: true, field: 'el motivo de la reapertura', max: 200 });
   const out = await withTransaction(async c => {
     const q = c.query.bind(c);
+    await q('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`costos-mes:${req.sucursalId}:${periodo}`]);
     const { rows: [cierre] } = await q('DELETE FROM cierres_mes WHERE sucursal_id = $1 AND periodo = $2 RETURNING *', [req.sucursalId, periodo]);
     if (!cierre) throw new ApiError(404, 'Ese mes no estaba cerrado.');
     await q(`INSERT INTO auditoria (entidad, entidad_id, accion, valor_anterior, motivo, usuario_id, sucursal_id) VALUES ('cierres_mes', $1, 'reabrir', $2::jsonb, $3, $4, $5)`,

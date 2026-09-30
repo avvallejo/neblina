@@ -4,7 +4,7 @@ const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
 const { assertPaymentAllowed, normalizeDiscount, assertDiscountRole } = require('../security/policies');
-const { createDiscountApproval, consumeDiscountApproval } = require('../services/discountApprovals');
+const { createDiscountApproval } = require('../services/discountApprovals');
 const { validateDate } = require('../services/dailySales');
 const { prepareOrderLines } = require('../services/orderValidation');
 const { resolverCortesia, respuestaCortesia } = require('../services/courtesies');
@@ -15,8 +15,10 @@ const { solicitarCancelacion } = require('../services/cancellations');
 const {cashPart}=require('../services/cashDrawer');
 const { requireOpenShift } = require('../services/openShift');
 const { preparationTrackingSql, deliveryHistorySql, deliverItem } = require('../services/preparationTracking');
-const { addOrderItems, changeOrderItem } = require('../services/openOrders');
+const { lockOpenOrder, addOrderItems, changeOrderItem } = require('../services/openOrders');
 const { validarClientUuid, pedidoPorClientUuid, buscarPosibleDuplicado, errorPosibleDuplicado } = require('../services/orderIdempotency');
+const { consumeDiscount, linkDiscount } = require('../services/discountPolicy');
+const { splitAccount } = require('../services/splitAccounts');
 const METODOS_PAGO = ['efectivo', 'tarjeta', 'transferencia', 'mixto', 'cortesia'];
 const router = express.Router();
 router.use(requireAuth, resolveSucursal); // personal y cliente operan pedidos, siempre dentro de SU sede
@@ -92,15 +94,11 @@ router.post('/', asyncHandler(async (req, res) => {
     const cortesiaValor = Math.round(lineasCortesia.reduce((sum, l) => sum + l.precioUnitario * l.cantidad, 0) * 100) / 100;
     const cortesiaUnidades = lineasCortesia.reduce((sum, l) => sum + l.cantidad, 0);
 
-    let autorizadoPor = null;
+    if(descuentoFinal && lineas.every(l=>l.esCortesia || l.precioUnitario===0)) throw new ApiError(400,'Quita las marcas de cortesía para aplicar un descuento y cobrar la diferencia.');
+    let autorizadoPor = null, discountApproval = null;
     if (descuentoFinal) {
-      autorizadoPor = req.auth.rol === 'admin'
-        ? req.auth.id
-        : await consumeDiscountApproval(client, {
-          requesterId: req.auth.id,
-          token: autorizacionDescuento,
-          discount: descuentoFinal,
-        });
+      discountApproval = await consumeDiscount(client, {auth:req.auth,sucursalId:req.sucursalId,token:autorizacionDescuento,discount:descuentoFinal});
+      autorizadoPor = discountApproval.authorizerId;
     }
 
     const subtotal = lineas.reduce((sum, line) => sum + line.precioUnitario * line.cantidad, 0);
@@ -140,6 +138,7 @@ router.post('/', asyncHandler(async (req, res) => {
         dest.destino, dest.mesaNumero, cortesiaValor, cortesiaUnidades, nombreTicket?.trim() || null, clientUuid]
     );
     const pedido = pedidoRes.rows[0];
+    if (descuentoFinal) await linkDiscount(client, discountApproval.id, pedido.id);
 
     const itemsCreados = [];
     for (const l of lineas) {
@@ -169,7 +168,7 @@ router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) =>
   // Se agregan nombre del cliente y conteo de items para que la pantalla de
   // Caja muestre "N producto(s) — Nombre" sin pedir cada pedido por separado.
   const { rows } = await query(
-    `SELECT v.*, p.nombre_ticket, u.nombre AS levantado_por_nombre, c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
+    `SELECT v.*, p.nombre_ticket, p.cuenta_origen_id, p.ajuste_redondeo, (SELECT folio FROM pedidos raiz WHERE raiz.id=p.cuenta_origen_id) AS cuenta_origen_folio, u.nombre AS levantado_por_nombre, c.nombre AS cliente_nombre, c.apellido AS cliente_apellido,
             (SELECT COUNT(*) FROM pedido_items pi WHERE pi.pedido_id = v.id AND pi.estado <> 'cancelado') AS num_items
      FROM vw_pedidos_con_estado v
      JOIN pedidos p ON p.id = v.id
@@ -180,6 +179,31 @@ router.get('/', requireRole('cajero', 'admin'), asyncHandler(async (req, res) =>
     [req.sucursalId, fecha]
   );
   res.json(rows);
+}));
+
+router.post('/:id/separar', requireRole('cajero','admin'), asyncHandler(async(req,res)=>{
+  const result=await withTransaction(client=>splitAccount(client,{id:req.params.id,sucursalId:req.sucursalId,auth:req.auth,body:req.body}));
+  res.status(result.yaExistia?200:201).json(result);
+}));
+
+router.patch('/:id/descuento', requireRole('cajero', 'admin'), asyncHandler(async(req,res) => {
+  const discount = req.body.descuentoPorcentaje === 0 ? 0 : normalizeDiscount(req.body.descuentoPorcentaje);
+  const result = await withTransaction(async client => {
+    const order = await lockOpenOrder(client, req.params.id, req.sucursalId);
+    if(req.body.autorizacionDescuento && order.descuento_solicitud_id===req.body.autorizacionDescuento && Number(order.descuento_porcentaje)===discount) return order;
+    await requireOpenShift(client, req.sucursalId);
+    if (Number(req.body.totalEsperado) !== Number(order.total)) throw new ApiError(409,'El ticket cambió. Actualízalo antes de aplicar el descuento.');
+    if(discount && Number(order.subtotal)<=Number(order.cortesia_valor)) throw new ApiError(400,'Quita las marcas de cortesía para aplicar un descuento y cobrar la diferencia.');
+    const approval = discount ? await consumeDiscount(client,{auth:req.auth,sucursalId:req.sucursalId,token:req.body.autorizacionDescuento,discount,pedidoId:order.id}) : null;
+    await client.query('UPDATE pedidos SET descuento_porcentaje=$2,descuento_autorizado_por=$3,ajuste_redondeo=0 WHERE id=$1',[order.id,discount,approval?.authorizerId||null]);
+    if(discount) await linkDiscount(client,approval.id,order.id);
+    else await client.query('UPDATE pedidos SET descuento_solicitud_id=NULL WHERE id=$1',[order.id]);
+    const updated = await recalcularImportes(client,order.id);
+    await client.query(`INSERT INTO auditoria(usuario_id,sucursal_id,entidad,entidad_id,accion,valor_anterior,valor_nuevo)
+      VALUES($1,$2,'pedidos',$3,'descuento',$4::jsonb,$5::jsonb)`,[req.auth.id,req.sucursalId,order.id,JSON.stringify({porcentaje:order.descuento_porcentaje,total:order.total}),JSON.stringify({porcentaje:discount,total:updated.total})]);
+    return updated;
+  });
+  res.json(result);
 }));
 
 router.post('/:id/items', requireRole('cajero', 'admin'), asyncHandler(async (req, res) => {
@@ -217,7 +241,7 @@ router.patch('/:id/items/:itemId/entregar', requireRole('cajero', 'admin'), asyn
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
-  const pedido = await query('SELECT v.*,p.nombre_ticket,u.nombre AS levantado_por_nombre,c.nombre AS cliente_nombre,c.apellido AS cliente_apellido,p.registrado_en,p.motivo_registro,p.registro_manual FROM vw_pedidos_con_estado v JOIN pedidos p ON p.id=v.id LEFT JOIN usuarios u ON u.id=p.cajero_id LEFT JOIN clientes c ON c.id=p.cliente_id WHERE v.id = $1 AND v.sucursal_id = $2', [req.params.id, req.sucursalId]);
+  const pedido = await query('SELECT v.*,p.nombre_ticket,p.cuenta_origen_id,p.ajuste_redondeo,(SELECT folio FROM pedidos raiz WHERE raiz.id=p.cuenta_origen_id) AS cuenta_origen_folio,u.nombre AS levantado_por_nombre,c.nombre AS cliente_nombre,c.apellido AS cliente_apellido,p.registrado_en,p.motivo_registro,p.registro_manual FROM vw_pedidos_con_estado v JOIN pedidos p ON p.id=v.id LEFT JOIN usuarios u ON u.id=p.cajero_id LEFT JOIN clientes c ON c.id=p.cliente_id WHERE v.id = $1 AND v.sucursal_id = $2', [req.params.id, req.sucursalId]);
   if (pedido.rows.length === 0) throw new ApiError(404, 'Pedido no encontrado.');
   if (req.auth.tipo === 'cliente' && pedido.rows[0].cliente_id !== req.auth.id) {
     throw new ApiError(403, 'No puedes ver un pedido que no es tuyo.');

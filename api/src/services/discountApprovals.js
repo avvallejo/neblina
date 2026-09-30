@@ -10,8 +10,8 @@ function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-async function createDiscountApproval({ requesterId, pin, discount, sucursalId }, queryFn = query) {
-  if (!/^\d{4}$/.test(String(pin || ''))) throw new ApiError(400, 'El PIN de autorización debe tener 4 dígitos.');
+async function verifyDiscountAdminPin({ requesterId, pin, sucursalId }, queryFn = query) {
+  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) throw new ApiError(400, 'El PIN de autorización debe tener 4 dígitos.');
 
   // El llamador ejecuta esta función dentro de una transacción. El bloqueo
   // serializa intentos concurrentes del mismo usuario para que no puedan pasar
@@ -48,6 +48,13 @@ async function createDiscountApproval({ requesterId, pin, discount, sucursalId }
   // confirmado para que el bloqueo persistente no se pueda evadir.
   if (!authorizerId) return { denied: true };
 
+  return { authorizerId, denied: false };
+}
+
+async function createDiscountApproval({ requesterId, pin, discount, sucursalId }, queryFn = query) {
+  const verification = await verifyDiscountAdminPin({ requesterId, pin, sucursalId }, queryFn);
+  if (verification.denied) return verification;
+  const { authorizerId } = verification;
   const token = crypto.randomBytes(32).toString('base64url');
   await queryFn(
     `INSERT INTO aprobaciones_descuento
@@ -79,4 +86,4 @@ async function consumeDiscountApproval(client, { requesterId, token, discount })
   return result.rows[0].autorizador_id;
 }
 
-module.exports = { createDiscountApproval, consumeDiscountApproval, tokenHash, MAX_FAILED_ATTEMPTS };
+module.exports = { verifyDiscountAdminPin, createDiscountApproval, consumeDiscountApproval, tokenHash, MAX_FAILED_ATTEMPTS };

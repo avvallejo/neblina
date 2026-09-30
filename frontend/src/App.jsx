@@ -1,3 +1,4 @@
+import SessionGuard from './components/SessionGuard.jsx';
 // RAÍZ DE LA APLICACIÓN — multi-sucursal y adaptable a cualquier pantalla.
 //
 // Flujo: elegir sucursal -> Landing (cliente u PIN de personal) -> app del
@@ -62,6 +63,7 @@ export default function App() {
   const [pantallaCfg, setPantallaCfg] = useState({ lema: '', piePantalla: '', pantallaEstilo: 'pizarra' });
   const [cortesiasMes, setCortesiasMes] = useState(0); // cupo mensual de cortesías de la sede (rol cajero)
   const [mesas, setMesas] = useState(4); // mesas de la sede (destino del pedido en Caja)
+  const [descuentosPendientes,setDescuentosPendientes]=useState([]);
   const [cortesiasPendientes, setCortesiasPendientes] = useState([]); // admin: esperan autorización
   const [cancelacionesPendientes, setCancelacionesPendientes] = useState([]); // admin: tickets por cancelar
   const [recetaOverrides, setRecetaOverrides] = useState({});
@@ -156,7 +158,7 @@ export default function App() {
       let usuario = null;
       if (api.getToken()) {
         try { usuario = await api.getYo(); }
-        catch { api.setToken(null); }
+        catch (e) { if(e.status===401) api.setToken(null); else throw e; }
       }
       // El personal con sede fija siempre opera SU sede.
       if (usuario && usuario.sucursalId) {
@@ -288,6 +290,7 @@ export default function App() {
         if (fid) setPromoConfig({ activo: fid.activo, cada: fid.cada_n_pedidos, premioId: fid.producto_premio_id });
       }),
       api.getReportes().then(setReportes),
+      api.getDescuentos().then(rows=>setDescuentosPendientes(rows.filter(r=>r.estado==='pendiente'&&!r.expirada))).catch(()=>{}),
       api.getCortesias('pendiente').then(setCortesiasPendientes).catch(() => { /* conserva lo último */ }),
       api.getCancelaciones('pendiente').then(setCancelacionesPendientes).catch(() => { /* conserva lo último */ }),
       api.getPreciosPorRevisar().then(rows => { if (revisionCarga === revisionCargaPrecios.current) setPreciosPorRevisar(rows); }),
@@ -304,6 +307,7 @@ export default function App() {
   useEffect(() => {
     if (role !== 'admin') return undefined;
     return startPolling(() => Promise.allSettled([
+      api.getDescuentos().then(rows=>setDescuentosPendientes(rows.filter(r=>r.estado==='pendiente'&&!r.expirada))).catch(()=>{}),
       api.getCortesias('pendiente').then(setCortesiasPendientes),
       api.getCancelaciones('pendiente').then(setCancelacionesPendientes),
     ]), 5000);
@@ -536,7 +540,7 @@ export default function App() {
           kpis={kpis} fechaVentas={fechaVentas} setFechaVentas={setFechaVentas} ventasError={ventasError} reportes={reportes} recargarCatalogo={cargarCatalogo} recargarAdmin={recargarAdmin} addToast={addToast}
           smsActivo={smsActivo} onToggleSms={guardarSmsConfig}
           nombreNegocio={nombreNegocio} logo={logo} pantallaCfg={pantallaCfg} onSaveBranding={guardarBranding}
-          cortesiasMes={cortesiasMes} cortesiasPendientes={cortesiasPendientes} cancelacionesPendientes={cancelacionesPendientes} mesas={mesas}
+          descuentosPendientes={descuentosPendientes} cortesiasMes={cortesiasMes} cortesiasPendientes={cortesiasPendientes} cancelacionesPendientes={cancelacionesPendientes} mesas={mesas}
           onLogout={logout} turnoAbierto={turnoAbierto} promoConfig={promoConfig} setPromoConfig={guardarPromo}
           usuarios={usuarios} addUsuario={addUsuario} updateUsuario={updateUsuario} currentUser={currentUser}
           materias={materias} addMateria={addMateria} updateMateria={updateMateria} deleteMateria={deleteMateria}
@@ -546,6 +550,7 @@ export default function App() {
           recetaOverrides={recetaOverrides} setRecetaOverride={setRecetaOverride}
         />
       )}
+      {currentUser && role!=='cliente' && <SessionGuard onExit={logout} user={currentUser} onRestored={u=>{setCurrentUser(u);setRole(u.rol);addToast('Sesión confirmada. Revisa y continúa con la acción pendiente.','success');}}/>}
       <ToastHost toasts={toasts} />
     </>
   );

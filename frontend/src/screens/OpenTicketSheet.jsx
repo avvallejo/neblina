@@ -1,3 +1,5 @@
+import SplitAccountSheet from '../components/SplitAccountSheet.jsx';
+import { DiscountSheet } from '../components/Discounts.jsx';
 import { deliveryLabel } from '../lib/preparationTracking.js';
 import { getProduct } from '../lib/catalog.js';
 import { productEmoji } from '../lib/productEmojis.js';
@@ -7,6 +9,8 @@ import { Sheet, useAccionUnica, StatusChip } from '../components/ui.jsx';
 import { money } from '../lib/helpers.js';
 
 export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
+  const [splitOpen,setSplitOpen]=useState(false);
+  const [discountOpen,setDiscountOpen]=useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [correction, setCorrection] = useState(null);
@@ -46,7 +50,9 @@ export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
       <p>{correction.cantidad === 0 ? 'Retirar del ticket' : `Cambiar de ${correction.item.cantidad} a ${correction.cantidad}`}. Se ajustarán el total y las existencias.</p>
       <label>Motivo<input className="text-input" maxLength={300} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Ej. Cambió refresco por jamaica"/></label>
       {correction.cantidad < Number(correction.item.cantidad) && <label style={{display:'block',marginTop:12}}><input type="checkbox" checked={returned} onChange={e=>setReturned(e.target.checked)}/> No se entregó o fue devuelto sin consumir, en condiciones de venderse de nuevo.</label>}
-      <div className="sheet-footer"><button className="btn-secondary" onClick={()=>setCorrection(null)}>Volver</button><button className="btn-primary" disabled={reason.trim().length<3 || (correction.cantidad<Number(correction.item.cantidad) && !returned)} onClick={()=>change(correction.item,correction.cantidad,{motivo:reason,devuelto:returned})}>Confirmar corrección</button></div>
+      {editable && <button className="discount-link" disabled={busy || !!correction} onClick={()=>setDiscountOpen(true)}>{Number(data.descuento_porcentaje)>0?'Editar descuento':'+ Aplicar descuento'}</button>}
+    {discountOpen && data && <DiscountSheet pedidoId={data.id} baseAmount={Number(data.subtotal)-Number(data.cortesia_valor)} current={Number(data.descuento_porcentaje)?{porcentaje:Number(data.descuento_porcentaje)}:null} onClose={()=>setDiscountOpen(false)} onApply={async d=>{await api.aplicarDescuentoPedido(data.id,{descuentoPorcentaje:d?.porcentaje||0,autorizacionDescuento:d?.autorizacion,totalEsperado:Number(data.total)});await load();await onChanged();}}/>}
+    <div className="sheet-footer"><button className="btn-secondary" onClick={()=>setCorrection(null)}>Volver</button><button className="btn-primary" disabled={reason.trim().length<3 || (correction.cantidad<Number(correction.item.cantidad) && !returned)} onClick={()=>change(correction.item,correction.cantidad,{motivo:reason,devuelto:returned})}>Confirmar corrección</button></div>
     </fieldset>}
     {!data && !error && <p>Cargando ticket…</p>}
     {data?.items.map(item => <div className="cart-item" key={item.id}>
@@ -68,9 +74,14 @@ export default function OpenTicketSheet({ order, onClose, onAdd, onChanged }) {
         </div>}
       </div>
     </div>)}
+    {data?.cuenta_origen_folio && <p>Cuenta separada de {data.cuenta_origen_folio}.</p>}
+    {editable && <button className="btn-secondary" disabled={busy || !!correction || data.items.filter(i=>i.estado!=='cancelado').reduce((s,i)=>s+Number(i.cantidad),0)<2} onClick={()=>setSplitOpen(true)}>Separar cuenta</button>}
+    {splitOpen && data && <SplitAccountSheet order={data} onClose={()=>setSplitOpen(false)} onSeparated={async()=>{await load();await onChanged();}}/>}
     {data && <div className="summary-row total"><span>Total por cobrar</span><span>{money(data.total)}</span></div>}
     {Number(data?.descuento_porcentaje) > 0 && <p>Descuento del ticket: {data.descuento_porcentaje}%.</p>}
     {data && !editable && <p>Este ticket ya no admite cambios. Cierra el detalle y actualiza la lista.</p>}
+    {editable && <button className="discount-link" disabled={busy || !!correction} onClick={()=>setDiscountOpen(true)}>{Number(data.descuento_porcentaje)>0?'Editar descuento':'+ Aplicar descuento'}</button>}
+    {discountOpen && data && <DiscountSheet pedidoId={data.id} baseAmount={Number(data.subtotal)-Number(data.cortesia_valor)} current={Number(data.descuento_porcentaje)?{porcentaje:Number(data.descuento_porcentaje)}:null} onClose={()=>setDiscountOpen(false)} onApply={async d=>{await api.aplicarDescuentoPedido(data.id,{descuentoPorcentaje:d?.porcentaje||0,autorizacionDescuento:d?.autorizacion,totalEsperado:Number(data.total)});await load();await onChanged();}}/>}
     <div className="sheet-footer">
       <button className="btn-secondary" disabled={busy} onClick={onClose}>Cerrar</button>
       <button className="btn-primary" disabled={!editable || busy || !!correction} onClick={() => onAdd(data)}>Agregar productos</button>

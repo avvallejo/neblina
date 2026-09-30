@@ -20,9 +20,11 @@
     "test:cancelaciones:live": "node test/live-cancelaciones.js",
     "test:margen:live": "node test/live-margen-contribucion.js",
     "test:costo-pendiente:live": "node test/live-costo-pendiente.js",
+    "test:regularizacion:live": "node test/live-cost-regularization.js",
     "test:salida-interna:live": "node test/live-salida-interna.js",
     "test:cobro-duplicado:live": "node test/live-cobro-duplicado.js",
     "test:corte:live": "node test/live-cash-closing.js",
+    "test:cuentas:live": "node test/live-discounts-split.js",
     "test:turno:live": "node test/live-open-shift.js"
   },
   "dependencies": {

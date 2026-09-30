@@ -14,6 +14,7 @@ import {
 import * as api from '../api/client.js';
 import { money, unidadDisplay } from '../lib/helpers.js';
 import { Sheet, EmptyState, FormError } from '../components/ui.jsx';
+import CostRegularization from '../components/CostRegularization.jsx';
 
 const GRUPO_LABELS = {
   costo_ventas: 'Costo de ventas', gasto_operacion: 'Gastos de operación', gasto_financiero: 'Gastos financieros',
@@ -260,6 +261,7 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
           <Fila label="Utilidad neta" value={er.utilidadNeta} neta detalle={er.utilidadNeta >= 0 && er.margenNeto !== null ? `· ${er.margenNeto}% de las ventas` : (er.utilidadNeta < 0 ? '· el mes cerró con pérdida' : '')} />
         </div>
         <VentasSinCosto cv={er.costoVentas} />
+        <CostRegularization key={periodo} periodo={periodo} regularizado={er.costoVentas.regularizado} onChanged={onChanged} />
 
         <div className="section-title"><HeartHandshake size={15} /> Mayordomía de {er.nombre}</div>
         <div className="mayordomia-card">
@@ -448,7 +450,7 @@ function VentasSinCosto({ cv }) {
     { id: 'sinTerminar', d: cv.sinTerminar, titulo: 'cobrados que siguen pendientes o en preparación',
       texto: 'Ya suman en ventas, pero su costo entra hasta que barra o parrilla los marca “Terminado”. Si ya se entregaron, termínalos en la comanda para que el costo y el inventario cuadren.' },
     { id: 'sinReceta', d: cv.sinReceta, titulo: 'terminados sin costo de insumos',
-      texto: 'Productos sin receta, con insumos a $0 o conceptos libres sin insumo: su costo nunca se registrará y la utilidad sale más alta de lo real. Agrega la receta o el costo en Productos / Inventario.' },
+      texto: 'Estos productos terminaron sin costo y la utilidad está incompleta. Corrige la receta o el costo en Productos / Inventario y después usa “Revisar costos” para completar las ventas anteriores.' },
   ].filter(b => b.d && b.d.lineas > 0);
   if (!bloques.length) return null;
   return bloques.map(b => (

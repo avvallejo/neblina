@@ -16,7 +16,10 @@ async function lockOpenOrder(client, id, sucursalId) {
 }
 
 // Subtotal, cortesías y total salen siempre de las líneas (ver orderAmounts).
-const recalculate = recalcularImportes;
+async function recalculate(client,id) {
+  await client.query('UPDATE pedidos SET ajuste_redondeo=0 WHERE id=$1',[id]);
+  return recalcularImportes(client,id);
+}
 async function audit(client, auth, order, action, before, after) {
   await client.query(`INSERT INTO auditoria (usuario_id,sucursal_id,entidad,entidad_id,accion,valor_anterior,valor_nuevo,motivo)
     VALUES ($1,$2,'pedidos',$3,$4,$5::jsonb,$6::jsonb,'Edición de ticket abierto antes del cobro')`,
@@ -76,4 +79,4 @@ async function changeOrderItem(client, { id, itemId, sucursalId, auth, cantidad,
   await audit(client,auth,order,cantidad===0?'quitar_producto':'cambiar_cantidad',item,{itemId,cantidad,total:updated.total});
   return updated;
 }
-module.exports = { addOrderItems, changeOrderItem };
+module.exports = { lockOpenOrder, addOrderItems, changeOrderItem };

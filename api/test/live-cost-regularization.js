@@ -26,8 +26,8 @@ let server;
   const sale = async (p, qty = 1, overrides = {}) => {
     const order = await one(`INSERT INTO pedidos(origen,sucursal_id,subtotal,total,cobrado,metodo_pago,destino,creado_en)
       VALUES('mostrador',$1,$2,$2,true,'efectivo','llevar',$3) RETURNING id`, [s.id, qty * 50, date]);
-    const item = await one('INSERT INTO pedido_items(pedido_id,producto_id,cantidad,precio_unitario) VALUES($1,$2,$3,50) RETURNING id', [order.id, p.id, qty]);
-    if (!overrides.pending) await query("UPDATE pedido_items SET estado='terminado',terminado_en=$2 WHERE id=$1", [item.id, date]);
+    const item = await one('INSERT INTO pedido_items(pedido_id,producto_id,cantidad,precio_unitario,estado) VALUES($1,$2,$3,50,$4) RETURNING id', [order.id, p.id, qty, overrides.legacy ? 'terminado' : 'pendiente']);
+    if (!overrides.pending && !overrides.legacy) await query("UPDATE pedido_items SET estado='terminado',terminado_en=$2 WHERE id=$1", [item.id, date]);
     await query('UPDATE movimientos_inventario SET creado_en=$2 WHERE pedido_item_id=$1', [item.id, date]);
     return { ...item, pedidoId: order.id };
   };
@@ -157,12 +157,13 @@ let server;
     assert.equal(Number(expected.find(x => x.materia_prima_id === coffeeMat.id).cantidad), 0.072);
     assert.equal(Number(expected.find(x => x.materia_prima_id === milkMat.id).cantidad), 0.4);
   }
-  // Un ingrediente sin vincular aparece como pendiente, no rompe el mes.
+  // Simular una venta histórica previa a la guarda de preparación (48):
+  // un ingrediente sin vincular aparece como pendiente, no rompe el mes.
   const badDrink = await product('Café sin vincular');
   await query("UPDATE productos SET tipo='bebida',permite_tipo_cafe=true WHERE id=$1", [badDrink.id]);
   const emptyCoffee = await one("INSERT INTO opciones_cafe(codigo,etiqueta,sucursal_id) VALUES('vacio','Sin insumo',$1) RETURNING id", [s.id]);
-  const badItem = await sale(badDrink, 1, { pending: true });
-  await query("UPDATE pedido_items SET cafe_id=$2,estado='terminado' WHERE id=$1", [badItem.id, emptyCoffee.id]);
+  const badItem = await sale(badDrink, 1, { legacy: true });
+  await query("UPDATE pedido_items SET cafe_id=$2 WHERE id=$1", [badItem.id, emptyCoffee.id]);
   plan = await load(); assert.equal(plan.lineas.find(l => l.itemId === badItem.id).listo, false);
   // Guardar y revertir la transacción deja el lote completo sin cambios.
   const c = await pool.connect();

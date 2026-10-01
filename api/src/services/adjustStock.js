@@ -1,15 +1,29 @@
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
 const { ApiError } = require('../utils/asyncHandler');
 const { parseNumber, cleanText } = require('../utils/catalogValidation');
 
+const H = require('./stockAdjustmentHistory');
+
 // Debe ejecutarse dentro de una transacción: lotes, saldo e historial son atómicos.
-async function ajustarStock(client, { id, sucursalId, usuarioId, nuevaCantidad, stockEsperado, motivo, fechaCaducidad }) {
+async function ajustarStock(client, { id, sucursalId, usuarioId, nuevaCantidad, stockEsperado, motivo, fechaCaducidad, fechaContable, clientUuid }) {
   const cantidad = parseNumber(nuevaCantidad, 'la cantidad contada', { required: true, min: 0 });
   if (cantidad > 999999999.999 || Math.abs(cantidad * 1000 - Math.round(cantidad * 1000)) > 0.0001) {
     throw new ApiError(400, 'Usa una cantidad con hasta tres decimales y menor a mil millones.');
   }
   const esperado = parseNumber(stockEsperado, 'el stock mostrado', { min: 0 });
   const razon = cleanText(motivo, { max: 500, field: 'motivo' });
+  const fecha = H.fechaContable(fechaContable);
+  if (clientUuid !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientUuid)) throw new ApiError(400, 'Identificador de ajuste inválido.');
+  const ajusteId = clientUuid || randomUUID();
+  const firma = createHash('sha256').update(JSON.stringify({id,sucursalId,usuarioId,cantidad,esperado,razon,fecha,fechaCaducidad})).digest('hex');
+  await client.query("SET LOCAL lock_timeout='5s'");
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`ajuste-stock:${ajusteId}`]);
+  const { rows: [previous] } = await client.query('SELECT firma,respuesta FROM ajustes_stock WHERE id=$1',[ajusteId]);
+  if (previous) {
+    if (previous.firma !== firma) throw new ApiError(409, 'Ese identificador corresponde a otro ajuste.');
+    return previous.respuesta;
+  }
+  await H.mesesAbiertos(client,sucursalId,[fecha]);
   const { rows: [materia] } = await client.query(
     'SELECT * FROM materias_primas WHERE id = $1 AND sucursal_id = $2 FOR UPDATE', [id, sucursalId]);
   if (!materia) throw new ApiError(404, 'Materia prima no encontrada.');
@@ -17,9 +31,11 @@ async function ajustarStock(client, { id, sucursalId, usuarioId, nuevaCantidad, 
     throw new ApiError(409, 'El stock cambió mientras hacías el conteo. Cierra el ajuste y vuelve a abrirlo.');
   }
   if (materia.requiere_lote && !razon) throw new ApiError(400, 'Indica el motivo de la corrección de inventario.');
+  await client.query(`INSERT INTO ajustes_stock(id,sucursal_id,materia_prima_id,usuario_id,fecha_contable,motivo,cantidad_anterior,cantidad_contada,firma)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[ajusteId,sucursalId,id,usuarioId,fecha,razon || 'Ajuste por conteo físico',materia.stock_actual,cantidad,firma]);
   const registrar = (diferencia, loteId = null) => client.query(
-    `INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, lote_id, usuario_id, motivo)
-     VALUES ($1,'ajuste',$2,$3,$4,$5)`, [id, diferencia, loteId, usuarioId, razon || 'Ajuste por conteo físico']);
+    `INSERT INTO movimientos_inventario (materia_prima_id, tipo, cantidad, lote_id, usuario_id, motivo, ajuste_stock_id)
+     VALUES ($1,'ajuste',$2,$3,$4,$5,$6)`, [id, diferencia, loteId, usuarioId, razon || 'Ajuste por conteo físico', ajusteId]);
 
   if (materia.requiere_lote) {
     const { rows: lotes } = await client.query(
@@ -68,7 +84,9 @@ async function ajustarStock(client, { id, sucursalId, usuarioId, nuevaCantidad, 
   }
   const { rows: [updated] } = await client.query(
     'UPDATE materias_primas SET stock_actual = $1 WHERE id = $2 RETURNING *', [cantidad, id]);
-  return updated;
+  const result = { ...updated, ajusteId, fechaContable: fecha };
+  await client.query('UPDATE ajustes_stock SET respuesta=$2 WHERE id=$1',[ajusteId,result]);
+  return result;
 }
 
 module.exports = { ajustarStock };

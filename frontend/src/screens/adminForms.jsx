@@ -12,7 +12,8 @@ import {
   formatNumeroInput, unidadStep, UNIDADES, redimensionarImagen, money,
 } from '../lib/helpers.js';
 import { buildRecipe } from '../lib/recipes.js';
-import { Sheet, Stepper, FormError } from '../components/ui.jsx';
+import { AdjustmentDateField, stockToday } from '../components/StockAdjustments.jsx';
+import { Sheet, Stepper, FormError, useAccionUnica } from '../components/ui.jsx';
 
 export function PromoConfigSheet({ config, onClose, onSave }) {
   const [activo, setActivo] = useState(config.activo);
@@ -977,7 +978,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
         lecheMlPorTamano[t.id] = n;
       }
     }
-    if (!isAlimento && (!isFrappe || product.coffeeType)) {
+    if (!isAlimento && product.coffeeType) {
       const g = Number(gramaje);
       if (!Number.isFinite(g) || g <= 0) { setError('El gramaje de café por shot debe ser mayor a 0.'); return; }
     }
@@ -998,7 +999,7 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
       {!isAlimento && <div className="option-group">
         <div className="option-label">Ingredientes base (se ajustan al tamaño y opciones que elija el cliente)</div>
         <div className="spec-table">
-          {(!isFrappe || product.coffeeType) && (
+          {product.coffeeType && (
             <div className="spec-row base-ing-row">
               <span className="spec-label">☕ Café <small>(el tipo lo elige el cliente)</small></span>
               <span className="base-ing-inputs">
@@ -1034,7 +1035,12 @@ export function RecetaFormSheet({ product, receta, onClose, onSave }) {
             <span className="spec-value">1 pieza c/u</span>
           </div>
         </div>
-        <div className="field-hint" style={{ marginTop: 8 }}>El café se elige al vender y su recargo se configura en Opciones → Cafés. No lo agregues otra vez como ingrediente fijo. Los ingredientes base se descuentan del inventario con la materia prima que corresponda a lo que el cliente pida (tipo de café, tipo de leche, tamaño). El vaso y la tapa de cada tamaño son los mismos para todas las bebidas de la sucursal.</div>
+        {!errorCarga && insumos !== null && <div className="recipe-base-links">
+          <strong>Insumos que descuenta cada opción</strong>
+          {[...(product.coffeeType ? COFFEE_OPTIONS : []),...(product.leche ? MILK_OPTIONS : [])].map(o=><div key={`${o.codigo}-${o.dbId}`}><span>{o.label}</span><b>{materiaDe(o.materiaPrimaId)?.nombre || 'Sin insumo vinculado · revisar Opciones'}</b></div>)}
+          <small>Se descuentan al terminar la preparación. Para usar otra marca autorizada, abre Insumos en la comanda.</small>
+        </div>}
+        <div className="field-hint" style={{ marginTop: 8 }}>La leche y el café base se configuran en Opciones → Leches / Cafés. No los agregues otra vez como ingredientes fijos. Los ingredientes base se descuentan del inventario con la materia prima que corresponda a lo que el cliente pida (tipo de café, tipo de leche, tamaño). El vaso y la tapa de cada tamaño son los mismos para todas las bebidas de la sucursal.</div>
       </div>}
 
       <div className="option-group">
@@ -1535,26 +1541,35 @@ export function AjusteStockSheet({ materia, onClose, onSave }) {
   const [motivo, setMotivo] = useState('');
   const [fechaCaducidad, setFechaCaducidad] = useState('');
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [fechaContable, setFechaContable] = useState(stockToday);
+  const [clientUuid] = useState(() => crypto.randomUUID());
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.getOpcionesAjuste().then(r => { if (alive && r.fechaContable) setReady(true); })
+      .catch(() => { if (alive) setError('La actualización de ajustes aún no está disponible. Completa el despliegue antes de continuar.'); });
+    return () => { alive = false; };
+  }, []);
 
   const nuevaNum = Number(nuevaCantidad);
   const diferencia = Number.isFinite(nuevaNum) ? nuevaNum - Number(materia.stockActual || 0) : null;
 
-  const submit = async () => {
+  const [saving, submit] = useAccionUnica(async () => {
+    if (!ready || !fechaContable) return;
     if (!nuevaCantidad.trim() || !Number.isFinite(nuevaNum) || nuevaNum < 0) { setError('Indica la cantidad contada (0 o más).'); return; }
     if (materia.requiereLote && !motivo.trim()) { setError('Indica el motivo de la corrección.'); return; }
     setError('');
-    setSaving(true);
-    const ok = await onSave(materia, { nuevaCantidad: nuevaNum, motivo: motivo.trim() || undefined, stockEsperado: Number(materia.stockActual), fechaCaducidad: fechaCaducidad || undefined });
-    setSaving(false);
+    const ok = await onSave(materia, { nuevaCantidad: nuevaNum, motivo: motivo.trim() || undefined, stockEsperado: Number(materia.stockActual), fechaCaducidad: fechaCaducidad || undefined, fechaContable, clientUuid });
     if (ok !== false) onClose();
-  };
+  });
 
   return (
-    <Sheet title={`Ajustar stock: ${materia.nombre}`} onClose={onClose}>
+    <Sheet title={`Ajustar stock: ${materia.nombre}`} onClose={onClose} closable={!saving}>
       <div className="field-hint" style={{ marginBottom: 14 }}>
         En el sistema hay <strong>{materia.stockActual} {unidadDisplay(unidadMateria)}</strong>. Escribe lo que contaste físicamente; la diferencia queda registrada como ajuste. Para compras usa "Registrar compra" y para pérdidas usa una merma — así el historial explica cada cambio.
       </div>
+      <AdjustmentDateField value={fechaContable} onChange={setFechaContable} disabled={saving}/>
+      <p className="field-hint" style={{marginBottom:14}}>La cantidad ajusta el inventario de hoy. Si hubo compras o ventas después del conteo, considera esos movimientos antes de capturarla.</p>
       {materia.requiereLote && <div className="field-hint" style={{ marginBottom: 14 }}>
         Si reduces la cantidad, se descontará de los lotes más antiguos. Si la aumentas, se creará un lote identificado como ajuste, sin registrar un gasto de compra. Los costos del insumo se conservan.
       </div>}
@@ -1576,7 +1591,7 @@ export function AjusteStockSheet({ materia, onClose, onSave }) {
       <FormError>{error}</FormError>
       <div className="sheet-footer">
         <span />
-        <button className="btn-primary" disabled={saving} onClick={submit}>{saving ? 'Ajustando…' : 'Guardar ajuste'}</button>
+        <button className="btn-primary" disabled={saving || !ready || !fechaContable} onClick={submit}>{saving ? 'Ajustando…' : 'Guardar ajuste'}</button>
       </div>
     </Sheet>
   );

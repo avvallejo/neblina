@@ -154,6 +154,7 @@ function adaptOpcion(o, tipo) {
     label: o.etiqueta,
     delta: Number(o.delta_precio || 0),
     dbId: o.id,
+    materiaPrimaId: o.materia_prima_id || null,
     ...(o.leche_ml !== undefined && o.leche_ml !== null ? { lecheMl: Number(o.leche_ml) } : {}), // tamaños: leche predeterminada de la sede
     ...(o.es_shot_adicional ? { esShot: true } : {}),
     ...(tipo === 'extra' && o.cantidad ? { cantidad: Number(o.cantidad), unidad: o.unidad } : {}), // porción del extra (para la receta)
@@ -478,8 +479,8 @@ export function registrarSalidaTurno(body) { return request('/turnos/actual/sali
 export function registrarSalidaInterna(materiaId, { cantidad, motivo, nota }) {
   return request(`/materias-primas/${materiaId}/salida-interna`, { method: 'POST', body: { cantidad, motivo, nota } });
 }
-export function ajustarStock(materiaId, { nuevaCantidad, motivo, stockEsperado, fechaCaducidad }) {
-  return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo, stockEsperado, fechaCaducidad } });
+export function ajustarStock(materiaId, { nuevaCantidad, motivo, stockEsperado, fechaCaducidad, fechaContable, clientUuid }) {
+  return request(`/materias-primas/${materiaId}/ajustar-stock`, { method: 'POST', body: { nuevaCantidad, motivo, stockEsperado, fechaCaducidad, fechaContable, clientUuid } });
 }
 
 export async function getCategoriasProducto() {
@@ -626,3 +627,14 @@ export async function reauthenticate(pin,usuarioId) {
 }
 
 export const separarCuenta = (id,body) => request(`/pedidos/${id}/separar`,{method:'POST',body});
+
+export function getAjustesInventario(params) { return request(`/ajustes-inventario?${new URLSearchParams(Object.entries(params).filter(([,v]) => v !== ''))}`); }
+export function getAjusteInventario(id) { return request(`/ajustes-inventario/${id}`); }
+export function corregirAjusteInventario(id, body) { return request(`/ajustes-inventario/${id}`, { method:'PATCH', body }); }
+export function getOpcionesAjuste() { return request('/ajustes-inventario/opciones'); }
+
+// Insumos realmente utilizados por barra/parrilla, sin alterar la venta.
+export function getInsumosPreparacion(id) { return request(`/pedido-items/${id}/insumos`); }
+export function guardarInsumosPreparacion(id,body) { return request(`/pedido-items/${id}/insumos`,{method:'PUT',body}); }
+export function getAlternativasInsumo(id) { return request(`/materias-primas/${id}/alternativas`); }
+export function guardarAlternativasInsumo(id,ids) { return request(`/materias-primas/${id}/alternativas`,{method:'PUT',body:{ids}}); }

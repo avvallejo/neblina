@@ -2,6 +2,7 @@ const { ApiError } = require('../utils/asyncHandler');
 
 // Configuración actual que usaría este insumo al terminar una bebida.
 const vinculadaAlItem = `
+  EXISTS (SELECT 1 FROM pedido_item_sustituciones s WHERE s.pedido_item_id=pi.id AND (s.materia_prima_id=$1 OR s.alternativa_id=$1)) OR
   EXISTS (SELECT 1 FROM opciones_cafe o WHERE o.id = pi.cafe_id AND o.materia_prima_id = $1)
   OR EXISTS (SELECT 1 FROM opciones_leche o WHERE o.id = pi.leche_id AND o.materia_prima_id = $1)
   OR EXISTS (SELECT 1 FROM pedido_item_extras e JOIN opciones_extra o ON o.id = e.extra_id

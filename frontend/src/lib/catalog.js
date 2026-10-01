@@ -67,7 +67,7 @@ export const esAlimento = p => !!p && p.tipo === 'alimento';
 // Ámbito de extras que ofrece un producto: los de alimentos (tocino, queso
 // extra…) o los de bebidas (vainilla, shot…).
 export const ambitoExtras = p => (esAlimento(p) ? 'alimentos' : 'bebidas');
-export const extrasPara = p => EXTRA_OPTIONS.filter(o => (o.aplicaA || 'bebidas') === ambitoExtras(p));
+export const extrasPara = p => EXTRA_OPTIONS.filter(o => (o.aplicaA || 'bebidas') === ambitoExtras(p) && (!o.esShot || p?.coffeeType));
 export const ESTACION_USUARIO_LABELS = { barra: 'Barra (barista)', parrilla: 'Parrilla (parrillero)' };
 // Etiqueta del rol considerando las estaciones: Barista, Parrillero o ambos.
 export function rolEtiqueta(u) {

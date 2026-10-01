@@ -227,8 +227,9 @@ async function estadoResultados(queryFn, sucursalId, periodo, cfg, { incluirPrec
      FROM movimientos_inventario mi
      JOIN materias_primas mp ON mp.id = mi.materia_prima_id
      LEFT JOIN lotes l ON l.id = mi.lote_id
+     LEFT JOIN ajustes_stock ast ON ast.id = mi.ajuste_stock_id
      WHERE mp.sucursal_id = $1 AND mi.tipo IN ('consumo','merma','ajuste')
-       AND (mi.creado_en AT TIME ZONE '${TZ}')::date BETWEEN $2 AND $3`, [sucursalId, r.desde, r.hasta]);
+       AND COALESCE(ast.fecha_contable,(mi.creado_en AT TIME ZONE '${TZ}')::date) BETWEEN $2 AND $3`, [sucursalId, r.desde, r.hasta]);
   // Ventas cobradas cuyo costo todavía no entra (o nunca entrará) al costo de
   // ventas: el inventario se descuenta cuando la línea pasa a 'terminado'
   // (trigger trg_descontar_inventario). Una línea cobrada que sigue pendiente o

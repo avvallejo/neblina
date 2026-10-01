@@ -5,6 +5,7 @@ const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { requireAuth, requireRole, resolveSucursal } = require('../middleware/auth');
 const { estacionesDe, ESTACIONES_USUARIO } = require('../services/stations');
 
+const ingredientes = require('../services/preparationIngredients');
 const router = express.Router();
 router.use(requireAuth, requireRole('barista', 'admin'), resolveSucursal);
 
@@ -54,6 +55,13 @@ router.get('/cola', asyncHandler(async (req, res) => {
   );
   res.json(rows);
 }));
+
+router.get('/:id/insumos', asyncHandler(async(req,res) => res.json(await ingredientes.consultar(query, {
+  id:req.params.id,sucursalId:req.sucursalId,auth:req.auth,
+}))));
+router.put('/:id/insumos', asyncHandler(async(req,res) => res.json(await withTransaction(c=>ingredientes.guardar(c, {
+  id:req.params.id,sucursalId:req.sucursalId,auth:req.auth,body:req.body,
+})))));
 
 router.patch('/pedido/:orderId/:action', asyncHandler(async (req, res) => {
   const rows = await withTransaction(client => prepareBatch(client, {

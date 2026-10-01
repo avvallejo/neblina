@@ -72,6 +72,8 @@ services:
       - ./db/44_separar_cuentas.sql:/docker-entrypoint-initdb.d/44_separar_cuentas.sql:ro
       - ./db/45_regularizacion_costos.sql:/docker-entrypoint-initdb.d/45_regularizacion_costos.sql:ro
       - ./db/46_costos_sin_inventario.sql:/docker-entrypoint-initdb.d/46_costos_sin_inventario.sql:ro
+      - ./db/47_historial_ajustes.sql:/docker-entrypoint-initdb.d/47_historial_ajustes.sql:ro
+      - ./db/48_insumos_preparacion.sql:/docker-entrypoint-initdb.d/48_insumos_preparacion.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

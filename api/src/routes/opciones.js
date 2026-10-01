@@ -107,10 +107,15 @@ function validarDelta(v) {
   if (!Number.isFinite(n) || n < -1000 || n > 1000) throw new ApiError(400, 'El ajuste de precio debe ser un número entre -1000 y 1000.');
   return Math.round(n * 100) / 100;
 }
-async function validarMateria(id, sucursalId) {
-  if (!id) return null;
-  const r = await query('SELECT id FROM materias_primas WHERE id = $1 AND sucursal_id = $2', [id, sucursalId]);
+async function validarMateria(id, sucursalId, tipo) {
+  if (!id) {
+    if (['leches','cafes'].includes(tipo)) throw new ApiError(400,'La leche y el café necesitan un insumo del inventario.');
+    return null;
+  }
+  const r = await query('SELECT id,unidad FROM materias_primas WHERE id = $1 AND sucursal_id = $2', [id, sucursalId]);
   if (r.rows.length === 0) throw new ApiError(400, 'La materia prima no pertenece a esta sucursal.');
+  const unidades = tipo === 'leches' ? ['ml','l'] : tipo === 'cafes' ? ['g','kg'] : null;
+  if (unidades && !unidades.includes(r.rows[0].unidad)) throw new ApiError(400,`El insumo necesita unidades ${unidades.join(' o ')}.`);
   return id;
 }
 const UNIDADES = ['g', 'kg', 'ml', 'l', 'pieza'];
@@ -129,7 +134,7 @@ router.post('/:tipo', requireAuth, requireRole('admin'), resolveSucursal, asyncH
   const { etiqueta, deltaPrecio, materiaPrimaId, cantidad, unidad } = req.body;
   if (!etiqueta?.trim()) throw new ApiError(400, 'Ingresa el nombre de la opción.');
   const delta = validarDelta(deltaPrecio ?? 0);
-  const materia = await validarMateria(materiaPrimaId, req.sucursalId);
+  const materia = await validarMateria(materiaPrimaId, req.sucursalId, req.params.tipo);
   if (req.params.tipo !== 'extras' && !materia) throw new ApiError(400, 'Elige la materia prima que descuenta esta opción.');
 
   // Código único por sede a partir del nombre (es lo que usa el frontend como id).
@@ -185,7 +190,7 @@ router.patch('/:tipo/:id', requireAuth, requireRole('admin'), resolveSucursal, a
     add('etiqueta', String(req.body.etiqueta).trim());
   }
   if (req.params.tipo !== 'tamanos' && req.body.materiaPrimaId !== undefined) {
-    add('materia_prima_id', await validarMateria(req.body.materiaPrimaId, req.sucursalId));
+    add('materia_prima_id', await validarMateria(req.body.materiaPrimaId, req.sucursalId, req.params.tipo));
   }
   if (req.params.tipo === 'extras') {
     if (req.body.cantidad !== undefined) {

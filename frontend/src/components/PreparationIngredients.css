@@ -1,0 +1,32 @@
+.prep-ingredients-sheet{max-width:720px}
+.prep-intro{display:flex;gap:14px;align-items:flex-start;background:var(--bg,#f5f0e7);padding:18px;border-radius:18px;margin-bottom:22px}
+.prep-intro>svg{flex-shrink:0;color:var(--accent,#2c706b);margin-top:3px}
+.prep-intro p,.prep-notice p{margin:0;line-height:1.5}
+.prep-field{display:grid;gap:8px;font-weight:650;margin:16px 0}
+.prep-field select{width:100%;border:1px solid var(--border,#ddd8cf);border-radius:12px;background:#fff;color:inherit;font:inherit;font-weight:500;padding:13px 14px;min-height:48px}
+.prep-field select:focus{outline:2px solid var(--accent,#2c706b);outline-offset:2px}
+.prep-notice{display:flex;gap:10px;padding:14px 16px;background:#f5f4ef;border-radius:12px;margin:16px 0;font-size:14px}
+.prep-notice svg{flex-shrink:0;margin-top:2px}
+.prep-notice.warning{background:#fff5df;color:#805408}
+.prep-section-label{font-weight:700;margin:24px 0 12px}
+.prep-alternatives{border:1px solid var(--border,#e4dfd7);border-radius:16px;overflow:hidden}
+.prep-alternatives:empty{display:none}
+.prep-alternatives label{display:flex;align-items:center;gap:14px;padding:16px;cursor:pointer}
+.prep-alternatives label+label{border-top:1px solid var(--border,#e4dfd7)}
+.prep-alternatives input{width:20px;height:20px;accent-color:#b65416}
+.prep-alternatives span{font-weight:650}.prep-alternatives small{display:block;font-size:12px;font-weight:400;color:#80786b;margin-top:4px}
+.prep-footnote{font-size:13px;line-height:1.5;color:#736b5f;display:block;margin:14px 0}
+.prep-success{display:flex;gap:10px;align-items:center;padding:15px 17px;border-radius:14px;background:#eaf4ed;color:#316b44;margin:18px 0;font-weight:650}
+.prep-success svg{flex-shrink:0}
+.prep-heading{margin:4px 0 22px}.prep-heading>span{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#817768;font-weight:700}
+.prep-heading h3{margin:8px 0;font-size:23px}.prep-heading p{margin:0;color:#736b5f;line-height:1.5}
+.prep-ingredient-list{display:grid;gap:12px}
+.prep-ingredient-list article{border:1px solid var(--border,#e4dfd7);border-radius:16px;padding:17px 18px;background:#fff}
+.prep-ingredient-title{display:flex;align-items:center;gap:10px}.prep-ingredient-title svg{color:#37716c;flex-shrink:0}.prep-ingredient-title strong{flex:1;font-size:15px}.prep-ingredient-title b{white-space:nowrap;color:#ae501a;font-size:15px}
+.prep-ingredient-list .prep-field{font-size:12px;color:#746b5e;margin-bottom:0}.prep-ingredient-list .prep-field select{font-size:15px;color:#2b2115}
+.prep-ingredient-list .prep-footnote{margin-bottom:0}
+@media(max-width:540px){.prep-ingredients-sheet{max-width:100%}.prep-intro{padding:15px}.prep-ingredient-list article{padding:14px}.prep-ingredient-title{flex-wrap:wrap}.prep-ingredient-title strong{min-width:55%}.prep-ingredient-title b{margin-left:28px}.prep-heading h3{font-size:21px}}
+
+.recipe-base-links{margin-top:16px;border:1px solid var(--border,#e4dfd7);border-radius:14px;padding:15px;background:#faf8f3;font-size:13px}
+.recipe-base-links>strong{display:block;margin-bottom:10px}.recipe-base-links>div{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-top:1px solid var(--border,#e4dfd7)}
+.recipe-base-links>div>b{text-align:right;font-weight:600}.recipe-base-links>small{display:block;color:#746b5e;margin-top:10px;line-height:1.5}

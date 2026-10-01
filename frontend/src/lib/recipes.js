@@ -80,7 +80,7 @@ export function buildRecipe(product, sel, override) {
   const ov = override || {};
   const size = sel.size || '12';
   const extras = sel.extras || [];
-  const hasShotExtra = extras.includes('shot');
+  const hasShotExtra = extras.some(ex => EXTRA_OPTIONS.find(o => o.id === ex)?.esShot || ex === 'shot');
   const shots = hasShotExtra ? 2 : 1;
   const gramajeBase = ov.gramajePorShot || 18;
   const gramaje = gramajeBase * shots;
@@ -99,16 +99,16 @@ export function buildRecipe(product, sel, override) {
     if (product.coffeeType) ingredientes.push({ label: coffeeLabel, cantidad: `${gramaje} g` });
     const lecheFr = lecheMlPara(size, ov);
     if (fijosReales) {
-      if (product.leche !== false) ingredientes.push({ label: milkLabel, cantidad: `${lecheFr} ml` });
+      if (product.leche) ingredientes.push({ label: milkLabel, cantidad: `${lecheFr} ml` });
       pushFijos();
     } else {
       const hielo = { 8: 120, 12: 180, 16: 240 }[size] || 180;
-      ingredientes.push({ label: milkLabel, cantidad: `${lecheFr} ml` });
+      if (product.leche) ingredientes.push({ label: milkLabel, cantidad: `${lecheFr} ml` });
       ingredientes.push({ label: 'Hielo', cantidad: `${hielo} g` });
       ingredientes.push({ label: 'Base de frappé', cantidad: '30 ml' });
       if (product.name.includes('Oreo')) ingredientes.push({ label: 'Galleta Oreo triturada', cantidad: '2 piezas' });
     }
-    extras.forEach(ex => ingredientes.push(extraIngredient(ex)));
+    extras.filter(ex => !(product.coffeeType && (EXTRA_OPTIONS.find(o => o.id === ex)?.esShot || ex === 'shot'))).forEach(ex => ingredientes.push(extraIngredient(ex)));
     ingredientes.push({ label: `Vaso frío ${size} oz`, cantidad: '1 pieza' });
     ingredientes.push({ label: `Tapa domo ${size} oz`, cantidad: '1 pieza' });
     ingredientes.push({ label: 'Popote ancho', cantidad: '1 pieza' });
@@ -116,7 +116,7 @@ export function buildRecipe(product, sel, override) {
     if (ov.pasos && ov.pasos.length) {
       pasos = [...ov.pasos];
     } else {
-      pasos.push('Agregar café molido, leche, hielo y base al vaso licuador');
+      pasos.push('Agregar los ingredientes de la receta al vaso licuador');
       pasos.push('Licuar a velocidad alta 25-30 segundos hasta lograr textura cremosa');
       pasos.push('Servir en vaso frío');
       if (product.name.includes('Oreo')) pasos.push('Decorar con galleta Oreo triturada');
@@ -134,7 +134,7 @@ export function buildRecipe(product, sel, override) {
       ],
     };
   } else {
-    ingredientes.push({ label: coffeeLabel, cantidad: `${gramaje} g` });
+    if (product.coffeeType) ingredientes.push({ label: coffeeLabel, cantidad: `${gramaje} g` });
     if (product.leche) ingredientes.push({ label: milkLabel, cantidad: `${lecheMlPara(size, ov)} ml` });
     if (fijosReales) {
       pushFijos();
@@ -143,7 +143,7 @@ export function buildRecipe(product, sel, override) {
       if (product.name.includes('Caramel')) ingredientes.push({ label: 'Jarabe de caramelo', cantidad: '15 ml' });
       if (product.name.includes('Tonic')) { ingredientes.push({ label: 'Agua tónica', cantidad: '150 ml' }); ingredientes.push({ label: 'Hielo', cantidad: '100 g' }); }
     }
-    extras.forEach(ex => ingredientes.push(extraIngredient(ex)));
+    extras.filter(ex => !(product.coffeeType && (EXTRA_OPTIONS.find(o => o.id === ex)?.esShot || ex === 'shot'))).forEach(ex => ingredientes.push(extraIngredient(ex)));
     if (product.sizes) {
       ingredientes.push({ label: `Vaso ${product.frio ? 'frío' : 'caliente'} ${size} oz`, cantidad: '1 pieza' });
       ingredientes.push({ label: `Tapa ${size} oz`, cantidad: '1 pieza' });
@@ -155,11 +155,13 @@ export function buildRecipe(product, sel, override) {
     if (ov.pasos && ov.pasos.length) {
       pasos = [...ov.pasos];
     } else {
-      pasos.push('Moler el café justo antes de preparar');
-      pasos.push(`Tarar y dosificar ${gramaje} g de café molido`);
-      pasos.push(`Extraer espresso ${shots > 1 ? 'doble' : 'sencillo'}`);
+      if (product.coffeeType) {
+        pasos.push('Moler el café justo antes de preparar');
+        pasos.push(`Tarar y dosificar ${gramaje} g de café molido`);
+        pasos.push(`Extraer espresso ${shots > 1 ? 'doble' : 'sencillo'}`);
+      }
       if (product.leche) pasos.push('Vaporizar y texturizar la leche a 60-65°C');
-      pasos.push(product.frio ? 'Servir sobre hielo' : 'Verter sobre el café en el vaso');
+      pasos.push(product.frio ? 'Servir sobre hielo' : product.coffeeType ? 'Verter sobre el café en el vaso' : 'Mezclar los ingredientes de la receta y servir');
       if (extras.length) pasos.push('Agregar extras seleccionados');
       pasos.push('Colocar tapa y entregar a la barra de pedidos');
     }
@@ -179,5 +181,9 @@ export function buildRecipe(product, sel, override) {
     };
   }
 
+  if (product.tipo === 'bebida' && !product.coffeeType) params = { type: 'simple', fields: [
+    ...(ov.tiempoExtraccion ? [{ label: 'Tiempo de preparación', value: ov.tiempoExtraccion }] : []),
+    ...(ov.temperatura ? [{ label: 'Temperatura', value: ov.temperatura }] : []),
+  ] };
   return { ingredientes, pasos, params };
 }

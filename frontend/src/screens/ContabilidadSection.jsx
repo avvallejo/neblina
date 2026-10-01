@@ -242,7 +242,7 @@ function ResultadosTab({ periodo, version, esGeneral, sedeNombre, addToast, onCh
             <>
               {(er.costoVentas.consumoInterno || 0) !== 0 && <Fila label="de los cuales consumibles de mesa y uso interno" value={er.costoVentas.consumoInterno} sub />}
               {er.costoVentas.mermas !== 0 && <Fila label="de los cuales mermas" value={er.costoVentas.mermas} sub />}
-              {(er.costoVentas.ajustesConteo ?? er.costoVentas.ajustes) !== 0 && <Fila label="de los cuales ajustes de inventario (conteo físico)" value={er.costoVentas.ajustesConteo ?? er.costoVentas.ajustes} sub />}
+              {(er.costoVentas.ajustesConteo ?? er.costoVentas.ajustes) !== 0 && <Fila label="Ajustes por conteo físico · incluidos en el costo" value={er.costoVentas.ajustesConteo ?? er.costoVentas.ajustes} sub />}
             </>
           )}
           <Fila label="Utilidad bruta" value={er.utilidadBruta} total />

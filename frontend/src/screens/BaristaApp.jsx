@@ -1,8 +1,9 @@
+import PreparationIngredients from '../components/PreparationIngredients.jsx';
 import { groupPreparationOrders } from '../lib/preparationOrders.js';
 import CoffeeGuide from '../components/CoffeeGuide.jsx';
 import ProductImage from '../components/ProductImage.jsx';
 import React, { useRef, useState } from 'react';
-import { Coffee, Clock, ClipboardList, AlertCircle, Sparkles, ShoppingCart, Flame, MapPin, ShoppingBag, Check } from 'lucide-react';
+import { Coffee, Clock, ClipboardList, AlertCircle, Sparkles, ShoppingCart, Flame, MapPin, ShoppingBag, Check, PackageCheck } from 'lucide-react';
 import { getProduct, customizationSummary, destinoLabel, rolEtiqueta } from '../lib/catalog.js';
 import { fmtHora } from '../lib/helpers.js';
 import { AppShell } from '../components/layout.jsx';
@@ -18,7 +19,7 @@ function DestinoBadge({ ticket }) {
   return <div className={`ticket-destino ${clase}`}><Icon size={14} /> {texto}</div>;
 }
 
-function TicketCard({ ticket, now, onVerReceta, onTerminar, onMerma, busy }) {
+function TicketCard({ ticket, now, onVerReceta, onInsumos, onTerminar, onMerma, busy }) {
   const product = getProduct(ticket.productId);
   const done = ticket.status === 'terminado';
   const elapsedSec = (now - (ticket.startedAt || ticket.createdAt)) / 1000;
@@ -39,6 +40,7 @@ function TicketCard({ ticket, now, onVerReceta, onTerminar, onMerma, busy }) {
     </div>
     <div className="ticket-actions">
       <button className="btn-secondary" onClick={onVerReceta}><ClipboardList size={15} /> Receta</button>
+      <button className="btn-secondary" disabled={busy} onClick={onInsumos}><PackageCheck size={15}/> Insumos</button>
       {!done && <button className="btn-primary" disabled={busy} onClick={onTerminar}>Terminar</button>}
       {!done && <button className="icon-btn small" disabled={busy} onClick={onMerma} aria-label="Registrar merma"><AlertCircle size={16} /></button>}
     </div>
@@ -46,6 +48,7 @@ function TicketCard({ ticket, now, onVerReceta, onTerminar, onMerma, busy }) {
 }
 
 export default function BaristaApp({ brand, sedeNombre, tickets, prepareTicket, finishTicket, addMerma, onCancelar, onLogout, now, currentUser, recetaOverrides, mostrador = null }) {
+  const [ingredientTicket,setIngredientTicket]=useState(null);
   const [recipeTicket, setRecipeTicket] = useState(null);
   const [mermaTicket, setMermaTicket] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -108,7 +111,7 @@ export default function BaristaApp({ brand, sedeNombre, tickets, prepareTicket, 
             </div>
             <div className="preparation-order-items">
               {items.map(t => <TicketCard key={t.id} ticket={t} now={now} busy={busy}
-                onVerReceta={() => setRecipeTicket(t)} onTerminar={() => handleFinish(t)} onMerma={() => setMermaTicket(t)} />)}
+                onVerReceta={() => setRecipeTicket(t)} onInsumos={() => setIngredientTicket(t)} onTerminar={() => handleFinish(t)} onMerma={() => setMermaTicket(t)} />)}
             </div>
           </div>;
         })}
@@ -130,6 +133,7 @@ export default function BaristaApp({ brand, sedeNombre, tickets, prepareTicket, 
       <p>Preparados hoy. Los productos de otras estaciones conservan su propio estado.</p>
       <div className="preparation-board">{completed.map(renderOrder)}</div>
     </section>}
+    {ingredientTicket && <PreparationIngredients ticket={ingredientTicket} onClose={() => setIngredientTicket(null)}/>}
     {recipeTicket && <RecipeModal ticket={tickets.find(t => t.id === recipeTicket.id) || recipeTicket}
       override={recetaOverrides[recipeTicket.productId]} onClose={() => setRecipeTicket(null)} onFinish={() => handleFinish(recipeTicket)} />}
     {mermaTicket && <MermaModal ticket={mermaTicket} onClose={() => setMermaTicket(null)} onSave={addMerma} />}

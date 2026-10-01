@@ -45,6 +45,7 @@ async function splitAccount(client, {id,sucursalId,auth,body}) {
       SELECT $2,producto_id,tamano_id,leche_id,cafe_id,$3,precio_unitario,notas,es_regalo,es_cortesia,estado,iniciado_en,terminado_en,barista_id,terminado_por,$4,CASE WHEN $4>0 THEN entregado_en END,CASE WHEN $4>0 THEN entregado_por END,creado_en,id
       FROM pedido_items WHERE id=$1 RETURNING *`,[line.id,account.id,quantity,delivered]);
     await client.query('INSERT INTO pedido_item_extras(pedido_item_id,extra_id) SELECT $2,extra_id FROM pedido_item_extras WHERE pedido_item_id=$1',[line.id,copy.id]);
+    await client.query('INSERT INTO pedido_item_sustituciones(pedido_item_id,materia_prima_id,alternativa_id,usuario_id,actualizado_en) SELECT $2,materia_prima_id,alternativa_id,usuario_id,actualizado_en FROM pedido_item_sustituciones WHERE pedido_item_id=$1',[line.id,copy.id]);
     // Mantener el lote, costo y fecha originales. Estos asientos únicamente
     // redistribuyen la propiedad del consumo, no modifican stock ni lotes.
     const {rows:movements}=await client.query(`SELECT * FROM movimientos_inventario m WHERE pedido_item_id=$1 AND tipo='consumo'

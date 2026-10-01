@@ -1,6 +1,8 @@
+import { IngredientAlternatives } from '../components/PreparationIngredients.jsx';
 import { DiscountsConfig, DiscountsPanel } from '../components/Discounts.jsx';
 import CajaComandas from './CajaComandas.jsx';
 import ProductImage from '../components/ProductImage.jsx';
+import StockAdjustments from '../components/StockAdjustments.jsx';
 import SalesDateFilter from '../components/SalesDateFilter.jsx';
 // PANEL ADMINISTRATIVO. Barra lateral con secciones; el ADMIN GENERAL además
 // tiene el switcher de sucursal, la administración de sucursales y el
@@ -10,7 +12,7 @@ import {
   LayoutDashboard, Lock, Droplets, Package, Coffee, ClipboardList, Receipt,
   Settings, Building2, BarChart3, Plus, Pencil, UserPlus, Sparkles, AlertTriangle,
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
-  Gift, BadgeCheck, BookOpen, Ban, Search, X,
+  Gift, BadgeCheck, BookOpen, Ban, Search, X, History, ArrowRightLeft,
 } from 'lucide-react';
 import ContabilidadSection from './ContabilidadSection.jsx';
 import CorteCaja from './CorteCaja.jsx';
@@ -38,7 +40,7 @@ import { Sheet } from '../components/ui.jsx';
 // Para buscar "cafe" y que encuentre "Café": sin acentos y sin mayúsculas.
 const sinAcentos = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste, onSurtir }) {
+function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo, onDelete, onCompra, onAjuste, onSurtir, onHistorial, onAlternativas }) {
   const [filtro, setFiltro] = useState('Todas');
   const [busqueda, setBusqueda] = useState('');
   const [sinUso, setSinUso] = useState(false);
@@ -63,6 +65,8 @@ function MateriasSection({ materias, proveedores, onEdit, onAdd, onToggleActivo,
     <>
       <div className="inv-toolbar">
         <button className="btn-primary" onClick={onAdd}><Plus size={15} /> Agregar insumo</button>
+        <button type="button" className="btn-secondary" onClick={onHistorial}><History size={15}/> Historial de ajustes</button>
+        <button type="button" className="btn-secondary" onClick={onAlternativas}><ArrowRightLeft size={15}/> Insumos alternativos</button>
         <span className="inv-conteo">
           {filtrando ? `${lista.length} de ${materias.length} insumo(s)` : `${materias.length} insumo(s)`}
           {bajos > 0 && <span className="bajo-tag" style={{ marginLeft: 8 }}><AlertTriangle size={11} /> {bajos} bajo(s)</span>}
@@ -1057,6 +1061,8 @@ export default function AdminApp(props) {
   const [precioProducto, setPrecioProducto] = useState(null);
   const [compraMateria, setCompraMateria] = useState(null);
   const [ajusteMateria, setAjusteMateria] = useState(null);
+  const [alternativasInsumos,setAlternativasInsumos]=useState(false);
+  const [historialAjustes, setHistorialAjustes] = useState(false);
   const [surtirMateria, setSurtirMateria] = useState(null);
   const [, bump] = useState(0);
 
@@ -1103,7 +1109,7 @@ export default function AdminApp(props) {
     try {
       await api.ajustarStock(materia.id, ajuste);
       await recargarAdmin();
-      addToast(`Stock de ${materia.nombre} ajustado a ${ajuste.nuevaCantidad}`, 'success');
+      addToast(`Stock de ${materia.nombre} ajustado a ${ajuste.nuevaCantidad}. Fecha contable: ${ajuste.fechaContable}.`, 'success');
       return true;
     } catch (e) { addToast(e.message, 'warn'); return false; }
   };
@@ -1307,6 +1313,8 @@ export default function AdminApp(props) {
           onDelete={deleteMateria}
           onCompra={setCompraMateria}
           onAjuste={setAjusteMateria}
+          onHistorial={() => setHistorialAjustes(true)}
+          onAlternativas={() => setAlternativasInsumos(true)}
           onSurtir={setSurtirMateria}
         />
       )}
@@ -1466,6 +1474,9 @@ export default function AdminApp(props) {
           onSave={registrarCompra}
         />
       )}
+
+      {alternativasInsumos && <IngredientAlternatives key={sedeActivaId} materias={materias} onClose={()=>setAlternativasInsumos(false)}/>}
+      {historialAjustes && <StockAdjustments key={sedeActivaId} materias={materias} onClose={() => setHistorialAjustes(false)} onChanged={recargarAdmin}/>}
 
       {ajusteMateria && (
         <AjusteStockSheet

@@ -60,10 +60,11 @@ async function calcularPrecioItem({ productoId, tamanoId, lecheId, cafeId, extra
   for (const extraId of extraIds) {
     // eslint-disable-next-line no-await-in-loop
     const r = sucursalId
-      ? await queryFn('SELECT delta_precio, etiqueta, aplica_a FROM opciones_extra WHERE id = $1 AND activo AND sucursal_id = $2', [extraId, sucursalId])
-      : await queryFn('SELECT delta_precio, etiqueta, aplica_a FROM opciones_extra WHERE id = $1 AND activo', [extraId]);
+      ? await queryFn('SELECT delta_precio, etiqueta, aplica_a, es_shot_adicional FROM opciones_extra WHERE id = $1 AND activo AND sucursal_id = $2', [extraId, sucursalId])
+      : await queryFn('SELECT delta_precio, etiqueta, aplica_a, es_shot_adicional FROM opciones_extra WHERE id = $1 AND activo', [extraId]);
     if (r.rows.length === 0) throw new ApiError(400, `Extra inválido: ${extraId}`);
     if ((r.rows[0].aplica_a || 'bebidas') !== ambito) throw new ApiError(400, `El extra "${r.rows[0].etiqueta}" no aplica a "${producto.nombre}".`);
+    if (r.rows[0].es_shot_adicional && !cafeId) throw new ApiError(400, 'El shot adicional necesita una bebida con café base configurado.');
     total += Number(r.rows[0].delta_precio);
   }
   if (!Number.isFinite(total) || total < 0) throw new ApiError(400, 'La combinación seleccionada produce un precio inválido.');

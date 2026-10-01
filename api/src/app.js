@@ -30,6 +30,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/sucursales', require('./routes/sucursales'));
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/proveedores', require('./routes/proveedores'));
+app.use('/api/ajustes-inventario', require('./routes/ajustesInventario'));
 app.use('/api/materias-primas', require('./routes/materias'));
 app.use('/api/productos', require('./routes/productos'));
 app.use('/api/opciones', require('./routes/opciones'));

@@ -72,9 +72,11 @@ router.put('/:productoId', requireRole('admin'), asyncHandler(async (req, res) =
       const duplicado = await client.query(
         `SELECT 1 FROM productos p JOIN opciones_cafe oc ON oc.sucursal_id = p.sucursal_id
          WHERE p.id=$1 AND p.sucursal_id=$2 AND p.permite_tipo_cafe
-           AND oc.materia_prima_id = ANY($3::uuid[]) LIMIT 1`,
+           AND oc.materia_prima_id = ANY($3::uuid[])
+         UNION ALL SELECT 1 FROM productos p JOIN opciones_leche ol ON ol.sucursal_id=p.sucursal_id
+         WHERE p.id=$1 AND p.sucursal_id=$2 AND p.permite_leche AND ol.materia_prima_id=ANY($3::uuid[]) LIMIT 1`,
         [req.params.productoId, req.sucursalId, insumosFijos.map(i => i.materiaPrimaId)]);
-      if (duplicado.rows.length) throw new ApiError(400, 'El café se toma de los ingredientes base según la elección de la venta. Quítalo de los ingredientes fijos para no descontarlo dos veces.');
+      if (duplicado.rows.length) throw new ApiError(400, 'El café y la leche se toman de los ingredientes base según la elección de la venta. Quítalos de los ingredientes fijos para no descontarlos dos veces.');
     }
     const { rows } = await client.query(
       `UPDATE recetas SET

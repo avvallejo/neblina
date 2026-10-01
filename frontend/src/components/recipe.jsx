@@ -37,7 +37,7 @@ export function RecipeModal({ ticket, product: selectedProduct, onClose, onFinis
     ...recipe.params.fields.map(f => ({ Icon: iconForParam(f.label), label: f.label, value: f.value })),
     ...(lecheIng ? [{ Icon: Milk, label: 'Leche', value: lecheIng.cantidad }] : []),
     ...(showTextura ? [{ Icon: Sparkles, label: 'Textura de la leche', value: texturaLeche }] : []),
-    ...(product?.tipo === 'bebida' ? [{ Icon: GaugeIcon, label: 'Presión', value: '9 Bar' }] : []),
+    ...(product?.tipo === 'bebida' && product?.coffeeType ? [{ Icon: GaugeIcon, label: 'Presión', value: '9 Bar' }] : []),
   ];
 
   return (

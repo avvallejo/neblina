@@ -1,0 +1,51 @@
+.stock-history-sheet .sheet-body { display:grid; gap:18px; }
+.stock-adjustment-intro,.stock-adjustment-hint { font-size:12px; line-height:1.6; color:var(--ink-soft); }
+.stock-history-filters { display:grid; grid-template-columns:1fr 1fr 1.3fr; gap:12px; padding:16px; background:var(--surface-2); border-radius:14px; border:1px solid var(--line); }
+.stock-history-filters label,.stock-adjustment-field { display:grid; gap:8px; font-size:12px; font-weight:700; }
+.stock-history-filters input,.stock-history-filters select,.stock-adjustment-field textarea,.stock-accounting-date input { width:100%; min-width:0; min-height:44px; border:1px solid var(--line); border-radius:11px; background:var(--surface); padding:10px 12px; font:inherit; color:var(--ink); }
+.stock-history-filters input:focus,.stock-history-filters select:focus,.stock-adjustment-field textarea:focus,.stock-accounting-date input:focus { outline:2px solid var(--brand); outline-offset:2px; }
+.stock-history-count { display:flex; justify-content:space-between; gap:12px; font-size:12px; }
+.stock-history-count span { color:var(--ink-soft); }
+.stock-history-empty { padding:26px 10px; text-align:center; color:var(--ink-soft); font-size:13px; }
+.stock-adjustment-list { display:grid; gap:12px; }
+.stock-adjustment-list article { border:1px solid var(--line); border-radius:15px; padding:18px; display:grid; gap:12px; }
+.stock-adjustment-row-heading { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+.stock-adjustment-row-heading strong { font-size:14px; }
+.stock-adjustment-row-heading > span { font-family:var(--font-mono); font-size:10px; color:var(--ink-faint); }
+.stock-adjustment-list p { color:var(--ink-soft); font-size:12px; line-height:1.6; }
+.stock-adjustment-row-values { display:flex; flex-wrap:wrap; gap:12px; font-family:var(--font-mono); font-size:15px; font-weight:700; }
+.stock-adjustment-row-values > span + span { color:var(--brand-deep); }
+.stock-adjustment-row-footer { display:flex; gap:16px; justify-content:space-between; align-items:center; border-top:1px solid var(--line); padding-top:12px; }
+.stock-adjustment-row-footer > div { display:grid; gap:8px; }
+.stock-adjustment-row-footer small { color:var(--ink-faint); font-size:10px; line-height:1.5; }
+.stock-adjustment-row-footer button { font-size:12px; min-height:42px; white-space:nowrap; }
+.stock-date-badge { display:inline-flex; align-items:center; gap:6px; width:fit-content; padding:6px 9px; background:var(--brand-soft); border-radius:7px; color:var(--brand-deep); font-size:11px; font-weight:700; }
+.stock-back { justify-self:start; font-size:12px; }
+.stock-adjustment-heading > span { font:11px var(--font-mono); color:var(--accent); }
+.stock-adjustment-heading h4 { margin:10px 0; font-family:var(--font-display); font-size:24px; }
+.stock-adjustment-heading p { color:var(--ink-soft); font-size:12px; line-height:1.6; }
+.stock-adjustment-totals { display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+.stock-adjustment-totals > div { display:grid; align-content:start; gap:9px; padding:18px; }
+.stock-adjustment-totals > div + div { border-left:1px solid var(--line); background:var(--brand-soft); }
+.stock-adjustment-totals span,.stock-adjustment-totals small { font-size:11px; color:var(--ink-soft); line-height:1.6; }
+.stock-adjustment-totals strong { font-family:var(--font-mono); font-size:22px; }
+.stock-adjustment-notice,.stock-adjustment-success { display:flex; gap:12px; align-items:flex-start; padding:16px; border-radius:12px; background:var(--surface-2); font-size:12px; line-height:1.65; color:var(--ink-soft); }
+.stock-adjustment-notice svg,.stock-adjustment-success svg { flex-shrink:0; color:var(--accent); margin-top:2px; }
+.stock-adjustment-success strong { color:var(--ink); font-size:14px; }
+.stock-accounting-date { display:grid; gap:10px; padding:16px; margin:4px 0 16px; border:1px solid var(--line); border-radius:14px; background:var(--surface-2); }
+.stock-history-sheet .stock-accounting-date { margin-bottom:0; }
+.stock-accounting-date label { display:grid; gap:10px; font-size:13px; font-weight:700; }
+.stock-accounting-date label > span { display:flex; gap:8px; align-items:center; }
+.stock-accounting-date label svg { color:var(--brand); }
+.stock-accounting-date input { font-size:15px; color-scheme:light; }
+.stock-date-shortcuts { display:flex; flex-wrap:wrap; gap:8px; }
+.stock-date-shortcuts button { padding:8px 12px; border:1px solid var(--line); border-radius:20px; background:var(--surface); color:var(--accent); font:700 11px var(--font-body); cursor:pointer; }
+.stock-accounting-date p { color:var(--ink-soft); font-size:11px; line-height:1.6; }
+.stock-adjustment-field textarea { min-height:80px; resize:vertical; font-weight:500; line-height:1.6; }
+.stock-corrections { border:1px solid var(--line); border-radius:12px; padding:16px; font-size:12px; line-height:1.6; }
+.stock-corrections summary { display:flex; gap:8px; align-items:center; cursor:pointer; font-weight:700; }
+.stock-corrections > div { padding-top:14px; }
+.stock-corrections small { color:var(--ink-soft); }
+.stock-history-pages { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:12px; }
+@media(min-width:760px) { .sheet.stock-history-sheet { width:min(820px,calc(100vw - 48px)); max-width:820px; max-height:92dvh; padding:24px; } }
+@media(max-width:560px) { .stock-history-filters { grid-template-columns:1fr 1fr; padding:12px; } .stock-history-filters label:last-child { grid-column:1/-1; } .stock-adjustment-row-heading { flex-wrap:wrap; gap:7px; } .stock-adjustment-row-footer { flex-wrap:wrap; } .stock-adjustment-row-footer button { width:100%; } .stock-history-count { flex-wrap:wrap; } .stock-adjustment-totals > div { padding:14px; } .stock-adjustment-totals strong { font-size:18px; } }

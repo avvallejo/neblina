@@ -15,6 +15,7 @@ const { eliminarMateria } = require('../services/deleteMateria');
 const { ajustarStock } = require('../services/adjustStock');
 const { registrarSalidaInterna } = require('../services/internalUse');
 
+const ingredientes = require('../services/preparationIngredients');
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
 
@@ -44,6 +45,11 @@ router.get('/', asyncHandler(async (req, res) => {
   );
   res.json(rows);
 }));
+
+router.get('/:id/alternativas', asyncHandler(async(req,res) => res.json(await ingredientes.alternativas(query,req.sucursalId,req.params.id))));
+router.put('/:id/alternativas', asyncHandler(async(req,res) => res.json(await withTransaction(c=>ingredientes.guardarAlternativas(c, {
+  sucursalId:req.sucursalId,usuarioId:req.auth.id,id:req.params.id,ids:req.body.ids,
+})))));
 
 router.get('/stock-bajo', asyncHandler(async (req, res) => {
   const { rows } = await query('SELECT * FROM vw_stock_bajo WHERE sucursal_id = $1', [req.sucursalId]);

@@ -339,7 +339,8 @@ export function terminarItem(id) { return request(`/pedido-items/${id}/terminar`
    MERMAS E INVENTARIO
    ============================================================ */
 
-export function crearMerma(body) { return request('/mermas', { method: 'POST', body }); }
+export function getMermas({ desde = '', hasta = '' } = {}) { return request(`/mermas?${new URLSearchParams({ desde, hasta })}`); }
+export function crearMerma(body) { return request('/mermas', { method: 'POST', body: { ...body, unidad: normalizeUnidadMedida(body.unidad) } }); }
 export function getMaterias() { return request('/materias-primas'); }
 
 /* ============================================================

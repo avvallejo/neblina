@@ -1,0 +1,5 @@
+.mermas-form { max-width: 760px; padding: 20px; border: 1px solid var(--line, #ddd); border-radius: 16px; margin-bottom: 28px; }
+.mermas-form h2 { margin-top: 0; }
+.mermas-field { display: flex; flex-direction: column; gap: 6px; margin: 16px 0; font-weight: 600; }
+.mermas-field .text-input { width: 100%; box-sizing: border-box; font-weight: 400; }
+.mermas-form .field-hint { line-height: 1.6; margin: 18px 0; }

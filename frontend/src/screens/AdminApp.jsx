@@ -14,6 +14,7 @@ import {
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
   Gift, BadgeCheck, BookOpen, Ban, Search, X, History, ArrowRightLeft,
 } from 'lucide-react';
+import MermasSection from './MermasSection.jsx';
 import ContabilidadSection from './ContabilidadSection.jsx';
 import CorteCaja from './CorteCaja.jsx';
 import * as api from '../api/client.js';
@@ -1154,6 +1155,7 @@ export default function AdminApp(props) {
     { id: 'productos', label: 'Productos', Icon: Coffee, badge: (preciosPorRevisar || []).length },
     { id: 'opciones', label: 'Opciones', Icon: SlidersHorizontal },
     { id: 'materias', label: 'Inventario', Icon: Droplets, badge: materiasBajas.length },
+    { id: 'mermas', label: 'Mermas', Icon: AlertTriangle },
     { id: 'recetas', label: 'Recetas', Icon: ClipboardList },
     { id: 'costos', label: 'Costos', Icon: DollarSign },
     { id: 'corte', label: 'Corte de caja', Icon: Wallet },
@@ -1173,6 +1175,7 @@ export default function AdminApp(props) {
   const TITLES = {
     dashboard: ['Panel administrativo', sedeNombre ? `Resumen de ${sedeNombre}` : 'Resumen del día'],
     usuarios: ['Personal y accesos', `${usuarios.length} cuenta(s)`],
+    mermas: ['Mermas', 'Registro de pérdidas e historial por fecha'],
     materias: ['Inventario', `${materias.length} insumo(s)`],
     proveedores: ['Proveedores', `${proveedores.length} proveedor(es)`],
     productos: ['Catálogo de productos', `${productosAdmin.length} producto(s)`],
@@ -1318,6 +1321,8 @@ export default function AdminApp(props) {
           onSurtir={setSurtirMateria}
         />
       )}
+
+      {screen === 'mermas' && <MermasSection key={sedeActivaId} materias={materias} onChanged={recargarAdmin} />}
 
       {screen === 'proveedores' && (
         <ProveedoresSection

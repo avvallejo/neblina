@@ -26,7 +26,7 @@ SELECT l.fecha::text,
   COALESCE(SUM(p.cortesia_unidades) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show), 0)::int AS unidades_cortesia,
   COALESCE(SUM(p.cortesia_valor) FILTER (WHERE p.cobrado AND NOT p.cancelado AND NOT p.no_show), 0) AS valor_cortesias,
   (SELECT COUNT(*) FROM mermas m WHERE m.sucursal_id = $1
-    AND m.creado_en >= l.inicio AND m.creado_en < l.fin) AS mermas
+    AND m.fecha_contable = l.fecha) AS mermas
 FROM limites l
 LEFT JOIN pedidos p ON p.sucursal_id = $1 AND p.creado_en >= l.inicio AND p.creado_en < l.fin
 GROUP BY l.fecha, l.inicio, l.fin`;

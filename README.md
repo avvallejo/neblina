@@ -508,3 +508,26 @@ Para marcas equivalentes, el administrador configura **Admin → Inventario → 
 En cada comanda de barra/parrilla, **Insumos** muestra las cantidades totales. Antes de terminar se puede elegir una alternativa autorizada y guardar; la selección no modifica existencias ni el precio. Al terminar se descuenta exclusivamente el insumo elegido, con sus propios lotes y costos. Aplica a todas las unidades de esa línea. Después de terminar, esa vista muestra el consumo registrado y ya no permite reemplazarlo. Las devoluciones y la separación de cuentas conservan la selección y los movimientos correspondientes.
 
 Esta actualización no altera consumos históricos ni recalcula existencias antiguas. El saldo real de producción debe contrastarse con los movimientos y el conteo físico; no se debe volver a descontar en bloque lo ya regularizado. Prueba integral en base desechable con nombre `codex_insumos_*`: `node test/live-preparation-ingredients.js` (incluye leche/café base, porciones, conversión, alternativas, costos, devoluciones, permisos, separación y concurrencia).
+
+### Mermas independientes y captura de meses anteriores
+
+En **Administración → Mermas** se registran pérdidas sin comanda: selecciona el
+insumo, cantidad en su unidad, fecha de la pérdida, motivo y observación.
+El historial permite filtrar por fecha y muestra hasta 200 registros de la sede.
+Solo Administración puede capturar fechas pasadas; no se aceptan fechas futuras
+ni meses cerrados (reabrirlos primero en Contabilidad).
+
+La fecha de captura se conserva en `creado_en`; `fecha_contable` determina el día
+del resumen y el mes del costo de ventas. El descuento ocurre sobre el inventario
+y los lotes disponibles al capturar, con el costo que resulte de esos lotes; no
+reconstruye existencias ni costos históricos. Si una pérdida ya fue descontada
+mediante un ajuste o consumo, conciliarla antes de capturar otra salida.
+
+Aplicar **`db/49_mermas_fecha.sql`** mediante `db/migrar.sh` antes de actualizar la
+API y el frontend. La migración conserva las mermas previas y les asigna su fecha
+local original; no modifica sus movimientos ni cantidades.
+
+Prueba integral: `node api/test/live-mermas.js`, exclusivamente con
+`NODE_ENV=development` y `PGDATABASE=codex_mermas_*`, en una base desechable con
+el esquema vigente. Verifica stock, lotes, costo mensual, resumen diario,
+permisos, filtros y rechazo de meses cerrados.

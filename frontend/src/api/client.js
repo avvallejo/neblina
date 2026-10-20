@@ -358,6 +358,23 @@ const matCatId = {};
 const prodCatId = {};
 
 export function getUsuarios() { return request('/usuarios'); }
+
+/* ============================================================
+   JORNADAS — horas del personal que se paga por hora (migración 50)
+   "Turno" es el turno de CAJA; la jornada es lo que trabaja una persona.
+   ============================================================ */
+export const getJornadaActual = () => request('/jornadas/actual');
+export const getMisHoras = fecha => request(`/jornadas/mias${fecha ? `?fecha=${fecha}` : ''}`);
+export const iniciarJornada = () => request('/jornadas/iniciar', { method: 'POST' });
+export const jornadaSalir = () => request('/jornadas/pausa/salir', { method: 'POST' });       // empieza una pausa (sin goce de sueldo)
+export const jornadaRegresar = () => request('/jornadas/pausa/regresar', { method: 'POST' }); // termina la pausa
+export const terminarJornada = () => request('/jornadas/terminar', { method: 'POST' });
+export const getHorasSemana = fecha => request(`/jornadas/admin/semana${fecha ? `?fecha=${fecha}` : ''}`);
+export const getPagosHoras = () => request('/jornadas/admin/pagos');
+export const pagarHoras = body => request('/jornadas/admin/pagos', { method: 'POST', body });
+export const crearJornadaManual = body => request('/jornadas/admin/manual', { method: 'POST', body });
+export const corregirJornada = (id, body) => request(`/jornadas/admin/${id}`, { method: 'PATCH', body });
+export const anularJornada = (id, motivo) => request(`/jornadas/admin/${id}/anular`, { method: 'POST', body: { motivo } });
 export function crearUsuario(body) { return request('/usuarios', { method: 'POST', body }); }
 export function actualizarUsuario(id, body) { return request(`/usuarios/${id}`, { method: 'PATCH', body }); }
 

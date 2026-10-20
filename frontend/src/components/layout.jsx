@@ -1,7 +1,8 @@
 // Armazón adaptable: barra lateral (escritorio), riel (tablet) y navegación
 // inferior (móvil), con topbar por pantalla.
-import React from 'react';
+import React, { useState } from 'react';
 import { Coffee, LogOut, Building2 } from 'lucide-react';
+import { useJornada, JornadaBar, SalidaSheet, MisHorasSheet } from './Jornada.jsx';
 
 // items: [{ id, label, Icon, badge? }]
 export function AppShell({
@@ -13,6 +14,12 @@ export function AppShell({
   onLogout,
   title, subtitle, topRight, children, wide,
 }) {
+  // Quien se paga por hora: reloj de su jornada arriba y, al cerrar sesión, "¿Terminaste tu turno?".
+  const conHoras = !!user?.pagaPorHora;
+  const jornada = useJornada(conHoras);
+  const [saliendo, setSaliendo] = useState(false);
+  const [verHoras, setVerHoras] = useState(false);
+  const cerrarSesion = () => { if (conHoras) setSaliendo(true); else if (window.confirm('¿Cerrar la sesión?')) onLogout(); };
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -56,7 +63,7 @@ export function AppShell({
             </div>
           )}
           {onLogout && (
-            <button className="sidebar-logout" onClick={onLogout}><LogOut size={16} /><span>Salir</span></button>
+            <button className="sidebar-logout" onClick={conHoras ? () => setSaliendo(true) : onLogout}><LogOut size={16} /><span>Cerrar sesión</span></button>
           )}
         </div>
       </aside>
@@ -70,12 +77,13 @@ export function AppShell({
             </div>
           </div>
           <div className="topbar-right">
+            {conHoras && <JornadaBar jornada={jornada} onVerHoras={() => setVerHoras(true)} />}
             {topRight}
             {/* En móvil no hay barra lateral: el botón de salir vive aquí. */}
             {onLogout && (
               <button className="topbar-logout" aria-label="Cerrar sesión"
-                      onClick={() => { if (window.confirm('¿Cerrar la sesión?')) onLogout(); }}>
-                <LogOut size={16} /><span>Salir</span>
+                      onClick={cerrarSesion}>
+                <LogOut size={16} /><span>Cerrar sesión</span>
               </button>
             )}
           </div>
@@ -96,6 +104,9 @@ export function AppShell({
           ))}
         </div>
       </nav>
+
+      {saliendo && <SalidaSheet jornada={jornada} onLogout={onLogout} onClose={() => setSaliendo(false)} />}
+      {verHoras && <MisHorasSheet onClose={() => setVerHoras(false)} />}
     </div>
   );
 }

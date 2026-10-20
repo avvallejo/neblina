@@ -75,6 +75,7 @@ services:
       - ./db/47_historial_ajustes.sql:/docker-entrypoint-initdb.d/47_historial_ajustes.sql:ro
       - ./db/48_insumos_preparacion.sql:/docker-entrypoint-initdb.d/48_insumos_preparacion.sql:ro
       - ./db/49_mermas_fecha.sql:/docker-entrypoint-initdb.d/49_mermas_fecha.sql:ro
+      - ./db/50_jornadas_horas.sql:/docker-entrypoint-initdb.d/50_jornadas_horas.sql:ro
     networks:
       - cafeteria-net
     healthcheck:

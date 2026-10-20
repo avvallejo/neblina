@@ -369,3 +369,16 @@ No se reclasifican automáticamente productos existentes.
 cantidad y empleado real (incluidas las parciales de varias personas).
 «Preparados por empleado» excluye Caja, que no requiere preparación. Las
 correcciones y devoluciones ajustan el saldo entregado conservando la auditoría.
+
+### Jornadas y pago por hora (50)
+
+Aplicar `50_jornadas_horas.sql` con `bash db/migrar.sh` antes de actualizar la API.
+Agrega `usuarios.paga_por_hora` y las tablas `tarifas_hora` (historial de tarifa),
+`jornadas` (entrada, salida, tarifa vigente al trabajarla, minutos y monto), `jornada_pausas`
+(Salir / Regresar) y `pagos_horas` (cada pago, ligado a su egreso).
+
+Una sola jornada abierta por usuario (índice único parcial). Una jornada pagada siempre tiene
+`pago_id` y viceversa. El pago es un egreso normal en *Sueldos y salarios* sin turno de caja,
+por lo que no entra al corte. Al anular ese egreso, un disparador libera las horas pagadas.
+Los usuarios existentes quedan con `paga_por_hora = false`: nada cambia hasta que la
+administración lo active por persona.

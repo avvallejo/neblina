@@ -383,6 +383,38 @@ gastos fijos "Sueldo del dueño" y "Pago de préstamo" ligados a su cuenta
 (montos ajustables con `SUELDO`, `PRESTAMO`, `DIEZMO`, `OFRENDA`, `INICIO`).
 Migración `db/32_contabilidad.sql`.
 
+## Horas de quien se paga por hora (jornadas)
+
+Para el personal pagado por hora (por ejemplo la cajera). Aplica la migración
+`50_jornadas_horas.sql` con `bash db/migrar.sh` **antes** de actualizar la API.
+
+**Para la administración**
+- En *Personal*, edita a la persona y elige **Se paga por hora** con su tarifa. Si cambias la tarifa,
+  solo aplica a las horas nuevas: cada jornada guarda la tarifa con la que se trabajó.
+- *Horas y pagos* muestra la semana (**domingo a sábado**), una tarjeta por persona, lo que está
+  por revisar y quién está trabajando ahora.
+- **Registrar pago** crea un egreso en la cuenta *Sueldos y salarios* que sale de **Caja (efectivo)**.
+  No pasa por el corte de caja, así que se puede pagar en cualquier semana del mes. El sueldo por hora
+  no se captura como gasto fijo (no se cuenta dos veces).
+- Para anular un pago, anula su egreso en Contabilidad: las horas vuelven a quedar por pagar.
+- Corregir, aprobar o anular una jornada pide siempre un motivo y queda en auditoría.
+
+**Para la persona**
+- Al entrar con su PIN se registra la entrada sola. Arriba ve su tiempo y lo que lleva ganado.
+- **Salir** y **Regresar** pausan el reloj por cualquier motivo; el tiempo de pausa no se paga.
+- Al cerrar sesión se pregunta *¿Terminaste tu turno?*: **Sí** cierra la jornada y muestra cuánto
+  cobraría hoy y en la semana; **No** solo cierra la sesión y la jornada sigue contando.
+- *Mis horas* (tocando el reloj) muestra la semana y lo acumulado antes del pago.
+
+**Reglas de cálculo**
+- Minutos completos (se descartan los segundos en entrada, salida y pausas).
+- Monto = minutos pagables × tarifa ÷ 60, redondeado al centavo; pagable = total − pausas.
+- Una jornada de más de 12 horas, o con una pausa de más de 2 horas, pasa a *Por revisar*:
+  el sistema nunca inventa la hora de salida y no se puede pagar hasta que la administración la corrija o apruebe.
+- "Turno" sigue siendo el turno de caja; la jornada (`jornadas`) es el horario de trabajo de una persona.
+
+Pruebas: `npm test` (cálculo, sin base) y `npm run test:jornadas:live` (contra una base **desechable**).
+
 ## Frontend adaptable
 
 `frontend/` es una app React (Vite) con un solo código para cualquier

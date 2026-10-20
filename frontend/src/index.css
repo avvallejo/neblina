@@ -1020,3 +1020,52 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing:
 .prepared-by { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
 .cash-delivery-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 @media (max-width: 850px) { .cash-command-item { flex-wrap: wrap; } .cash-delivery-actions { width: 100%; } }
+
+/* ============================================================
+   JORNADAS — reloj de horas (personal que se paga por hora)
+   ============================================================ */
+.jornada-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.jornada-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 12px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-size: 12.5px; font-weight: 800; border: 0; cursor: pointer; white-space: nowrap; }
+.jornada-chip.static { background: var(--bg-deep); color: var(--ink-soft); cursor: default; }
+.jornada-chip strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.jornada-tiempo { font-variant-numeric: tabular-nums; }
+.jornada-bar.en-pausa .jornada-chip { background: var(--warn-soft); color: var(--warn); }
+.jornada-accion { min-height: 36px; padding: 6px 16px; border-radius: 999px; border: 1.5px solid var(--brand); background: var(--surface); color: var(--brand); font-size: 12.5px; font-weight: 800; }
+.jornada-accion:disabled { opacity: .45; }
+.jornada-bar.en-pausa .jornada-accion { background: var(--brand); color: #FFF6EC; }
+.jornada-aviso { font-size: 12px; font-weight: 700; color: var(--ok); flex-basis: 100%; text-align: right; }
+.jornada-aviso.error { color: var(--danger); }
+.jornada-resumen-grande { text-align: center; padding: 14px 10px 16px; border-radius: 16px; background: var(--ok-soft); margin-bottom: 14px; }
+.jornada-resumen-grande.compacto { padding: 10px; }
+.jornada-resumen-etiqueta { font-size: 12.5px; font-weight: 800; color: var(--ink-soft); }
+.jornada-resumen-monto { font-size: 34px; font-weight: 900; color: var(--ok); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.jornada-resumen-detalle { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
+.jornada-semana { border: 1px solid var(--line); border-radius: 14px; padding: 4px 12px; margin-bottom: 12px; background: var(--surface); }
+.jornada-semana-fila { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 13px; }
+.jornada-semana-fila + .jornada-semana-fila { border-top: 1px solid var(--line); }
+.jornada-semana-fila.principal { font-weight: 800; }
+.jornada-semana-fila.principal strong { font-size: 17px; }
+.jornada-semana-fila.aviso { color: var(--warn); font-weight: 700; }
+.jornada-botones { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.mis-horas-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.mis-horas-semana { font-weight: 800; font-size: 13.5px; text-align: center; }
+.mis-horas-lista { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.mis-horas-dia { border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; background: var(--surface); }
+.mis-horas-dia-cab { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; padding-bottom: 4px; }
+.mis-horas-fila { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px dashed var(--line); }
+.mis-horas-horario { font-size: 13px; font-weight: 700; }
+.mis-horas-detalle { font-size: 12px; color: var(--ink-soft); }
+.mis-horas-detalle.aviso { color: var(--warn); font-weight: 700; }
+.mis-horas-monto { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.jornada-estado { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--bg-deep); color: var(--ink-soft); }
+.jornada-estado.abierta { background: var(--ok-soft); color: var(--ok); }
+.jornada-estado.por_revisar { background: var(--warn-soft); color: var(--warn); }
+.jornada-estado.pagada { background: var(--ok-soft); color: var(--ok); }
+.jornada-estado.anulada { background: var(--danger-soft); color: var(--danger); }
+@media (max-width: 759px) { .jornada-chip strong { display: none; } .jornada-bar:not(.en-pausa) .jornada-chip strong { display: inline; } }
+.horas-bloque { margin-bottom: 16px; }
+.horas-bloque.aviso { border: 1px solid var(--warn-soft); background: var(--warn-soft); border-radius: 14px; padding: 10px 12px; }
+.horas-persona { border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin-bottom: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.horas-persona-cab { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.horas-persona-monto { text-align: right; display: flex; flex-direction: column; font-size: 17px; }
+.horas-acciones { display: inline-flex; gap: 6px; margin-top: 4px; }

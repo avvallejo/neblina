@@ -61,6 +61,9 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
   const [sucursalId, setSucursalId] = useState(user && user.sucursal_id ? user.sucursal_id : (sedeActivaId || ''));
   // Comanda que ve (barista / mostrador): barra, parrilla o ambas.
   const [estaciones, setEstaciones] = useState(user && Array.isArray(user.estaciones) && user.estaciones.length ? user.estaciones : (isNew ? ['barra'] : ['barra', 'parrilla']));
+  // Pago por hora (jornadas): la persona registra su entrada con su PIN y se le paga cada semana.
+  const [pagaPorHora, setPagaPorHora] = useState(!!(user && user.paga_por_hora));
+  const [tarifa, setTarifa] = useState(user && user.tarifa_hora ? String(user.tarifa_hora) : '');
   const [error, setError] = useState('');
   const prepara = rol === 'barista' || rol === 'mostrador';
 
@@ -69,8 +72,11 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
     if (isNew && !/^\d{4}$/.test(pin)) { setError('El PIN debe tener exactamente 4 dígitos.'); return; }
     if (!isNew && pin && !/^\d{4}$/.test(pin)) { setError('Si cambias el PIN, debe tener 4 dígitos.'); return; }
     if (prepara && estaciones.length === 0) { setError('Elige al menos una estación: barra, parrilla o ambas.'); return; }
+    if (pagaPorHora && !(Number(tarifa) > 0)) { setError('Indica cuánto se le paga por hora.'); return; }
     setError('');
     const payload = { id: isNew ? undefined : user.id, nombre: nombre.trim(), rol, pin: pin || undefined };
+    if (pagaPorHora) { payload.pagaPorHora = true; payload.tarifaHora = Number(tarifa); }
+    else if (!isNew && user.paga_por_hora) payload.pagaPorHora = false;
     if (prepara) payload.estaciones = ['barra', 'parrilla'].filter(e => estaciones.includes(e));
     if (esGeneral) {
       if (general && rol === 'admin') payload.esAdminGeneral = true;
@@ -136,6 +142,19 @@ export function UsuarioFormSheet({ user, onClose, onSave, esGeneral, sedes, sede
       <div className="option-group">
         <div className="option-label">PIN de acceso (4 dígitos){!isNew ? ' — déjalo vacío para no cambiarlo' : ''}</div>
         <input className="text-input" inputMode="numeric" maxLength={4} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="Ej. 5831" />
+      </div>
+      <div className="option-group">
+        <div className="option-label">Pago por hora</div>
+        <div className="option-row">
+          <button type="button" aria-pressed={!pagaPorHora} className={`option-chip ${!pagaPorHora ? 'selected' : ''}`} onClick={() => setPagaPorHora(false)}>No</button>
+          <button type="button" aria-pressed={pagaPorHora} className={`option-chip ${pagaPorHora ? 'selected' : ''}`} onClick={() => setPagaPorHora(true)}>Se paga por hora</button>
+        </div>
+        {pagaPorHora && (
+          <>
+            <input className="text-input" style={{ marginTop: 8 }} inputMode="decimal" value={tarifa} onChange={e => setTarifa(e.target.value.replace(/[^\d.]/g, '').slice(0, 8))} placeholder="Tarifa por hora, ej. 50" />
+            <div className="field-hint">Al entrar con su PIN se registra su entrada y verá cuánto lleva ganado. Si cambias la tarifa, solo aplica a las horas nuevas. El pago se registra en Horas y pagos.</div>
+          </>
+        )}
       </div>
       <FormError>{error}</FormError>
       <div className="sheet-footer">

@@ -116,6 +116,11 @@ router.patch('/egresos/:id', asyncHandler(async (req, res) => {
     const actual = await A.obtenerEgreso(q, req.sucursalId, req.params.id);
     if (actual.anulado) throw new ApiError(409, 'Un egreso anulado no se edita.');
     await A.exigirMesAbierto(q, req.sucursalId, actual.fecha);
+    // El egreso que paga horas trabajadas debe seguir cuadrando con sus jornadas: si hay un error, se anula y se vuelve a pagar.
+    const { rows: [pagoHoras] } = await q('SELECT 1 FROM pagos_horas WHERE egreso_id = $1 AND NOT anulado', [actual.id]);
+    if (pagoHoras && (req.body.monto !== undefined || req.body.cuentaContableId !== undefined || req.body.pagado === false)) {
+      throw new ApiError(409, 'Este egreso es el pago de horas trabajadas. Si hay un error, anúlalo y vuelve a pagar desde Horas y pagos.');
+    }
     const sets = []; const values = []; let i = 1;
     const add = (col, v) => { sets.push(`${col} = $${i++}`); values.push(v); };
     if (req.body.fecha !== undefined) { const f = A.validarFecha(req.body.fecha); await A.exigirMesAbierto(q, req.sucursalId, f); add('fecha', f); }

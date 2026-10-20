@@ -171,7 +171,7 @@ export default function App() {
       if (activa) await cargarCatalogo();
 
       if (usuario && usuario.tipo === 'staff') {
-        setCurrentUser({ id: usuario.id, nombre: usuario.nombre, rol: usuario.rol, sucursalId: usuario.sucursalId, estaciones: usuario.estaciones || ['barra', 'parrilla'] });
+        setCurrentUser({ id: usuario.id, nombre: usuario.nombre, rol: usuario.rol, sucursalId: usuario.sucursalId, estaciones: usuario.estaciones || ['barra', 'parrilla'], pagaPorHora: !!usuario.pagaPorHora });
         setRole(usuario.rol);
       } else if (api.getTokenCliente() && activa) {
         // Cliente con sesión guardada: directo a su app (ella misma
@@ -355,13 +355,13 @@ export default function App() {
   };
 
   const addUsuario = async u => {
-    try { await api.crearUsuario({ nombre: u.nombre, rol: u.rol, pin: u.pin, esAdminGeneral: u.esAdminGeneral, estaciones: u.estaciones }); await recargarAdmin(); addToast('Usuario agregado', 'success'); }
+    try { await api.crearUsuario({ nombre: u.nombre, rol: u.rol, pin: u.pin, esAdminGeneral: u.esAdminGeneral, estaciones: u.estaciones, pagaPorHora: u.pagaPorHora, tarifaHora: u.tarifaHora }); await recargarAdmin(); addToast('Usuario agregado', 'success'); }
     catch (e) { addToast(e.message, 'warn'); }
   };
   const updateUsuario = async (id, patch) => {
     try {
       const body = {};
-      ['nombre', 'rol', 'activo', 'estaciones'].forEach(k => { if (patch[k] !== undefined) body[k] = patch[k]; });
+      ['nombre', 'rol', 'activo', 'estaciones', 'pagaPorHora', 'tarifaHora'].forEach(k => { if (patch[k] !== undefined) body[k] = patch[k]; });
       if (patch.pin) body.pin = patch.pin;
       if (patch.sucursalId !== undefined) body.sucursalId = patch.sucursalId;
       await api.actualizarUsuario(id, body); await recargarAdmin();

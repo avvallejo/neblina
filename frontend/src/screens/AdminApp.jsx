@@ -12,10 +12,11 @@ import {
   LayoutDashboard, Lock, Droplets, Package, Coffee, ClipboardList, Receipt,
   Settings, Building2, BarChart3, Plus, Pencil, UserPlus, Sparkles, AlertTriangle,
   TrendingDown, Wallet, AlertCircle, MapPin, Monitor, DollarSign, Percent, Scale, SlidersHorizontal,
-  Gift, BadgeCheck, BookOpen, Ban, Search, X, History, ArrowRightLeft,
+  Gift, BadgeCheck, BookOpen, Ban, Search, X, History, ArrowRightLeft, Clock,
 } from 'lucide-react';
 import MermasSection from './MermasSection.jsx';
 import ContabilidadSection from './ContabilidadSection.jsx';
+import HorasPagosSection from './HorasPagosSection.jsx';
 import CorteCaja from './CorteCaja.jsx';
 import * as api from '../api/client.js';
 import { CATEGORIES, PRODUCTS, ROLE_LABELS, PAY_METHOD_LABELS, CORTESIA_ESTADO_LABELS, CANCELACION_ESTADO_LABELS, ESTACION_LABELS, TIPO_PRODUCTO_LABELS, rolEtiqueta, MATERIA_CATEGORIAS, getProduct, precioDesde } from '../lib/catalog.js';
@@ -1162,6 +1163,7 @@ export default function AdminApp(props) {
     { id: 'contabilidad', label: 'Contabilidad', Icon: BookOpen },
     { id: 'proveedores', label: 'Proveedores', Icon: Package },
     { id: 'usuarios', label: 'Personal', Icon: Lock },
+    { id: 'horas', label: 'Horas y pagos', Icon: Clock },
     { id: 'reportes', label: 'Reportes', Icon: Receipt },
     { id: 'comandas', label: 'Comandas / personal', Icon: ClipboardList },
     { id: 'autorizaciones', label: 'Autorizaciones', Icon: BadgeCheck, badge: descuentosPendientes.length + (cortesiasPendientes || []).length + (cancelacionesPendientes || []).length },
@@ -1175,6 +1177,7 @@ export default function AdminApp(props) {
   const TITLES = {
     dashboard: ['Panel administrativo', sedeNombre ? `Resumen de ${sedeNombre}` : 'Resumen del día'],
     usuarios: ['Personal y accesos', `${usuarios.length} cuenta(s)`],
+    horas: ['Horas y pagos', 'Jornadas del personal que se paga por hora, de domingo a sábado'],
     mermas: ['Mermas', 'Registro de pérdidas e historial por fecha'],
     materias: ['Inventario', `${materias.length} insumo(s)`],
     proveedores: ['Proveedores', `${proveedores.length} proveedor(es)`],
@@ -1208,7 +1211,7 @@ export default function AdminApp(props) {
       onLogout={onLogout}
       title={title}
       subtitle={subtitle}
-      wide={['corte', 'comandas', 'reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones', 'contabilidad'].includes(screen)}
+      wide={['corte', 'comandas', 'reportes', 'comparativo', 'materias', 'productos', 'proveedores', 'costos', 'opciones', 'autorizaciones', 'contabilidad', 'horas'].includes(screen)}
       topRight={esGeneral ? <span className="sede-pill"><Building2 size={13} /> {sedeNombre || 'Elige sucursal'}</span> : null}
     >
       {screen === 'comandas' && <CajaComandas key={sedeActivaId || sedeNombre} initialHistory readOnly />}
@@ -1292,6 +1295,7 @@ export default function AdminApp(props) {
                     <div className="list-row-sub">
                       {rolEtiqueta(u)}
                       {u.sucursal_id && sedes ? ` • ${(sedes.find(s => s.id === u.sucursal_id) || {}).nombre || 'Sucursal'}` : ''}
+                      {u.paga_por_hora && ` • Se paga por hora${u.tarifa_hora ? ` (${money(u.tarifa_hora)})` : ''}`}
                       {!u.activo && ' • Inactivo'}
                     </div>
                   </div>
@@ -1348,6 +1352,7 @@ export default function AdminApp(props) {
       {screen === 'opciones' && <OpcionesSection addToast={addToast} onOpcionesChanged={recargarCatalogo} />}
       {screen === 'costos' && <CostosSection addToast={addToast} sedeNombre={sedeNombre} onCostosChanged={recargarAdmin} />}
       {screen === 'corte' && <CorteCaja key={sedeActivaId} addToast={addToast} currentUser={currentUser} onChanged={async()=>{await recargarCatalogo();await recargarAdmin();}}/>}
+      {screen === 'horas' && <HorasPagosSection addToast={addToast} />}
       {screen === 'contabilidad' && <ContabilidadSection addToast={addToast} esGeneral={esGeneral} sedeNombre={sedeNombre} proveedores={proveedores} />}
       {screen === 'reportes' && <ReportesSection data={reportes} />}
       {screen === 'autorizaciones' && <AutorizacionesSection descuentos={descuentosPendientes} cortesias={cortesiasPendientes} cancelaciones={cancelacionesPendientes} addToast={addToast} onResolved={recargarAdmin} />}

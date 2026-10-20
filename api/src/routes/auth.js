@@ -2,11 +2,12 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const { query } = require('../db');
+const { query, withTransaction } = require('../db');
 const { asyncHandler, ApiError } = require('../utils/asyncHandler');
 const { JWT_SECRET, UUID_RE, requireAuth } = require('../middleware/auth');
 const { enviarSms } = require('../services/sms');
 const { createUnverifiedCustomer } = require('../services/customerRegistration');
+const { iniciarJornada } = require('../services/jornadas');
 
 const router = express.Router();
 
@@ -32,6 +33,7 @@ router.get('/yo', requireAuth, asyncHandler(async (req, res) => {
     rol: req.auth.rol || null,
     sucursalId: req.auth.sucursalId ?? null,
     estaciones: req.auth.estaciones || null,
+    pagaPorHora: !!req.auth.pagaPorHora,
   });
 }));
 
@@ -56,7 +58,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const sucursalId = await validarSucursal(req.body.sucursalId);
 
   const { rows } = await query(
-    `SELECT id, nombre, rol, pin_hash, token_version, sucursal_id, estaciones FROM usuarios
+    `SELECT id, nombre, rol, pin_hash, token_version, sucursal_id, estaciones, paga_por_hora FROM usuarios
      WHERE activo = true AND (sucursal_id = $1 OR (rol = 'admin' AND sucursal_id IS NULL))`,
     [sucursalId]
   );
@@ -77,9 +79,17 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     JWT_SECRET,
     { expiresIn: '12h' }
   );
+  // Quien se paga por hora registra su ENTRADA al iniciar sesión (si ya tiene una jornada abierta, la
+  // conserva). Un fallo aquí nunca debe impedir entrar a trabajar: la administración lo corrige después.
+  let jornada = null;
+  if (encontrado.paga_por_hora) {
+    try { jornada = (await withTransaction(c => iniciarJornada(c, { usuarioId: encontrado.id })))?.jornada || null; }
+    catch (err) { console.error('No se pudo registrar la entrada de la jornada', err.message); }
+  }
   res.json({
     token,
-    usuario: { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, sucursalId: encontrado.sucursal_id || null, estaciones: encontrado.estaciones || ['barra', 'parrilla'] },
+    usuario: { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, sucursalId: encontrado.sucursal_id || null, estaciones: encontrado.estaciones || ['barra', 'parrilla'], pagaPorHora: !!encontrado.paga_por_hora },
+    jornada,
   });
 }));
 

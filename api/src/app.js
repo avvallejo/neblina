@@ -50,6 +50,7 @@ app.use('/api/descuentos', require('./routes/descuentos'));
 app.use('/api/cortesias', require('./routes/cortesias'));
 app.use('/api/cancelaciones', require('./routes/cancelaciones'));
 app.use('/api/contabilidad', require('./routes/contabilidad'));
+app.use('/api/jornadas', require('./routes/jornadas'));
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 app.use(errorHandler);

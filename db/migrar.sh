@@ -87,6 +87,7 @@ ya_tiene() {
     50) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'jornadas'" ;;
     51) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'bitacora_acciones'" ;;
     52) q "SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'tipo_movimiento' AND e.enumlabel = 'correccion_captura'" ;;
+    53) q "SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'tipo_movimiento' AND e.enumlabel = 'existencia_inicial'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

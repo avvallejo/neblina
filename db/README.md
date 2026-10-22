@@ -392,3 +392,7 @@ anulación en `lotes` y de reversión en `ajustes_stock`. Re-ejecutable.
 ## 52 — Descartar el costo de un ajuste por error de captura
 
 Aplicar `52_correccion_captura.sql` con `bash db/migrar.sh` antes de actualizar la API. Agrega el movimiento `correccion_captura`. Re-ejecutable.
+
+## 53 — Existencias iniciales con rastro
+
+Aplicar `53_existencia_inicial.sql` con `bash db/migrar.sh` antes de actualizar la API. Agrega el movimiento `existencia_inicial` (entrada que no es costo de ventas). Re-ejecutable.

@@ -30,7 +30,7 @@ let server;
   const antes0 = await ajustesCosto();
 
   // Caso real: insumo creado con 400 kg "de existencias iniciales" a mano (sin movimiento) y luego una compra de 2.2 kg.
-  const choco = await ok('POST', '/materias-primas', { nombre: `Chocomilk ${tag}`, categoriaId: cat.id, unidad: 'kg', stockActual: 400, costoUnitario: 142.7273 });
+  const choco = await ok('POST', '/materias-primas', { nombre: `Chocomilk ${tag}`, categoriaId: cat.id, unidad: 'kg', stockActual: 400, costoUnitario: 142.7273, motivo: 'QA existencias iniciales', confirmarCantidad: 400 });
   await ok('POST', `/materias-primas/${choco.id}/lotes`, { cantidadComprada: 2.2, unidad: 'kg', costoTotal: 314 });
   let m = await one('SELECT stock_actual, costo_unitario FROM materias_primas WHERE id=$1', [choco.id]);
   assert.equal(Number(m.stock_actual), 402.2);

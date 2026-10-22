@@ -448,6 +448,10 @@ no hubo pérdida. El botón *Quitar $… del estado de resultados* agrega un mov
 las existencias y los lotes no cambian y nada se borra. Pide motivo, respeta meses cerrados y queda en la bitácora.
 Requiere `db/52_correccion_captura.sql`. Prueba: `node api/test/live-descartar-ajuste.js` (base `codex_*`).
 
+### Existencias capturadas a mano (v2.20.0)
+
+Dar de alta un insumo con "existencias que ya tengo" o editar "Stock actual" a mano ya no es silencioso: el servidor exige un **motivo** y deja un movimiento con usuario y fecha (`existencia_inicial` al crear, `correccion_captura` al editar; ninguno es costo de ventas). Si la cantidad es grande (≥ 50 kg/l, 50 000 g/ml, 500 piezas) hay que escribirla otra vez (`confirmarCantidad`) o la API responde 409. Un conteo físico real sigue siendo "Ajustar stock". Requiere `db/53_existencia_inicial.sql`. Prueba: `node api/test/live-existencia-inicial.js` (base `codex_*`).
+
 Aplicar **`db/51_bitacora_y_anulacion_compras.sql`** con `bash db/migrar.sh` **antes** de actualizar la API.
 Pruebas: `npm test` (sanitizado y registro, sin base) y `node api/test/live-anular-compra.js` con
 `NODE_ENV=development` y `PGDATABASE=codex_*` (base desechable): reproduce el alta de 200 kg, el ajuste que

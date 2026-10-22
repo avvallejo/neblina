@@ -125,7 +125,7 @@ async function listarCambios(queryFn, sucursalId, params = {}, { incluirGlobal =
   return { total, filas: rows };
 }
 
-const TIPOS_MOVIMIENTO = ['compra', 'consumo', 'merma', 'ajuste', 'anulacion_compra', 'correccion_captura'];
+const TIPOS_MOVIMIENTO = ['compra', 'consumo', 'merma', 'ajuste', 'anulacion_compra', 'correccion_captura', 'existencia_inicial'];
 // Entradas y salidas de existencias. El consumo de ventas (una fila por insumo
 // de cada vaso) queda fuera salvo que se pida: ahogaría lo importante.
 async function listarMovimientos(queryFn, sucursalId, params = {}) {

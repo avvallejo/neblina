@@ -244,6 +244,10 @@ export function ProveedorFormSheet({ proveedor, onClose, onSave }) {
 }
 
 // Presentación de compra ("bolsa de 900 g", "caja de 12 l", "paquete de 50 piezas").
+// Mismos umbrales que el servidor (api/src/services/manualStock.js).
+const UMBRAL_CANTIDAD_GRANDE = { kg: 50, l: 50, g: 50000, ml: 50000, pieza: 500 };
+const cantidadGrande = (u, n) => Math.abs(Number(n)) >= (UMBRAL_CANTIDAD_GRANDE[u] ?? Infinity);
+
 function PresentacionEditor({ unidadControl, value, onChange }) {
   const activa = !!value;
   const unidades = unidadesCompatibles(unidadControl);
@@ -348,6 +352,8 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
   const [unidadCompra, setUnidadCompra] = useState(item ? normalizeUnidad(item.unidad || 'kg') : 'kg');
   const [totalPagado, setTotalPagado] = useState('');
   const [pagoCompra, setPagoCompra] = useState({ cuentaDineroId: null, pagado: true }); // Contabilidad: con qué se pagó la primera compra
+  const [motivoStock, setMotivoStock] = useState('');
+  const [confirmaCantidad, setConfirmaCantidad] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -436,6 +442,19 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
       // manual y un valor sin cambios podría sobrescribir movimientos recientes.
       if (isNew || (!item.requiereLote && (stockNum !== Number(item.stockActual) || unidad !== normalizeUnidad(item.unidad)))) payload.stockActual = stockNum;
       payload.costoUnitario = costoNum;
+      // Existencias a mano: siempre con motivo (queda en el movimiento) y, si son
+      // muy grandes, con la cantidad escrita otra vez.
+      if (payload.stockActual !== undefined) {
+        const cambio = isNew ? stockNum : stockNum - Number(item.stockActual || 0);
+        if (Math.abs(cambio) >= 0.0005) {
+          if (!motivoStock.trim()) { setError(isNew ? 'Indica de dónde salen estas existencias (por ejemplo: "conteo físico de hoy").' : 'Indica por qué cambias el stock a mano. Si contaste físicamente, usa "Ajustar stock".'); return; }
+          payload.motivo = motivoStock.trim();
+          if (cantidadGrande(unidad, cambio)) {
+            if (parseFloat(confirmaCantidad) !== Math.abs(cambio)) { setError(`Son ${Math.abs(cambio)} ${unidadDisplay(unidad)}: es mucho. Escribe ${Math.abs(cambio)} en "Confirmar cantidad" para continuar.`); return; }
+            payload.confirmarCantidad = Math.abs(cambio);
+          }
+        } else if (!isNew) delete payload.stockActual;
+      }
     }
     setError('');
     setSaving(true);
@@ -531,6 +550,18 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
                 <div className="option-label">Costo estimado ($ por {unidadDisplay(unidad)})</div>
                 <input className="text-input" type="number" min="0" step="0.01" value={costoUnitario} onChange={e => setCostoUnitario(e.target.value)} placeholder="0.00" />
               </div>
+              {parseFloat(stockActual) > 0 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="option-label">¿De dónde salen / por qué cambian estas existencias?</div>
+                  <input className="text-input" type="text" maxLength={300} value={motivoStock} onChange={e => setMotivoStock(e.target.value)} placeholder="Ej. conteo físico del 22 de octubre" />
+                  {cantidadGrande(unidad, parseFloat(stockActual)) && (
+                    <>
+                      <div className="option-label" style={{ marginTop: 8 }}>Confirmar cantidad (cantidad muy grande)</div>
+                      <input className="text-input" type="number" step="any" value={confirmaCantidad} onChange={e => setConfirmaCantidad(e.target.value)} placeholder="Escríbela otra vez" />
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -548,6 +579,18 @@ export function MateriaFormSheet({ item, proveedores, onClose, onSave }) {
             <input className="text-input" type="number" step="0.01" value={costoUnitario} onChange={e => setCostoUnitario(e.target.value)} placeholder="0.00" />
             <div className="field-hint">Se actualiza solo con cada compra registrada; edítalo únicamente para corregir.</div>
           </div>
+              {!item?.requiereLote && Number.isFinite(parseFloat(stockActual)) && Math.abs(parseFloat(stockActual) - Number(item?.stockActual || 0)) >= 0.0005 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="option-label">¿De dónde salen / por qué cambian estas existencias?</div>
+                  <input className="text-input" type="text" maxLength={300} value={motivoStock} onChange={e => setMotivoStock(e.target.value)} placeholder="Ej. conteo físico del 22 de octubre" />
+                  {cantidadGrande(unidad, parseFloat(stockActual) - Number(item?.stockActual || 0)) && (
+                    <>
+                      <div className="option-label" style={{ marginTop: 8 }}>Confirmar cantidad (cantidad muy grande)</div>
+                      <input className="text-input" type="number" step="any" value={confirmaCantidad} onChange={e => setConfirmaCantidad(e.target.value)} placeholder="Escríbela otra vez" />
+                    </>
+                  )}
+                </div>
+              )}
         </div>
       )}
       {proveedores.length > 0 && (
@@ -651,7 +694,7 @@ export function ProductoFormSheet({ producto, onClose, onSave, materias = [] }) 
           const existencia = nvExistencia === '' ? 0 : parseFloat(nvExistencia);
           const costo = nvCosto === '' ? 0 : parseFloat(nvCosto);
           if (!Number.isFinite(existencia) || existencia < 0 || !Number.isFinite(costo) || costo < 0) { setError('Existencia inicial y costo por pieza deben ser números positivos o cero.'); return; }
-          reventa = { nuevo: { nombre: name.trim(), stockActual: existencia, costoUnitario: costo, stockMinimo: minimo ?? 0, stockMaximo: maximo }, cantidad: piezas };
+          reventa = { nuevo: { nombre: name.trim(), stockActual: existencia, costoUnitario: costo, stockMinimo: minimo ?? 0, stockMaximo: maximo, motivo: existencia > 0 ? `Existencias iniciales al crear el producto de reventa "${name.trim()}"` : undefined, confirmarCantidad: existencia > 0 && cantidadGrande('pieza', existencia) ? existencia : undefined }, cantidad: piezas };
         } else {
           reventa = { insumoId: insumoSel, cantidad: piezas, niveles: { stockMinimo: minimo, stockMaximo: maximo } };
         }

@@ -408,6 +408,7 @@ export function crearMateria(m) {
     body: {
       nombre: m.nombre, categoriasUso: m.categoriasUso, categoriaId: matCatId[m.categoria], unidad: normalizeUnidadMedida(m.unidad),
       stockActual: m.stockActual, stockMinimo: m.stockMinimo, stockMaximo: m.stockMaximo, costoUnitario: m.costoUnitario,
+      motivo: m.motivo, confirmarCantidad: m.confirmarCantidad,
       proveedorId: m.proveedorId || null,
       presentacion: presentacionToApi(m.presentacion),
       // Primera compra: { paquetes | cantidadComprada + unidad, costoTotal } → el servidor deriva el costo unitario.
@@ -422,6 +423,8 @@ export function actualizarMateria(id, m) {
   if (m.categoria !== undefined) body.categoriaId = matCatId[m.categoria];
   if (m.unidad !== undefined) body.unidad = normalizeUnidadMedida(m.unidad);
   if (m.stockActual !== undefined) body.stockActual = m.stockActual;
+  if (m.motivo !== undefined) body.motivo = m.motivo;
+  if (m.confirmarCantidad !== undefined) body.confirmarCantidad = m.confirmarCantidad;
   if (m.stockMinimo !== undefined) body.stockMinimo = m.stockMinimo;
   if (m.stockMaximo !== undefined) body.stockMaximo = m.stockMaximo;
   if (m.presentacion !== undefined) body.presentacion = presentacionToApi(m.presentacion);

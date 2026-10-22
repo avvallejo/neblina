@@ -61,4 +61,4 @@ export function resumenCambio(anterior, nuevo) {
 }
 
 export function esRechazada(estadoHttp) { return Number(estadoHttp) >= 400; }
-export const ETIQUETAS_TIPO_MOVIMIENTO = { compra: 'Compra', consumo: 'Consumo', merma: 'Merma', ajuste: 'Ajuste', anulacion_compra: 'Compra anulada', correccion_captura: 'Corrección de captura' };
+export const ETIQUETAS_TIPO_MOVIMIENTO = { compra: 'Compra', consumo: 'Consumo', merma: 'Merma', ajuste: 'Ajuste', anulacion_compra: 'Compra anulada', correccion_captura: 'Corrección de captura', existencia_inicial: 'Existencia inicial' };

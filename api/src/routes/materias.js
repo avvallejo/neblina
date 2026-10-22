@@ -17,6 +17,7 @@ const { registrarSalidaInterna } = require('../services/internalUse');
 
 const ingredientes = require('../services/preparationIngredients');
 const { registrarCambio } = require('../services/bitacora');
+const M = require('../services/manualStock');
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
 
@@ -123,6 +124,14 @@ router.post('/', asyncHandler(async (req, res) => {
   // (lo normal: el costo unitario se deriva de lo que pagaste) o, si ya tienes
   // existencias sin ticket, `stockActual` + `costoUnitario` a mano.
   const primeraCompra = req.body.primeraCompra && typeof req.body.primeraCompra === 'object' ? req.body.primeraCompra : null;
+  // Existencias "a mano": sin ticket, así que exigen motivo (queda en el movimiento)
+  // y, si son muy grandes, que se confirme la cantidad.
+  const stockManual = primeraCompra ? 0 : (parseNumber(stockActual, 'stock actual', { min: 0 }) ?? 0);
+  let motivoInicial = null;
+  if (stockManual > 0) {
+    motivoInicial = M.motivoObligatorio(req.body.motivo, 'de dónde salen las existencias iniciales (por ejemplo: "conteo físico del 22 de octubre")');
+    M.exigirConfirmacion(unidadNormalizada, stockManual, req.body.confirmarCantidad);
+  }
   const creado = await withTransaction(async client => {
     const presentacion = await normalizarPresentacion(client, req.body.presentacion, unidadNormalizada);
     const { rows } = await client.query(
@@ -133,7 +142,7 @@ router.post('/', asyncHandler(async (req, res) => {
         nombreLimpio,
         categoriaId,
         unidadNormalizada,
-        primeraCompra ? 0 : (parseNumber(stockActual, 'stock actual', { min: 0 }) ?? 0),
+        stockManual,
         parseNumber(stockMinimo, 'stock mínimo', { min: 0 }) ?? 0,
         primeraCompra ? 0 : (parseNumber(costoUnitario, 'costo unitario', { min: 0 }) ?? 0),
         proveedorId || null,
@@ -155,8 +164,9 @@ router.post('/', asyncHandler(async (req, res) => {
         nuevo: { nombre: actual.nombre, unidad: actual.unidad, stock_actual: actual.stock_actual, costo_unitario: actual.costo_unitario, conPrimeraCompra: true } });
       return actual;
     }
+    if (stockManual > 0) await M.registrarMovimientoManual(client, { materiaId: rows[0].id, tipo: 'existencia_inicial', cantidad: stockManual, usuarioId: req.auth.id, motivo: motivoInicial });
     await registrarCambio(client, { sucursalId: req.sucursalId, usuarioId: req.auth.id, entidad: 'materias_primas', entidadId: rows[0].id, accion: 'crear',
-      nuevo: { nombre: rows[0].nombre, unidad: rows[0].unidad, stock_actual: rows[0].stock_actual, costo_unitario: rows[0].costo_unitario } });
+      nuevo: { nombre: rows[0].nombre, unidad: rows[0].unidad, stock_actual: rows[0].stock_actual, costo_unitario: rows[0].costo_unitario }, motivo: motivoInicial });
     return rows[0];
   });
   res.status(201).json(creado);
@@ -171,6 +181,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     const sets = [];
     const values = [];
     let nuevaUnidad = current.unidad;
+    let deltaStockManual = null;
+    let motivoStockManual = null;
     const addValue = (column, value) => {
       values.push(value);
       sets.push(`${column} = $${values.length}`);
@@ -247,7 +259,15 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       if (current.requiere_lote) {
         throw new ApiError(400, 'Este insumo se controla por lote: ajusta el stock registrando compra/lote o merma.');
       }
-      addValue('stock_actual', parseNumber(req.body.stockActual, 'stock actual', { min: 0 }));
+      const nuevoStock = parseNumber(req.body.stockActual, 'stock actual', { min: 0 });
+      const factorU = await assertConvertible(client, current.unidad, nuevaUnidad);
+      const delta = Math.round((nuevoStock - Number(current.stock_actual) * factorU) * 1000) / 1000;
+      if (Math.abs(delta) >= 0.0005) {
+        motivoStockManual = M.motivoObligatorio(req.body.motivo, 'por qué cambias el stock a mano (si contaste físicamente usa "Ajustar stock")');
+        M.exigirConfirmacion(nuevaUnidad, delta, req.body.confirmarCantidad);
+        deltaStockManual = delta;
+      }
+      addValue('stock_actual', nuevoStock);
     } else if (nuevaUnidad !== current.unidad && !current.requiere_lote) {
       addConversion('stock_actual', 'stock_actual');
     }
@@ -267,6 +287,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     );
 
     const motivoCambio = cleanText(req.body.motivo, { field: 'motivo', max: 300 });
+    if (deltaStockManual !== null) await M.registrarMovimientoManual(client, { materiaId: current.id, tipo: 'correccion_captura', cantidad: deltaStockManual, usuarioId: req.auth.id, motivo: motivoStockManual });
     if (nuevaUnidad !== current.unidad && current.requiere_lote) {
       await client.query(
         `UPDATE materias_primas m

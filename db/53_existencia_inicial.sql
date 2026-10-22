@@ -1,0 +1,11 @@
+-- ============================================================================
+-- 53: EXISTENCIA INICIAL CON RASTRO
+-- ============================================================================
+-- Las existencias que se capturan "a mano" al dar de alta un insumo no dejaban
+-- ningún movimiento (ni usuario, ni motivo): ese fue el origen de los 400 kg
+-- fantasma de Chocomilk. Desde ahora cada alta con existencias deja un
+-- movimiento 'existencia_inicial' (entrada que NO es costo de ventas) y las
+-- ediciones manuales de "Stock actual" dejan 'correccion_captura'.
+-- El ALTER TYPE va fuera de transacción. Re-ejecutable.
+-- ============================================================================
+ALTER TYPE tipo_movimiento ADD VALUE IF NOT EXISTS 'existencia_inicial';

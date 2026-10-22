@@ -667,3 +667,5 @@ export function getBitacoraMovimientos(params) { return request(`/bitacora/movim
 export function getCompras(params) { return request(`/compras?${qs(params)}`); }
 export function getAnulacionCompra(id) { return request(`/compras/${id}/anulacion`); }
 export function anularCompra(id, body) { return request(`/compras/${id}/anular`, { method: 'POST', body }); }
+export function getBitacoraAjustes(params) { return request(`/bitacora/ajustes?${qs(params)}`); }
+export function descartarCostoAjuste(id, body) { return request(`/ajustes-inventario/${id}/descartar-costo`, { method: 'POST', body }); }

@@ -1,0 +1,13 @@
+-- ============================================================================
+-- 52: DESCARTAR EL COSTO DE UN AJUSTE POR ERROR DE CAPTURA
+-- ============================================================================
+-- Caso: existencias que nunca existieron (p. ej. 400 kg de un insumo capturados
+-- a mano) y un ajuste que las quitó. El ajuste es una salida valuada al costo y
+-- entra al costo de ventas, aunque no hubo pérdida real. Descartar su costo
+-- deja las existencias como están y hace que el ajuste sume cero en el estado
+-- de resultados: un movimiento contrario (tipo 'ajuste', mismo costo) cancela
+-- el costo y un movimiento 'correccion_captura' (que NO es costo de ventas)
+-- conserva la cantidad. Nada se borra.
+-- El ALTER TYPE va fuera de transacción (igual que 16, 26 y 51). Re-ejecutable.
+-- ============================================================================
+ALTER TYPE tipo_movimiento ADD VALUE IF NOT EXISTS 'correccion_captura';

@@ -8,6 +8,7 @@ const ACCIONES = {
   'materias-primas|salida-interna': 'Registró una salida interna',
   'materias-primas|lotes': 'Registró una compra',
   'compras|anular': 'Anuló una compra por error',
+  'ajustes-inventario|descartar-costo': 'Quitó el costo de un ajuste (error de captura)',
   'mermas|crear': 'Registró una merma',
   'ajustes-inventario|editar': 'Corrigió un ajuste',
   'contabilidad|egresos/anular': 'Anuló un egreso',
@@ -30,6 +31,7 @@ const CAMBIOS = {
   'lotes:anular_compra': 'Anuló una compra por error',
   'ajustes_stock:ajustar_stock': 'Ajustó existencias',
   'ajustes_stock:revertir': 'Revirtió un ajuste',
+  'ajustes_stock:descartar_costo': 'Quitó el costo de un ajuste (error de captura)',
   'ajustes_stock:corregir': 'Corrigió fecha/motivo de un ajuste',
   'egresos:anular': 'Anuló un egreso',
 };
@@ -59,4 +61,4 @@ export function resumenCambio(anterior, nuevo) {
 }
 
 export function esRechazada(estadoHttp) { return Number(estadoHttp) >= 400; }
-export const ETIQUETAS_TIPO_MOVIMIENTO = { compra: 'Compra', consumo: 'Consumo', merma: 'Merma', ajuste: 'Ajuste', anulacion_compra: 'Compra anulada' };
+export const ETIQUETAS_TIPO_MOVIMIENTO = { compra: 'Compra', consumo: 'Consumo', merma: 'Merma', ajuste: 'Ajuste', anulacion_compra: 'Compra anulada', correccion_captura: 'Corrección de captura' };

@@ -62,7 +62,15 @@ export default function StockAdjustments({ materias, onClose, onChanged }) {
       setSelected(result); setSaved(true); setRevision(r => r+1); onChanged?.();
     } catch(e) { setError(e.message); }
   });
-  const back = () => { setSelected(null); setError(''); };
+  const [captureReason, setCaptureReason] = useState('');
+  const [discarding, discard] = useAccionUnica(async () => {
+    setError('');
+    try {
+      await api.descartarCostoAjuste(selected.id, { motivo: captureReason.trim() });
+      setSelected(await api.getAjusteInventario(selected.id)); setCaptureReason(''); setRevision(r => r+1); onChanged?.();
+    } catch(e) { setError(e.message); }
+  });
+  const back = () => { setSelected(null); setError(''); setCaptureReason(''); };
   return <Sheet title={selected ? 'Detalle del ajuste' : 'Historial de ajustes'} className="stock-history-sheet" onClose={onClose} closable={!busy && !opening}>
     {selected ? <>
       <button type="button" className="btn-ghost stock-back" disabled={busy} onClick={back}><ArrowLeft size={16}/> Volver al historial</button>
@@ -80,6 +88,13 @@ export default function StockAdjustments({ materias, onClose, onChanged }) {
         <label className="stock-adjustment-field">¿Por qué lo corriges?<textarea value={reason} maxLength={500} disabled={busy || selected.cerrado} onChange={e => setReason(e.target.value)} placeholder="Ej. El conteo corresponde al cierre del 30 de septiembre."/></label>
         <p className="stock-adjustment-hint">Cambiar el mes traslada el mismo costo; no registra otra salida de inventario. Si el consumo ya fue costeado en “Revisar costos”, necesita conciliación para evitar contarlo dos veces.</p>
       </>}
+      {selected.revertido_en
+        ? <div className="stock-adjustment-notice"><Info size={18}/><p><strong>Este ajuste ya no cuenta como costo de ventas.</strong> {selected.motivo_reversion}. Las existencias no se movieron.</p></div>
+        : selected.costo > 0 && !saved && <div className="stock-adjustment-notice"><Info size={18}/><div>
+          <p><strong>¿Quitó existencias que nunca existieron?</strong> Si las existencias de antes estaban mal capturadas (no hubo pérdida real), puedes quitar este costo del estado de resultados. Las existencias se quedan como están hoy y todo queda registrado en la bitácora.</p>
+          <label className="stock-adjustment-field">¿Qué pasó?<textarea value={captureReason} maxLength={500} disabled={discarding || busy || selected.cerrado} onChange={e => setCaptureReason(e.target.value)} placeholder="Ej. Se capturaron 400 kg por error al dar de alta el insumo."/></label>
+          <button type="button" className="btn-danger" disabled={discarding || busy || selected.cerrado || captureReason.trim().length < 5} onClick={discard}>{discarding ? 'Quitando costo…' : `Quitar ${money(selected.costo)} del estado de resultados`}</button>
+        </div></div>}
       <FormError>{error}</FormError>
       {!saved && <button type="button" className="btn-primary full" disabled={busy || selected.cerrado || !date || !motive.trim() || reason.trim().length < 5 || (date === selected.fecha_contable && motive === selected.motivo)} onClick={save}>{busy ? 'Guardando corrección…' : 'Guardar fecha y motivo'}</button>}
       {!!selected.cambios.length && <details className="stock-corrections"><summary><History size={16}/> Historial de correcciones</summary>{selected.cambios.map((c,i) => <div key={i}><strong>{c.usuario || 'Administrador'} · {captureDate(c.creado_en)}</strong><p>{c.motivo}</p><small>{displayDate(c.valor_anterior.fechaContable)} → {displayDate(c.valor_nuevo.fechaContable)}</small></div>)}</details>}

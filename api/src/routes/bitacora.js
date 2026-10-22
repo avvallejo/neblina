@@ -13,6 +13,7 @@ const global = req => ({ incluirGlobal: !req.auth.sucursalId });
 
 router.get('/acciones', asyncHandler(async (req, res) => res.json(await B.listarAcciones(query, req.sucursalId, req.query, global(req)))));
 router.get('/cambios', asyncHandler(async (req, res) => res.json(await B.listarCambios(query, req.sucursalId, req.query, global(req)))));
+router.get('/ajustes', asyncHandler(async (req, res) => res.json(await B.listarAjustes(query, req.sucursalId, req.query))));
 router.get('/movimientos', asyncHandler(async (req, res) => res.json(await B.listarMovimientos(query, req.sucursalId, req.query))));
 
 module.exports = router;

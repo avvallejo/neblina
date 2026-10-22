@@ -125,7 +125,7 @@ async function listarCambios(queryFn, sucursalId, params = {}, { incluirGlobal =
   return { total, filas: rows };
 }
 
-const TIPOS_MOVIMIENTO = ['compra', 'consumo', 'merma', 'ajuste', 'anulacion_compra'];
+const TIPOS_MOVIMIENTO = ['compra', 'consumo', 'merma', 'ajuste', 'anulacion_compra', 'correccion_captura'];
 // Entradas y salidas de existencias. El consumo de ventas (una fila por insumo
 // de cada vaso) queda fuera salvo que se pida: ahogaría lo importante.
 async function listarMovimientos(queryFn, sucursalId, params = {}) {
@@ -185,4 +185,29 @@ async function listarCompras(queryFn, sucursalId, params = {}) {
   return { total, filas: rows };
 }
 
-module.exports = { sanitizar, registrarCambio, listarAcciones, listarCambios, listarMovimientos, listarCompras, UUID, TZ };
+// Ajustes de existencias (conteos) con lo que suman hoy al costo de ventas.
+async function listarAjustes(queryFn, sucursalId, params = {}) {
+  const { limite, desplazamiento } = paginacion(params);
+  const { valores, where } = condiciones(params, { sucursal: 'a.sucursal_id', fecha: 'a.creado_en', usuario: 'a.usuario_id' }, { sucursalId, incluirGlobal: false });
+  if (params.q) {
+    valores.push(`%${String(params.q).slice(0, 80).replace(/[\\%_]/g, m => `\\${m}`)}%`);
+    where.push(`(m.nombre ILIKE $${valores.length} OR a.motivo ILIKE $${valores.length} OR u.nombre ILIKE $${valores.length})`);
+  }
+  const cond = where.join(' AND ');
+  const { rows: [{ total }] } = await queryFn(
+    `SELECT count(*)::int AS total FROM ajustes_stock a JOIN materias_primas m ON m.id = a.materia_prima_id LEFT JOIN usuarios u ON u.id = a.usuario_id WHERE ${cond}`, valores);
+  const { rows } = await queryFn(
+    `SELECT a.id, a.creado_en, a.fecha_contable, m.nombre AS insumo, m.unidad, u.nombre AS usuario, a.motivo,
+            a.cantidad_anterior, a.cantidad_contada, a.revertido_en, a.motivo_reversion, ur.nombre AS revertido_por,
+            COALESCE(mov.diferencia, 0) AS diferencia, COALESCE(mov.costo, 0) AS costo
+     FROM ajustes_stock a
+     JOIN materias_primas m ON m.id = a.materia_prima_id
+     LEFT JOIN usuarios u ON u.id = a.usuario_id LEFT JOIN usuarios ur ON ur.id = a.revertido_por
+     LEFT JOIN LATERAL (SELECT sum(mi.cantidad) AS diferencia, sum(-mi.cantidad * COALESCE(mi.costo_unitario, 0)) FILTER (WHERE mi.tipo = 'ajuste') AS costo
+       FROM movimientos_inventario mi WHERE mi.ajuste_stock_id = a.id AND mi.tipo IN ('ajuste','correccion_captura')) mov ON true
+     WHERE ${cond} ORDER BY a.creado_en DESC, a.id DESC LIMIT $${valores.length + 1} OFFSET $${valores.length + 2}`,
+    [...valores, limite, desplazamiento]);
+  return { total, filas: rows.map(r => ({ ...r, diferencia: Number(r.diferencia), costo: Math.round(Number(r.costo) * 100) / 100 })) };
+}
+
+module.exports = { listarAjustes, sanitizar, registrarCambio, listarAcciones, listarCambios, listarMovimientos, listarCompras, UUID, TZ };

@@ -20,7 +20,7 @@ const selection = `SELECT a.*, m.nombre AS insumo, m.unidad, u.nombre AS usuario
   EXISTS(SELECT 1 FROM cierres_mes c WHERE c.sucursal_id=a.sucursal_id AND c.periodo=to_char(a.fecha_contable,'YYYY-MM')) AS cerrado
   FROM ajustes_stock a JOIN materias_primas m ON m.id=a.materia_prima_id LEFT JOIN usuarios u ON u.id=a.usuario_id
   LEFT JOIN LATERAL (SELECT sum(mi.cantidad) AS cantidad, count(*) AS movimientos,
-    sum(-mi.cantidad*COALESCE(mi.costo_unitario,l.costo_total/NULLIF(fn_convertir_unidad(l.cantidad_comprada,l.unidad,m.unidad),0),m.costo_unitario,0)) AS costo
+    sum(-mi.cantidad*COALESCE(mi.costo_unitario,l.costo_total/NULLIF(fn_convertir_unidad(l.cantidad_comprada,l.unidad,m.unidad),0),m.costo_unitario,0)) FILTER (WHERE mi.tipo='ajuste') AS costo
     FROM movimientos_inventario mi LEFT JOIN lotes l ON l.id=mi.lote_id WHERE mi.ajuste_stock_id=a.id) mov ON true`;
 const normalize = a => ({ ...a, fecha_contable: A.fechaISO(a.fecha_contable),
   folio: `AJ-${a.id.slice(0,8).toUpperCase()}`, diferencia: Number(a.diferencia), costo: A.round2(a.costo),

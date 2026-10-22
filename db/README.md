@@ -388,3 +388,7 @@ administración lo active por persona.
 Aplicar `51_bitacora_y_anulacion_compras.sql` con `bash db/migrar.sh` antes de actualizar la API. Crea `bitacora_acciones`,
 vuelve de solo-inserción a `auditoria` y `bitacora_acciones`, agrega el movimiento `anulacion_compra` y las columnas de
 anulación en `lotes` y de reversión en `ajustes_stock`. Re-ejecutable.
+
+## 52 — Descartar el costo de un ajuste por error de captura
+
+Aplicar `52_correccion_captura.sql` con `bash db/migrar.sh` antes de actualizar la API. Agrega el movimiento `correccion_captura`. Re-ejecutable.

@@ -441,6 +441,13 @@ carga como costo de ventas aunque nunca se perdió nada. Anular deshace el error
 No procede si el lote ya se usó en ventas o mermas, ni si alguna de las fechas involucradas está en un mes
 cerrado (reábrelo primero). Todo va en una transacción y con rastro.
 
+**Descartar el costo de un ajuste por error de captura** (Inventario → historial de ajustes → *Ver / corregir*).
+Si las existencias que el ajuste quitó nunca existieron (p. ej. 400 kg capturados a mano como existencias iniciales),
+no hubo pérdida. El botón *Quitar $… del estado de resultados* agrega un movimiento `ajuste` contrario al mismo costo
+(el ajuste suma cero) y un movimiento `correccion_captura` (no es costo de ventas) que conserva la cantidad:
+las existencias y los lotes no cambian y nada se borra. Pide motivo, respeta meses cerrados y queda en la bitácora.
+Requiere `db/52_correccion_captura.sql`. Prueba: `node api/test/live-descartar-ajuste.js` (base `codex_*`).
+
 Aplicar **`db/51_bitacora_y_anulacion_compras.sql`** con `bash db/migrar.sh` **antes** de actualizar la API.
 Pruebas: `npm test` (sanitizado y registro, sin base) y `node api/test/live-anular-compra.js` con
 `NODE_ENV=development` y `PGDATABASE=codex_*` (base desechable): reproduce el alta de 200 kg, el ajuste que

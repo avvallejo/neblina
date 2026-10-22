@@ -1,0 +1,22 @@
+.bitacora-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.bitacora-filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+.bitacora-filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.bitacora-filtros .text-input { min-width: 140px; }
+.bitacora-scroll { overflow-x: auto; border: 1px solid var(--line, #ddd); border-radius: 14px; }
+.bitacora-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bitacora-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); padding: 10px 12px; border-bottom: 1px solid var(--line, #ddd); white-space: nowrap; }
+.bitacora-table td { padding: 10px 12px; border-bottom: 1px solid var(--line, #eee); vertical-align: top; }
+.bitacora-table tr:last-child td { border-bottom: 0; }
+.bitacora-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bitacora-table .cuando { white-space: nowrap; }
+.bitacora-detalle { color: var(--ink-soft); font-size: 12px; line-height: 1.5; margin-top: 3px; }
+.bitacora-etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: var(--surface-2, #f1f1f1); color: var(--ink-soft); }
+.bitacora-etiqueta.mala { background: #fde8e8; color: #9b1c1c; }
+.bitacora-etiqueta.anulada { background: #fdecc8; color: #7a4b00; }
+.bitacora-pie { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: var(--ink-soft); }
+.bitacora-pie > div { display: flex; gap: 8px; }
+.anular-resumen { background: var(--surface-2, #f6f6f6); border-radius: 12px; padding: 12px 14px; line-height: 1.6; font-size: 14px; margin-bottom: 14px; }
+.anular-ajuste { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line, #eee); font-size: 13px; }
+.anular-ajuste input { margin-top: 3px; }
+.anular-aviso { background: #fdecc8; color: #5c3b00; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.5; margin: 12px 0; }
+.anular-ok { background: #e3f4e6; color: #14532d; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.6; }

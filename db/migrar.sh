@@ -85,6 +85,7 @@ ya_tiene() {
     47) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'ajustes_stock'" ;;
     49) q "SELECT 1 FROM information_schema.columns WHERE table_name = 'mermas' AND column_name = 'fecha_contable'" ;;
     50) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'jornadas'" ;;
+    51) q "SELECT 1 FROM information_schema.tables WHERE table_name = 'bitacora_acciones'" ;;
     *) echo "" ;;  # migraciones futuras: si no están registradas, se aplican
   esac
 }

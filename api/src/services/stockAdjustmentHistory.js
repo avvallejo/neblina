@@ -47,7 +47,7 @@ async function obtener(query, sucursalId, id) {
   if (!a) throw new ApiError(404, 'Ajuste no encontrado en esta sucursal.');
   const { rows: cambios } = await query(`SELECT au.creado_en, au.motivo,au.valor_anterior,au.valor_nuevo,u.nombre AS usuario
     FROM auditoria au LEFT JOIN usuarios u ON u.id=au.usuario_id
-    WHERE au.entidad='ajustes_stock' AND au.entidad_id=$1 AND au.sucursal_id=$2 ORDER BY au.creado_en DESC,au.id DESC`, [id,sucursalId]);
+    WHERE au.entidad='ajustes_stock' AND au.accion='corregir' AND au.entidad_id=$1 AND au.sucursal_id=$2 ORDER BY au.creado_en DESC,au.id DESC`, [id,sucursalId]);
   return { ...normalize(a), cambios };
 }
 async function corregir(client, { sucursalId, usuarioId, id, body }) {
@@ -70,4 +70,10 @@ async function corregir(client, { sucursalId, usuarioId, id, body }) {
     VALUES('ajustes_stock',$1,'corregir',$2,$3,$4,$5,$6)`,[id,old,next,razon,usuarioId,sucursalId]);
   return obtener(client.query.bind(client),sucursalId,id);
 }
-module.exports = { fechaContable, mesesAbiertos, listar, obtener, corregir };
+// Rastro del ajuste mismo (quién contó, cuánto había y cuánto quedó).
+async function registrarAuditoriaAjuste(client, { sucursalId, usuarioId, ajusteId, insumo, anterior, contada, unidad, fecha, motivo }) {
+  await client.query(`INSERT INTO auditoria(entidad,entidad_id,accion,valor_anterior,valor_nuevo,motivo,usuario_id,sucursal_id)
+    VALUES('ajustes_stock',$1,'ajustar_stock',$2,$3,$4,$5,$6)`,
+  [ajusteId, { insumo, cantidad: anterior, unidad }, { insumo, cantidad: contada, unidad, diferencia: Math.round((contada - anterior) * 1000) / 1000, fechaContable: fecha }, motivo, usuarioId, sucursalId]);
+}
+module.exports = { fechaContable, mesesAbiertos, listar, obtener, corregir, registrarAuditoriaAjuste };

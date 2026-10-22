@@ -84,6 +84,8 @@ async function ajustarStock(client, { id, sucursalId, usuarioId, nuevaCantidad, 
   }
   const { rows: [updated] } = await client.query(
     'UPDATE materias_primas SET stock_actual = $1 WHERE id = $2 RETURNING *', [cantidad, id]);
+  await H.registrarAuditoriaAjuste(client, { sucursalId, usuarioId, ajusteId, insumo: materia.nombre, anterior: Number(materia.stock_actual), contada: cantidad,
+    unidad: materia.unidad, fecha, motivo: razon || 'Ajuste por conteo físico' });
   const result = { ...updated, ajusteId, fechaContable: fecha };
   await client.query('UPDATE ajustes_stock SET respuesta=$2 WHERE id=$1',[ajusteId,result]);
   return result;

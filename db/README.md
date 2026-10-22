@@ -382,3 +382,9 @@ Una sola jornada abierta por usuario (índice único parcial). Una jornada pagad
 por lo que no entra al corte. Al anular ese egreso, un disparador libera las horas pagadas.
 Los usuarios existentes quedan con `paga_por_hora = false`: nada cambia hasta que la
 administración lo active por persona.
+
+## 51 — Bitácora y anulación de compras por error
+
+Aplicar `51_bitacora_y_anulacion_compras.sql` con `bash db/migrar.sh` antes de actualizar la API. Crea `bitacora_acciones`,
+vuelve de solo-inserción a `auditoria` y `bitacora_acciones`, agrega el movimiento `anulacion_compra` y las columnas de
+anulación en `lotes` y de reversión en `ajustes_stock`. Re-ejecutable.

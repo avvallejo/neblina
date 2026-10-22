@@ -26,6 +26,9 @@ app.use(rateLimit({
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// Bitácora: quién hizo cada acción de escritura (ver migración 51).
+app.use('/api', require('./middleware/bitacora').bitacoraAcciones());
+
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/sucursales', require('./routes/sucursales'));
 app.use('/api/usuarios', require('./routes/usuarios'));
@@ -51,6 +54,8 @@ app.use('/api/cortesias', require('./routes/cortesias'));
 app.use('/api/cancelaciones', require('./routes/cancelaciones'));
 app.use('/api/contabilidad', require('./routes/contabilidad'));
 app.use('/api/jornadas', require('./routes/jornadas'));
+app.use('/api/bitacora', require('./routes/bitacora'));
+app.use('/api/compras', require('./routes/compras'));
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 app.use(errorHandler);

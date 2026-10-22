@@ -656,3 +656,14 @@ export function getInsumosPreparacion(id) { return request(`/pedido-items/${id}/
 export function guardarInsumosPreparacion(id,body) { return request(`/pedido-items/${id}/insumos`,{method:'PUT',body}); }
 export function getAlternativasInsumo(id) { return request(`/materias-primas/${id}/alternativas`); }
 export function guardarAlternativasInsumo(id,ids) { return request(`/materias-primas/${id}/alternativas`,{method:'PUT',body:{ids}}); }
+
+/* ============================================================
+   BITÁCORA Y ANULACIÓN DE COMPRAS (admin)
+   ============================================================ */
+const qs = params => new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v !== '' && v !== undefined && v !== null)).toString();
+export function getBitacoraAcciones(params) { return request(`/bitacora/acciones?${qs(params)}`); }
+export function getBitacoraCambios(params) { return request(`/bitacora/cambios?${qs(params)}`); }
+export function getBitacoraMovimientos(params) { return request(`/bitacora/movimientos?${qs(params)}`); }
+export function getCompras(params) { return request(`/compras?${qs(params)}`); }
+export function getAnulacionCompra(id) { return request(`/compras/${id}/anulacion`); }
+export function anularCompra(id, body) { return request(`/compras/${id}/anular`, { method: 'POST', body }); }

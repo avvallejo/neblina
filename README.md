@@ -415,6 +415,37 @@ Para el personal pagado por hora (por ejemplo la cajera). Aplica la migración
 
 Pruebas: `npm test` (cálculo, sin base) y `npm run test:jornadas:live` (contra una base **desechable**).
 
+## Bitácora y anulación de compras capturadas por error
+
+**Bitácora** (Admin → *Bitácora*, solo administradores, solo lectura). Cuatro vistas:
+- *Quién hizo qué*: cada acción de escritura del personal (alta, edición, ajuste, anulación, pago…)
+  con persona, rol, sede, ruta, resultado (también las **rechazadas**) e IP; y cada entrada al sistema.
+  Nunca guarda PIN, contraseñas ni tokens. La escribe `middleware/bitacora.js` (tabla `bitacora_acciones`).
+- *Cambios (antes y después)*: el detalle de lo importante en `auditoria` — altas y ediciones de insumos,
+  compras, ajustes de existencias, anulaciones, egresos…
+- *Movimientos de inventario*: cada entrada/salida con su usuario (el consumo por ventas se oculta por defecto).
+- *Compras y altas*: quién dio de alta cada compra, cuándo y por cuánto.
+`auditoria` y `bitacora_acciones` son de **solo inserción** en la base (un UPDATE/DELETE falla).
+La bitácora de acciones empieza a llenarse al desplegar; para lo anterior, `lotes.usuario_id`,
+`movimientos_inventario.usuario_id` y `auditoria` ya guardaban quién fue.
+
+**Anular una compra/alta por error** (Bitácora → *Compras y altas* → *Anular*). Un ajuste de inventario
+que "arregla" una alta equivocada es una salida valuada al costo del insumo: el estado de resultados la
+carga como costo de ventas aunque nunca se perdió nada. Anular deshace el error de origen:
+1. el lote queda **anulado** (no se borra: quién, cuándo y por qué) y sus existencias salen con un movimiento
+   `anulacion_compra`, que no es costo de ventas;
+2. los ajustes que se marquen como "compensación" se **revierten** con un movimiento contrario al mismo costo
+   (suman cero en resultados) y el inventario queda igual que estaba;
+3. el egreso de la compra se anula y el dinero vuelve a su cuenta;
+4. el costo de referencia del insumo vuelve al de la compra vigente anterior (si esa compra lo había fijado).
+No procede si el lote ya se usó en ventas o mermas, ni si alguna de las fechas involucradas está en un mes
+cerrado (reábrelo primero). Todo va en una transacción y con rastro.
+
+Aplicar **`db/51_bitacora_y_anulacion_compras.sql`** con `bash db/migrar.sh` **antes** de actualizar la API.
+Pruebas: `npm test` (sanitizado y registro, sin base) y `node api/test/live-anular-compra.js` con
+`NODE_ENV=development` y `PGDATABASE=codex_*` (base desechable): reproduce el alta de 200 kg, el ajuste que
+infla el estado de resultados y su corrección, con y sin control por lote.
+
 ## Frontend adaptable
 
 `frontend/` es una app React (Vite) con un solo código para cualquier

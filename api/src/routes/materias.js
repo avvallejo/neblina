@@ -16,8 +16,21 @@ const { ajustarStock } = require('../services/adjustStock');
 const { registrarSalidaInterna } = require('../services/internalUse');
 
 const ingredientes = require('../services/preparationIngredients');
+const { registrarCambio } = require('../services/bitacora');
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'), resolveSucursal);
+
+// Campos de un insumo cuyo cambio queda en la bitácora (antes → después).
+const CAMPOS_AUDITADOS = ['nombre', 'unidad', 'categoria_id', 'stock_actual', 'stock_minimo', 'stock_maximo', 'costo_unitario',
+  'proveedor_id', 'requiere_lote', 'requiere_caducidad', 'activo', 'presentacion_cantidad', 'presentacion_unidad', 'presentacion_nombre', 'observaciones'];
+function diferencias(antes, despues) {
+  const anterior = {}; const nuevo = {};
+  for (const campo of CAMPOS_AUDITADOS) {
+    const a = antes[campo] ?? null; const d = despues[campo] ?? null;
+    if (String(a) !== String(d)) { anterior[campo] = a; nuevo[campo] = d; }
+  }
+  return Object.keys(nuevo).length ? { anterior, nuevo } : null;
+}
 
 async function assertConvertible(client, from, to) {
   if (!from || !to || from === to) return 1;
@@ -138,8 +151,12 @@ router.post('/', asyncHandler(async (req, res) => {
     if (primeraCompra) {
       await registrarCompra(client, { materiaId: rows[0].id, sucursalId: req.sucursalId, usuarioId: req.auth.id, body: { ...primeraCompra, proveedorId: primeraCompra.proveedorId ?? proveedorId ?? null } });
       const { rows: [actual] } = await client.query('SELECT * FROM materias_primas WHERE id = $1', [rows[0].id]);
+      await registrarCambio(client, { sucursalId: req.sucursalId, usuarioId: req.auth.id, entidad: 'materias_primas', entidadId: actual.id, accion: 'crear',
+        nuevo: { nombre: actual.nombre, unidad: actual.unidad, stock_actual: actual.stock_actual, costo_unitario: actual.costo_unitario, conPrimeraCompra: true } });
       return actual;
     }
+    await registrarCambio(client, { sucursalId: req.sucursalId, usuarioId: req.auth.id, entidad: 'materias_primas', entidadId: rows[0].id, accion: 'crear',
+      nuevo: { nombre: rows[0].nombre, unidad: rows[0].unidad, stock_actual: rows[0].stock_actual, costo_unitario: rows[0].costo_unitario } });
     return rows[0];
   });
   res.status(201).json(creado);
@@ -249,6 +266,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       values
     );
 
+    const motivoCambio = cleanText(req.body.motivo, { field: 'motivo', max: 300 });
     if (nuevaUnidad !== current.unidad && current.requiere_lote) {
       await client.query(
         `UPDATE materias_primas m
@@ -261,9 +279,13 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         [req.params.id]
       );
       const refreshed = await client.query('SELECT * FROM materias_primas WHERE id = $1', [req.params.id]);
+      const cambiosLote = diferencias(current, refreshed.rows[0]);
+      if (cambiosLote) await registrarCambio(client, { sucursalId: req.sucursalId, usuarioId: req.auth.id, entidad: 'materias_primas', entidadId: current.id, accion: 'editar', ...cambiosLote, motivo: motivoCambio });
       return refreshed.rows[0];
     }
 
+    const cambios = diferencias(current, rows[0]);
+    if (cambios) await registrarCambio(client, { sucursalId: req.sucursalId, usuarioId: req.auth.id, entidad: 'materias_primas', entidadId: current.id, accion: 'editar', ...cambios, motivo: motivoCambio });
     return rows[0];
   });
 

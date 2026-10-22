@@ -64,6 +64,7 @@ async function registrarCompra(client, { materiaId, sucursalId, usuarioId, body 
     [materiaId, sucursalId]
   );
   if (!materia) throw new ApiError(404, 'Materia prima no encontrada.');
+  const { rows: [{ stock_actual: stockAntes }] } = await client.query('SELECT stock_actual FROM materias_primas WHERE id = $1', [materiaId]);
   const { cantidad, unidad: unidadLote, paquetes } = resolverCantidadCompra(body, materia);
   const costo = parseNumber(body.costoTotal, 'costo total', { required: true, min: 0 });
   await factorConversion(client, unidadLote, materia.unidad);
@@ -109,6 +110,12 @@ async function registrarCompra(client, { materiaId, sucursalId, usuarioId, body 
       proveedorId: body.proveedorId || null, loteId: lote.id, referencia: body.numeroLote,
     });
   }
+  const { rows: [despues] } = await client.query('SELECT nombre, unidad, stock_actual FROM materias_primas WHERE id = $1', [materiaId]);
+  await require('./bitacora').registrarCambio(client, {
+    sucursalId, usuarioId, entidad: 'lotes', entidadId: lote.id, accion: 'registrar_compra',
+    nuevo: { insumo: despues.nombre, cantidad, unidad: unidadLote, paquetes, costoTotal: costo, costoUnitarioReferencia: costoUnitario,
+      stockAntes: Number(stockAntes), stockDespues: Number(despues.stock_actual), proveedorId: body.proveedorId || null, numeroLote: lote.numero_lote },
+  });
   return { ...lote, costo_unitario_referencia: costoUnitario };
 }
 

@@ -86,6 +86,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     try { jornada = (await withTransaction(c => iniciarJornada(c, { usuarioId: encontrado.id })))?.jornada || null; }
     catch (err) { console.error('No se pudo registrar la entrada de la jornada', err.message); }
   }
+  res.locals.actorBitacora = { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, sucursalId: encontrado.sucursal_id || sucursalId };
   res.json({
     token,
     usuario: { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol, sucursalId: encontrado.sucursal_id || null, estaciones: encontrado.estaciones || ['barra', 'parrilla'], pagaPorHora: !!encontrado.paga_por_hora },
